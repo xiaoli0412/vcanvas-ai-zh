@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
+import type { Translate } from '../lib/i18n'
 import { StreamOverlay } from './StreamOverlay'
 import './PlanOverlay.css'
 
@@ -18,6 +19,7 @@ interface Props {
   streamText: string
   streamTokenCount: number
   streamDone: boolean
+  t: Translate
 }
 
 const PHASE_ICONS: Record<string, string> = {
@@ -26,13 +28,7 @@ const PHASE_ICONS: Record<string, string> = {
   create: '▣',
 }
 
-const PHASE_VERBS: Record<string, string> = {
-  gaze: 'Gazing into the image…',
-  dream: 'Dreaming up the design…',
-  create: 'Crafting the code…',
-}
-
-export function PlanOverlay({ phases, activePhaseIndex, tokenCount, done, streamText, streamTokenCount, streamDone }: Props) {
+export function PlanOverlay({ phases, activePhaseIndex, tokenCount, done, streamText, streamTokenCount, streamDone, t }: Props) {
   const contentRef = useRef<HTMLDivElement>(null)
   const [startTime] = useState(() => performance.now())
   const [elapsed, setElapsed] = useState('0.0')
@@ -89,7 +85,13 @@ export function PlanOverlay({ phases, activePhaseIndex, tokenCount, done, stream
               {PHASE_ICONS[activePhase?.name] || '○'}
             </span>
             <span className="plan-active-verb">
-              {PHASE_VERBS[activePhase?.name] || 'Working…'}
+              {activePhase?.name === 'gaze'
+                ? t('plan.gazing')
+                : activePhase?.name === 'dream'
+                  ? t('plan.dreaming')
+                  : activePhase?.name === 'create'
+                    ? t('plan.crafting')
+                    : t('plan.working')}
             </span>
           </div>
 
@@ -99,7 +101,7 @@ export function PlanOverlay({ phases, activePhaseIndex, tokenCount, done, stream
                 <div className="plan-section-header">
                   <span className="plan-section-icon">{PHASE_ICONS[phase.name]}</span>
                   <span className="plan-section-label">{phase.label}</span>
-                  {phase.status === 'done' && <span className="plan-section-check">ok</span>}
+                  {phase.status === 'done' && <span className="plan-section-check">{t('plan.done')}</span>}
                 </div>
                 <div className="plan-section-text mono">
                   {phase.text}
@@ -114,7 +116,7 @@ export function PlanOverlay({ phases, activePhaseIndex, tokenCount, done, stream
           </div>
           <div className="plan-footer mono">
             <span>{tokenCount} tok / {elapsed}s</span>
-            <span>Phase {activePhaseIndex + 1} of {phases.length}</span>
+            <span>{t('plan.phase', { current: activePhaseIndex + 1, total: phases.length })}</span>
           </div>
         </>
       )}
@@ -126,6 +128,7 @@ export function PlanOverlay({ phases, activePhaseIndex, tokenCount, done, stream
             streamText={streamText}
             tokenCount={streamTokenCount}
             done={streamDone}
+            t={t}
           />
         </div>
       )}

@@ -2,20 +2,23 @@ import React, { useCallback } from 'react'
 import { Excalidraw, THEME } from '@excalidraw/excalidraw'
 import '@excalidraw/excalidraw/index.css'
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
+import type { Locale } from '../lib/i18n'
 import './Canvas.css'
 
 interface Props {
   onEditorReady: (api: ExcalidrawImperativeAPI) => void
   onCanvasChange?: () => void
+  locale: Locale
 }
 
-export function Canvas({ onEditorReady, onCanvasChange }: Props) {
+export function Canvas({ onEditorReady, onCanvasChange, locale }: Props) {
   return (
     <div className="canvas-wrapper">
       <Excalidraw
         excalidrawAPI={onEditorReady}
         onChange={onCanvasChange}
         theme={THEME.DARK}
+        langCode={locale}
         UIOptions={{
           canvasActions: {
             loadScene: false,

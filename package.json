@@ -1,13 +1,14 @@
 {
   "name": "vcanvas",
-  "version": "1.0.0",
+  "version": "1.10.5",
   "description": "A visual canvas playground for vision-language models. Draw, describe, generate.",
   "private": true,
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:gh": "VCANVAS_BASE=/vcanvas/ vite build",
-    "preview": "vite preview"
+    "build:gh": "VCANVAS_BASE=/vcanvas-ai-zh/ vite build",
+    "preview": "vite preview",
+    "proxy": "node scripts/custom-openai-proxy.mjs"
   },
   "license": "MIT",
   "dependencies": {

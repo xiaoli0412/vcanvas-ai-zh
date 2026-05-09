@@ -1,6 +1,7 @@
 /** Provider and model configuration */
 
 export type ApiType = 'openai' | 'gemini'
+export type CustomMode = 'openai' | 'azure' | 'compatible'
 
 export interface ModelDef {
   id: string
@@ -12,16 +13,92 @@ export interface ProviderDef {
   id: string
   name: string
   type: ApiType
-  endpoint: string
+  endpoint?: string
   models: ModelDef[]
-  keyHint: string
+  keyHintKey: string
   keyUrl: string
   keyUrlLabel: string
   storageKey: string
-  /** Allow user to type a custom endpoint URL */
-  customEndpoint?: boolean
-  /** Allow fetching models from API */
+  customConfig?: boolean
   fetchModels?: boolean
+}
+
+export interface CustomProviderConfig {
+  mode: CustomMode
+  baseUrl?: string
+  endpoint?: string
+  modelId?: string
+  resourceUrl?: string
+  deployment?: string
+  apiVersion?: string
+}
+
+export interface ProviderState {
+  activeProviderId: string
+  activeModelId: string
+  keys: Record<string, string>
+  custom: CustomProviderConfig
+}
+
+export interface FetchOptions {
+  headers?: Record<string, string>
+  body?: string
+  method?: string
+  signal?: AbortSignal
+}
+
+export interface ResolvedProviderRequest {
+  endpoint: string
+  headers: Record<string, string>
+  query?: Record<string, string>
+  modelId: string
+  useProxy?: boolean
+}
+
+const VCANVAS_PROXY_URL = 'http://127.0.0.1:8765/proxy'
+
+function withBearer(apiKey: string): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  }
+  if (apiKey.trim()) {
+    headers.Authorization = `Bearer ${apiKey}`
+  }
+  return headers
+}
+
+async function fetchWithOptionalProxy(url: string, options: FetchOptions = {}, useProxy = false) {
+  const method = options.method || (options.body ? 'POST' : 'GET')
+
+  try {
+    return await fetch(url, {
+      method,
+      headers: options.headers,
+      body: options.body,
+      signal: options.signal,
+    })
+  } catch (error) {
+    if (!useProxy) throw error
+  }
+
+  return fetch(VCANVAS_PROXY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      url,
+      method,
+      headers: options.headers || {},
+      body: options.body,
+    }),
+    signal: options.signal,
+  })
+}
+
+const DEFAULT_CUSTOM: CustomProviderConfig = {
+  mode: 'compatible',
+  endpoint: '',
+  modelId: '',
+  apiVersion: '2024-10-21',
 }
 
 export const PROVIDERS: ProviderDef[] = [
@@ -33,7 +110,7 @@ export const PROVIDERS: ProviderDef[] = [
     models: [
       { id: 'glm-5v-turbo', label: 'GLM-5V Turbo', vision: true },
     ],
-    keyHint: 'paste z.ai key',
+    keyHintKey: 'provider.keyHint.zai',
     keyUrl: 'https://z.ai',
     keyUrlLabel: 'z.ai',
     storageKey: 'glm5v_key',
@@ -48,7 +125,7 @@ export const PROVIDERS: ProviderDef[] = [
       { id: 'gemini-3-flash-preview', label: 'Gemini 3.1 Flash', vision: true },
       { id: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Flash Lite', vision: true },
     ],
-    keyHint: 'paste Google AI key',
+    keyHintKey: 'provider.keyHint.google',
     keyUrl: 'https://aistudio.google.com/apikey',
     keyUrlLabel: 'AI Studio',
     storageKey: 'gemini_key',
@@ -61,7 +138,7 @@ export const PROVIDERS: ProviderDef[] = [
     models: [
       { id: 'accounts/fireworks/routers/kimi-k2p5-turbo', label: 'Kimi K2.5 Turbo', vision: true },
     ],
-    keyHint: 'paste Fire Pass key',
+    keyHintKey: 'provider.keyHint.fireworks',
     keyUrl: 'https://app.fireworks.ai/fire-pass',
     keyUrlLabel: 'Fire Pass',
     storageKey: 'fireworks_key',
@@ -81,64 +158,73 @@ export const PROVIDERS: ProviderDef[] = [
       { id: 'xiaomi/mimo-v2-omni', label: 'MiMo V2 Omni', vision: true },
       { id: 'moonshotai/kimi-k2.5-0127', label: 'Kimi K2.5', vision: true },
     ],
-    keyHint: 'paste OpenRouter key',
+    keyHintKey: 'provider.keyHint.openrouter',
     keyUrl: 'https://openrouter.ai/keys',
     keyUrlLabel: 'OpenRouter',
     storageKey: 'openrouter_key',
   },
   {
     id: 'custom',
-    name: 'Custom',
+    name: 'Custom OpenAI',
     type: 'openai',
-    endpoint: '',
-    customEndpoint: true,
     models: [],
-    keyHint: 'paste API key (if needed)',
+    keyHintKey: 'provider.keyHint.custom',
     keyUrl: '',
     keyUrlLabel: '',
     storageKey: 'custom_key',
+    customConfig: true,
   },
 ]
+
+const STORAGE_KEY = 'vcanvas_provider_state'
 
 export function getProvider(id: string): ProviderDef {
   return PROVIDERS.find(p => p.id === id) || PROVIDERS[0]
 }
 
-/** Saved user state */
-export interface ProviderState {
-  activeProviderId: string
-  activeModelId: string
-  keys: Record<string, string>
-  /** Custom endpoint URL for the "custom" provider */
-  customEndpoint?: string
-  /** Custom model ID for manual input */
-  customModelId?: string
+function normalizeUrl(value?: string) {
+  return value?.trim().replace(/\/+$/, '') || ''
 }
 
-const STORAGE_KEY = 'vcanvas_provider_state'
+function ensurePath(url: string, path: string) {
+  const normalized = normalizeUrl(url)
+  if (!normalized) return ''
+  if (normalized.toLowerCase().endsWith(path.toLowerCase())) return normalized
+  return normalized + path
+}
 
-export function loadProviderState(): ProviderState {
+function ensureCompatibleEndpoint(url: string) {
+  const normalized = normalizeUrl(url)
+  if (!normalized) return ''
+  if (/\/chat\/completions$/i.test(normalized)) return normalized
+  if (/\/v1$/i.test(normalized)) return ensurePath(normalized, '/chat/completions')
+  return ensurePath(`${normalized}/v1`, '/chat/completions')
+}
+
+function isAbsoluteUrl(value?: string) {
+  if (!value) return false
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) {
-      const parsed = JSON.parse(raw)
-      for (const p of PROVIDERS) {
-        if (!parsed.keys?.[p.id]) {
-          const oldKey = localStorage.getItem(p.storageKey)
-          if (oldKey) {
-            if (!parsed.keys) parsed.keys = {}
-            parsed.keys[p.id] = oldKey
-          }
-        }
-      }
-      if (!PROVIDERS.find(p => p.id === parsed.activeProviderId) && parsed.activeProviderId !== 'custom') {
-        parsed.activeProviderId = PROVIDERS[0].id
-        parsed.activeModelId = PROVIDERS[0].models[0].id
-      }
-      return parsed
-    }
-  } catch { /* ignore */ }
+    const url = new URL(value)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
 
+function migrateLegacyCustom(raw: any): CustomProviderConfig {
+  const mode = raw?.custom?.mode || 'compatible'
+  return {
+    mode,
+    baseUrl: raw?.custom?.baseUrl || '',
+    endpoint: raw?.custom?.endpoint || raw?.customEndpoint || '',
+    modelId: raw?.custom?.modelId || raw?.customModelId || raw?.activeModelId || '',
+    resourceUrl: raw?.custom?.resourceUrl || '',
+    deployment: raw?.custom?.deployment || '',
+    apiVersion: raw?.custom?.apiVersion || '2024-10-21',
+  }
+}
+
+export function makeDefaultProviderState(): ProviderState {
   const keys: Record<string, string> = {}
   for (const p of PROVIDERS) {
     const oldKey = localStorage.getItem(p.storageKey)
@@ -155,11 +241,157 @@ export function loadProviderState(): ProviderState {
     activeProviderId,
     activeModelId: provider.models[0]?.id || '',
     keys,
+    custom: { ...DEFAULT_CUSTOM },
   }
+}
+
+export function loadProviderState(): ProviderState {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (!parsed.keys) parsed.keys = {}
+      for (const p of PROVIDERS) {
+        if (!parsed.keys[p.id]) {
+          const oldKey = localStorage.getItem(p.storageKey)
+          if (oldKey) parsed.keys[p.id] = oldKey
+        }
+      }
+      if (!PROVIDERS.find(p => p.id === parsed.activeProviderId)) {
+        parsed.activeProviderId = PROVIDERS[0].id
+      }
+      const provider = getProvider(parsed.activeProviderId)
+      const activeModelId = parsed.activeProviderId === 'custom'
+        ? (parsed.custom?.modelId || parsed.customModelId || '')
+        : (parsed.activeModelId || provider.models[0]?.id || '')
+
+      return {
+        activeProviderId: parsed.activeProviderId,
+        activeModelId,
+        keys: parsed.keys,
+        custom: migrateLegacyCustom(parsed),
+      }
+    }
+  } catch { /* ignore */ }
+
+  return makeDefaultProviderState()
 }
 
 export function saveProviderState(state: ProviderState) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+}
+
+export function getActiveModelId(state: ProviderState): string {
+  if (state.activeProviderId === 'custom') return state.custom.modelId?.trim() || ''
+  return state.activeModelId
+}
+
+export function getCustomConfigError(custom: CustomProviderConfig, apiKey: string): string | null {
+  return getCustomConfigErrorForPurpose(custom, apiKey, 'request')
+}
+
+export function getCustomConfigErrorForPurpose(
+  custom: CustomProviderConfig,
+  apiKey: string,
+  purpose: 'request' | 'models',
+): string | null {
+  const needsModel = purpose === 'request'
+
+  if (custom.mode === 'openai') {
+    if (!custom.baseUrl?.trim()) return 'provider.validation.openaiBaseUrlRequired'
+    if (!isAbsoluteUrl(custom.baseUrl.trim())) return 'provider.validation.invalidUrl'
+    if (needsModel && !custom.modelId?.trim()) return 'provider.validation.customModelRequired'
+    if (apiKey.trim().length <= 4) return 'provider.validation.apiKeyRequired'
+    return null
+  }
+
+  if (custom.mode === 'azure') {
+    if (!custom.resourceUrl?.trim()) return 'provider.validation.azureResourceUrlRequired'
+    if (!isAbsoluteUrl(custom.resourceUrl.trim())) return 'provider.validation.invalidUrl'
+    if (!custom.deployment?.trim()) return 'provider.validation.azureDeploymentRequired'
+    if (!custom.apiVersion?.trim()) return 'provider.validation.azureApiVersionRequired'
+    if (apiKey.trim().length <= 4) return 'provider.validation.apiKeyRequired'
+    return null
+  }
+
+  const endpoint = custom.endpoint?.trim() || custom.baseUrl?.trim() || ''
+  if (!endpoint) return 'provider.validation.compatibleEndpointRequired'
+  if (!isAbsoluteUrl(endpoint)) return 'provider.validation.invalidUrl'
+  if (needsModel && !custom.modelId?.trim()) return 'provider.validation.customModelRequired'
+  return null
+}
+
+export function getProviderConfigError(state: ProviderState): string | null {
+  if (state.activeProviderId !== 'custom') {
+    return (state.keys[state.activeProviderId] || '').trim().length > 4
+      ? null
+      : 'provider.validation.apiKeyRequired'
+  }
+
+  return getCustomConfigError(state.custom, state.keys.custom || '')
+}
+
+export function isProviderConfigured(state: ProviderState): boolean {
+  return getProviderConfigError(state) === null
+}
+
+export function resolveProviderRequest(provider: ProviderDef, state: ProviderState, apiKey: string): ResolvedProviderRequest {
+  if (provider.id !== 'custom') {
+    if (!provider.endpoint) {
+      throw new Error('provider.error.noEndpoint')
+    }
+    return {
+      endpoint: provider.endpoint,
+      headers: withBearer(apiKey),
+      modelId: state.activeModelId,
+    }
+  }
+
+  const custom = state.custom
+  const modelId = custom.modelId?.trim() || ''
+  const validationError = getCustomConfigError(custom, apiKey)
+  if (validationError) {
+    throw new Error(validationError)
+  }
+
+  if (custom.mode === 'azure') {
+    const resourceUrl = normalizeUrl(custom.resourceUrl)
+    const deployment = custom.deployment?.trim() || ''
+    const apiVersion = custom.apiVersion?.trim() || ''
+    return {
+      endpoint: `${resourceUrl}/openai/deployments/${encodeURIComponent(deployment)}/chat/completions`,
+      headers: {
+        'Content-Type': 'application/json',
+        'api-key': apiKey,
+      },
+      query: { 'api-version': apiVersion },
+      modelId,
+      useProxy: true,
+    }
+  }
+
+  if (custom.mode === 'openai') {
+    const baseUrl = normalizeUrl(custom.baseUrl)
+    const endpoint = /\/chat\/completions$/i.test(baseUrl)
+      ? baseUrl
+      : ensurePath(/\/v1$/i.test(baseUrl) ? baseUrl : `${baseUrl}/v1`, '/chat/completions')
+    return {
+      endpoint,
+      headers: withBearer(apiKey),
+      modelId,
+      useProxy: true,
+    }
+  }
+
+  const endpointOrBase = normalizeUrl(custom.endpoint || custom.baseUrl)
+  const endpoint = ensureCompatibleEndpoint(endpointOrBase)
+
+  return {
+    endpoint,
+    headers: withBearer(apiKey),
+    modelId,
+    useProxy: true,
+  }
 }
 
 /** Fetch vision-capable models from OpenRouter API */
@@ -179,4 +411,55 @@ export async function fetchOpenRouterModels(): Promise<ModelDef[]> {
     }
   }
   return models
+}
+
+export async function fetchCustomModels(state: ProviderState, apiKey: string): Promise<ModelDef[]> {
+  const provider = getProvider('custom')
+  const validationError = getCustomConfigErrorForPurpose(state.custom, apiKey, 'models')
+  if (validationError) {
+    throw new Error(validationError)
+  }
+
+  const request = resolveProviderRequest(provider, {
+    ...state,
+    custom: {
+      ...state.custom,
+      modelId: state.custom.modelId?.trim() || '__fetch_models__',
+    },
+  }, apiKey)
+  const target = state.custom.mode === 'azure'
+    ? new URL(`${normalizeUrl(state.custom.resourceUrl)}/openai/models`)
+    : new URL(request.endpoint)
+
+  if (state.custom.mode === 'azure') {
+    target.searchParams.set('api-version', state.custom.apiVersion?.trim() || DEFAULT_CUSTOM.apiVersion || '2024-10-21')
+  } else {
+    target.pathname = target.pathname.replace(/\/chat\/completions$/i, '/models')
+    target.search = ''
+  }
+
+  const response = await fetchWithOptionalProxy(target.toString(), {
+    headers: request.headers,
+    method: 'GET',
+  }, !!request.useProxy)
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => '')
+    throw new Error(errText ? `Custom models ${response.status}: ${errText}` : `Custom models ${response.status}`)
+  }
+
+  const data = await response.json()
+  const models = Array.isArray(data?.data) ? data.data : []
+  const seen = new Set<string>()
+  return models
+    .map((item: any) => ({
+      id: item.id,
+      label: item.id,
+      vision: /vision|omni|kimi|gemini|glm|gpt|mimo/i.test(String(item.id || '')),
+    }))
+    .filter((item: ModelDef) => {
+      if (!item.id || seen.has(item.id)) return false
+      seen.add(item.id)
+      return true
+    })
 }

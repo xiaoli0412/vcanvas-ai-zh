@@ -1,4 +1,6 @@
-import type { ProviderDef } from './providers'
+import { resolveProviderRequest, type ProviderDef, type ProviderState } from './providers'
+
+const VCANVAS_PROXY_URL = 'http://127.0.0.1:8765/proxy'
 
 export interface StreamCallbacks {
   onChunk: (text: string, tokenIndex: number) => void
@@ -184,16 +186,16 @@ async function readGeminiStream(
 
 export async function streamChat(
   provider: ProviderDef,
+  state: ProviderState,
   apiKey: string,
   modelId: string,
   messages: Message[],
   callbacks: StreamCallbacks,
   signal?: AbortSignal,
-  endpointOverride?: string
 ) {
-  const endpoint = endpointOverride || provider.endpoint
-
   if (provider.type === 'gemini') {
+    const endpoint = provider.endpoint
+    if (!endpoint) throw new Error('provider.error.noEndpoint')
     const apiUrl = `${endpoint}/models/${modelId}:streamGenerateContent?alt=sse&key=${apiKey}`
     const { systemInstruction, contents } = toGeminiPayload(messages)
     const body: any = { contents }
@@ -215,23 +217,45 @@ export async function streamChat(
   }
 
   // OpenAI-compatible (z.ai, Fireworks, OpenRouter, Custom)
-  if (!endpoint) throw new Error('No endpoint configured. Set a base URL in settings.')
   const openaiMessages = toOpenAIMessages(messages)
+  const request = resolveProviderRequest(provider, state, apiKey)
+  const apiUrl = new URL(request.endpoint)
+  for (const [key, value] of Object.entries(request.query || {})) {
+    apiUrl.searchParams.set(key, value)
+  }
 
-  const response = await fetch(endpoint, {
+  const body: Record<string, unknown> = {
+    max_tokens: 16000,
+    stream: true,
+    messages: openaiMessages,
+  }
+  if (request.modelId) body.model = request.modelId
+
+  const directInit: RequestInit = {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: modelId,
-      max_tokens: 16000,
-      stream: true,
-      messages: openaiMessages,
-    }),
+    headers: request.headers,
+    body: JSON.stringify(body),
     signal,
-  })
+  }
+
+  let response: Response
+  try {
+    response = await fetch(apiUrl.toString(), directInit)
+  } catch (error) {
+    if (!request.useProxy) throw error
+
+    response = await fetch(VCANVAS_PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: apiUrl.toString(),
+        method: 'POST',
+        headers: request.headers,
+        body: JSON.stringify(body),
+      }),
+      signal,
+    })
+  }
 
   if (!response.ok) {
     const errText = await response.text()

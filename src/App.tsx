@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react'
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { convertToExcalidrawElements } from '@excalidraw/excalidraw'
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import { Header } from './components/Header'
@@ -14,7 +14,8 @@ import { MessageStrip } from './components/MessageStrip'
 import { ResizeHandle } from './components/ResizeHandle'
 import { streamChat, extractHTML } from './lib/api'
 import { exportSourceAsPng, exportAllAsPng, getSources } from './lib/export'
-import { getProvider, loadProviderState, saveProviderState } from './lib/providers'
+import { createTranslator, getInitialLocale, saveLocale, type Locale } from './lib/i18n'
+import { getActiveModelId, getProvider, isProviderConfigured, loadProviderState, saveProviderState } from './lib/providers'
 import type { ProviderState } from './lib/providers'
 import type { Message } from './lib/api'
 import type { ChatChip } from './lib/store'
@@ -109,13 +110,19 @@ If someone looks at the output and instantly thinks "AI made this" — that's th
 export function App() {
   const editorRef = useRef<ExcalidrawImperativeAPI | null>(null)
   const [editor, setEditor] = useState<ExcalidrawImperativeAPI | null>(null)
+  const [locale, setLocale] = useState<Locale>(getInitialLocale)
   const [providerState, setProviderState] = useState<ProviderState>(loadProviderState)
   const [showSettings, setShowSettings] = useState(false)
 
+  const t = useMemo(() => createTranslator(locale), [locale])
   const provider = getProvider(providerState.activeProviderId)
-  const modelId = providerState.activeModelId
+  const modelId = getActiveModelId(providerState)
   const apiKey = providerState.keys[provider.id] || ''
-  const modelLabel = provider.models.find(m => m.id === modelId)?.label || modelId
+  const modelLabel = provider.id === 'custom'
+    ? (providerState.custom.mode === 'azure'
+      ? (providerState.custom.deployment?.trim() || providerState.custom.modelId?.trim() || '—')
+      : (providerState.custom.modelId?.trim() || '—'))
+    : (provider.models.find(m => m.id === modelId)?.label || modelId)
   const [messages, setMessages] = useState<Message[]>([])
   const [chips, setChips] = useState<ChatChip[]>([])
   const [iteration, setIteration] = useState(0)
@@ -137,6 +144,11 @@ export function App() {
 
   const previewRef = useRef<HTMLIFrameElement>(null)
   const panelLeftRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    document.documentElement.lang = locale
+    saveLocale(locale)
+  }, [locale])
 
   const handleProviderUpdate = useCallback((newState: ProviderState) => {
     setProviderState(newState)
@@ -177,13 +189,13 @@ export function App() {
       y: 100 + frameCount * 50,
       width: 400,
       height: 300,
-      name: `Frame ${frameCount + 1}`,
+      name: t('canvas.frameName', { index: frameCount + 1 }),
       children: [],
     }])
     api.updateScene({
       elements: [...api.getSceneElements(), ...newElements],
     })
-  }, [])
+  }, [t])
 
   const handleSave = useCallback(() => {
     const api = editorRef.current
@@ -196,10 +208,10 @@ export function App() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `glm5v-drawing-${Date.now()}.json`
+    a.download = `${t('system.export.filename')}-${Date.now()}.json`
     a.click()
     URL.revokeObjectURL(url)
-  }, [])
+  }, [t])
 
   const handleLoad = useCallback(() => {
     const input = document.createElement('input')
@@ -237,7 +249,7 @@ export function App() {
     if (!hasFrames) {
       // No frames — full canvas mode
       const b64 = await exportAllAsPng(api)
-      if (b64) return [{ base64: b64, label: 'Full canvas' }]
+      if (b64) return [{ base64: b64, label: t('system.prompt.fullCanvas') }]
       return []
     }
 
@@ -245,7 +257,7 @@ export function App() {
     if (selected.length === 0) {
       // Frames exist but none selected — export entire canvas
       const b64 = await exportAllAsPng(api)
-      if (b64) return [{ base64: b64, label: 'Full canvas' }]
+      if (b64) return [{ base64: b64, label: t('system.prompt.fullCanvas') }]
       return []
     }
 
@@ -255,7 +267,7 @@ export function App() {
       if (b64) results.push({ base64: b64, label: src.name })
     }
     return results
-  }, [selectedFrameIds])
+  }, [selectedFrameIds, t])
 
   // Capture preview iframe as screenshot
   const capturePreview = useCallback(async (): Promise<string | null> => {
@@ -278,7 +290,7 @@ export function App() {
   }, [])
 
   const handleGenerate = useCallback(async (prompt: string) => {
-    if (!apiKey || generating) return
+    if (!isProviderConfigured(providerState) || generating) return
 
     setGenerating(true)
     setStreamText('')
@@ -312,7 +324,7 @@ export function App() {
     setIteration((i) => i + 1)
 
     try {
-      await streamChat(provider, apiKey, modelId, newMessages, {
+      await streamChat(provider, providerState, apiKey, modelId, newMessages, {
         onChunk: (text, tokenIdx) => {
           setStreamText((prev) => prev + text)
           setStreamTokenCount(tokenIdx)
@@ -327,11 +339,11 @@ export function App() {
             setTimeout(() => {
               setLastHTML(html)
               setGenerating(false)
-              addChip({ role: 'assistant', text: 'OK: generated' })
+              addChip({ role: 'assistant', text: t('system.chip.generated') })
             }, 500)
           } else {
             setGenerating(false)
-            addChip({ role: 'assistant', text: 'No HTML found in response' })
+            addChip({ role: 'assistant', text: t('system.chip.noHtml') })
           }
 
           setMessages((prev) => [
@@ -346,12 +358,12 @@ export function App() {
       })
     } catch (err: any) {
       setGenerating(false)
-      addChip({ role: 'assistant', text: 'ERR:' + err.message })
+      addChip({ role: 'assistant', text: 'ERR:' + (t(err.message) === err.message ? err.message : t(err.message)) })
     }
-  }, [provider, apiKey, modelId, generating, getSelectedFrameImages, addChip])
+  }, [provider, providerState, apiKey, modelId, generating, getSelectedFrameImages, addChip, t])
 
   const handleRefine = useCallback(async (prompt: string) => {
-    if (!apiKey || generating) return
+    if (!isProviderConfigured(providerState) || generating) return
 
     setGenerating(true)
     setStreamText('')
@@ -364,7 +376,7 @@ export function App() {
     const screenshotB64 = await capturePreview()
     setPreviewScreenshot(screenshotB64 ? 'data:image/png;base64,' + screenshotB64 : null)
 
-    const refinementPrompt = prompt || 'Look at the current output and improve it. Fix any visual issues, improve alignment, make it more polished and production-ready.'
+    const refinementPrompt = prompt || t('system.prompt.refineDefault')
 
     const userContent: Message['content'] = []
     const chipImages: ChatChip['images'] = []
@@ -375,7 +387,7 @@ export function App() {
         type: 'image',
         source: { type: 'base64', media_type: 'image/png', data: screenshotB64 },
       })
-      chipImages.push({ src: 'data:image/png;base64,' + screenshotB64, label: 'Current output' })
+      chipImages.push({ src: 'data:image/png;base64,' + screenshotB64, label: t('system.prompt.currentOutput') })
     }
 
     // 2. Canvas sketches (original reference)
@@ -401,11 +413,11 @@ export function App() {
     ]
 
     setMessages(newMessages)
-    addChip({ role: 'user', text: prompt || 'REFINE', images: chipImages.length ? chipImages : undefined })
+    addChip({ role: 'user', text: prompt || t('system.chip.refineAction'), images: chipImages.length ? chipImages : undefined })
     setIteration((i) => i + 1)
 
     try {
-      await streamChat(provider, apiKey, modelId, newMessages, {
+      await streamChat(provider, providerState, apiKey, modelId, newMessages, {
         onChunk: (text, tokenIdx) => {
           setStreamText((prev) => prev + text)
           setStreamTokenCount(tokenIdx)
@@ -420,11 +432,11 @@ export function App() {
             setTimeout(() => {
               setLastHTML(html)
               setGenerating(false)
-              addChip({ role: 'assistant', text: 'OK: refined' })
+              addChip({ role: 'assistant', text: t('system.chip.refined') })
             }, 500)
           } else {
             setGenerating(false)
-            addChip({ role: 'assistant', text: 'No HTML found in response' })
+            addChip({ role: 'assistant', text: t('system.chip.noHtml') })
           }
         },
         onError: (err) => {
@@ -434,9 +446,9 @@ export function App() {
       })
     } catch (err: any) {
       setGenerating(false)
-      addChip({ role: 'assistant', text: 'ERR:' + err.message })
+      addChip({ role: 'assistant', text: 'ERR:' + (t(err.message) === err.message ? err.message : t(err.message)) })
     }
-  }, [provider, apiKey, modelId, generating, lastHTML, capturePreview, getSelectedFrameImages, addChip])
+  }, [provider, providerState, apiKey, modelId, generating, lastHTML, capturePreview, getSelectedFrameImages, addChip, t])
 
   // ── Plan Mode: multi-step Gaze → Dream → Create ──
 
@@ -492,7 +504,7 @@ ${SYSTEM_PROMPT}`
     onText: (text: string) => void,
   ): Promise<string> => {
     return new Promise((resolve, reject) => {
-      streamChat(provider, apiKey, modelId, messages, {
+      streamChat(provider, providerState, apiKey, modelId, messages, {
         onChunk: (text, tokenIdx) => {
           onText(text)
           setPlanTokenCount(tokenIdx)
@@ -501,10 +513,10 @@ ${SYSTEM_PROMPT}`
         onError: (err) => reject(err),
       })
     })
-  }, [provider, apiKey, modelId])
+  }, [provider, providerState, apiKey, modelId])
 
   const handlePlanGenerate = useCallback(async (prompt: string) => {
-    if (!apiKey || generating) return
+    if (!isProviderConfigured(providerState) || generating) return
 
     setGenerating(true)
     setPlanDone(false)
@@ -512,9 +524,9 @@ ${SYSTEM_PROMPT}`
     setPlanActiveIndex(0)
 
     const initialPhases: PlanPhase[] = [
-      { name: 'gaze', label: 'Gaze', status: 'active', text: '' },
-      { name: 'dream', label: 'Dream', status: 'waiting', text: '' },
-      { name: 'create', label: 'Create', status: 'waiting', text: '' },
+      { name: 'gaze', label: t('plan.gaze'), status: 'active', text: '' },
+      { name: 'dream', label: t('plan.dream'), status: 'waiting', text: '' },
+      { name: 'create', label: t('plan.create'), status: 'waiting', text: '' },
     ]
     setPlanPhases(initialPhases)
 
@@ -530,7 +542,7 @@ ${SYSTEM_PROMPT}`
       chipImages.push({ src: 'data:image/png;base64,' + img.base64, label: img.label })
     }
 
-    addChip({ role: 'user', text: `[Plan] ${prompt}`, images: chipImages })
+    addChip({ role: 'user', text: `${t('system.chip.planTag')} ${prompt}`, images: chipImages })
 
     try {
       // Phase 1: Gaze
@@ -585,21 +597,21 @@ ${SYSTEM_PROMPT}`
           setLastHTML(html)
           setGenerating(false)
           setIteration((i) => i + 1)
-          addChip({ role: 'assistant', text: 'OK: plan complete' })
+          addChip({ role: 'assistant', text: t('system.chip.planComplete') })
         }, 800)
       } else {
         setGenerating(false)
-        addChip({ role: 'assistant', text: 'No HTML found in plan output' })
+        addChip({ role: 'assistant', text: t('system.chip.noPlanHtml') })
       }
     } catch (err: any) {
       setGenerating(false)
       setPlanDone(true)
-      addChip({ role: 'assistant', text: 'ERR: ' + err.message })
+      addChip({ role: 'assistant', text: 'ERR: ' + (t(err.message) === err.message ? err.message : t(err.message)) })
     }
-  }, [apiKey, generating, getSelectedFrameImages, addChip, runPlanPhase])
+  }, [providerState, generating, getSelectedFrameImages, addChip, runPlanPhase, t])
 
   const handlePlanRefine = useCallback(async (prompt: string) => {
-    if (!apiKey || generating) return
+    if (!isProviderConfigured(providerState) || generating) return
 
     setGenerating(true)
     setPlanDone(false)
@@ -607,9 +619,9 @@ ${SYSTEM_PROMPT}`
     setPlanActiveIndex(0)
 
     const initialPhases: PlanPhase[] = [
-      { name: 'gaze', label: 'Gaze', status: 'active', text: '' },
-      { name: 'dream', label: 'Dream', status: 'waiting', text: '' },
-      { name: 'create', label: 'Create', status: 'waiting', text: '' },
+      { name: 'gaze', label: t('plan.gaze'), status: 'active', text: '' },
+      { name: 'dream', label: t('plan.dream'), status: 'waiting', text: '' },
+      { name: 'create', label: t('plan.create'), status: 'waiting', text: '' },
     ]
     setPlanPhases(initialPhases)
 
@@ -625,7 +637,7 @@ ${SYSTEM_PROMPT}`
         type: 'image',
         source: { type: 'base64', media_type: 'image/png', data: screenshotB64 },
       })
-      chipImages.push({ src: 'data:image/png;base64,' + screenshotB64, label: 'Current output' })
+      chipImages.push({ src: 'data:image/png;base64,' + screenshotB64, label: t('system.prompt.currentOutput') })
     }
     for (const img of frameImages) {
       imageContent.push({
@@ -635,8 +647,8 @@ ${SYSTEM_PROMPT}`
       chipImages.push({ src: 'data:image/png;base64,' + img.base64, label: img.label })
     }
 
-    const refinementPrompt = prompt || 'Improve the current output — fix visual issues, improve alignment, make it more polished.'
-    addChip({ role: 'user', text: `[Plan Refine] ${refinementPrompt}`, images: chipImages })
+    const refinementPrompt = prompt || t('system.prompt.planRefineDefault')
+    addChip({ role: 'user', text: `${t('system.chip.planRefineTag')} ${refinementPrompt}`, images: chipImages })
 
     try {
       // Gaze at both screenshot and canvas
@@ -682,39 +694,44 @@ ${SYSTEM_PROMPT}`
           setLastHTML(html)
           setGenerating(false)
           setIteration((i) => i + 1)
-          addChip({ role: 'assistant', text: 'OK: plan refine complete' })
+          addChip({ role: 'assistant', text: t('system.chip.planRefineComplete') })
         }, 800)
       } else {
         setGenerating(false)
-        addChip({ role: 'assistant', text: 'No HTML found in plan output' })
+        addChip({ role: 'assistant', text: t('system.chip.noPlanHtml') })
       }
     } catch (err: any) {
       setGenerating(false)
       setPlanDone(true)
-      addChip({ role: 'assistant', text: 'ERR: ' + err.message })
+      addChip({ role: 'assistant', text: 'ERR: ' + (t(err.message) === err.message ? err.message : t(err.message)) })
     }
-  }, [provider, apiKey, modelId, generating, lastHTML, capturePreview, getSelectedFrameImages, addChip, runPlanPhase])
+  }, [providerState, generating, lastHTML, capturePreview, getSelectedFrameImages, addChip, runPlanPhase, t])
 
-  const needsKey = apiKey.length <= 4
+  const canGenerate = isProviderConfigured(providerState)
+  const needsKey = !canGenerate
 
   return (
     <>
       <Header
         providerName={provider.name}
         modelLabel={modelLabel}
-        hasKey={!needsKey}
+        hasKey={canGenerate}
         onOpenSettings={() => setShowSettings(true)}
+        locale={locale}
+        onToggleLocale={() => setLocale(prev => prev === 'zh-CN' ? 'en' : 'zh-CN')}
+        t={t}
       />
       {showSettings && (
         <ProviderModal
           state={providerState}
           onUpdate={handleProviderUpdate}
           onClose={() => setShowSettings(false)}
+          t={t}
         />
       )}
       <div className="workspace">
         <div className="panel-left" ref={panelLeftRef}>
-          <Canvas onEditorReady={(e) => { editorRef.current = e; setEditor(e) }} onCanvasChange={handleCanvasChange} />
+          <Canvas onEditorReady={(e) => { editorRef.current = e; setEditor(e) }} onCanvasChange={handleCanvasChange} locale={locale} />
           <FramePicker
             editor={editor}
             selectedIds={selectedFrameIds}
@@ -724,8 +741,9 @@ ${SYSTEM_PROMPT}`
             onSave={handleSave}
             onLoad={handleLoad}
             previewScreenshot={previewScreenshot}
+            t={t}
           />
-          <MessageStrip chips={chips} />
+          <MessageStrip chips={chips} t={t} />
           <PromptBar
             onGenerate={planMode ? handlePlanGenerate : handleGenerate}
             onRefine={planMode ? handlePlanRefine : handleRefine}
@@ -734,7 +752,8 @@ ${SYSTEM_PROMPT}`
             generating={generating}
             planMode={planMode}
             onPlanModeToggle={() => setPlanMode(p => !p)}
-            hasKey={!needsKey}
+            hasKey={canGenerate}
+            t={t}
           />
         </div>
         <ResizeHandle onResize={handleResize} />
@@ -747,31 +766,42 @@ ${SYSTEM_PROMPT}`
                     <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
                   </svg>
                 </div>
-                <h2 className="api-key-overlay-title">API Key Required</h2>
+                <h2 className="api-key-overlay-title">{provider.id === 'custom' ? t('overlay.apiKeyRequiredCustom') : t('overlay.apiKeyRequired')}</h2>
                 <p className="api-key-overlay-desc">
-                  Get an API key from{' '}
-                  <a href={provider.keyUrl} target="_blank" rel="noopener">{provider.keyUrlLabel}</a>{' '}
-                  for <strong>{provider.name}</strong>.
+                  {provider.id === 'custom'
+                    ? t('overlay.customDesc')
+                    : t('overlay.apiDesc', { provider: provider.name })}
                 </p>
                 <div className="api-key-overlay-steps">
-                  <div className="api-key-step"><span className="api-key-step-num">1</span> Get a key from <a href={provider.keyUrl} target="_blank" rel="noopener">{provider.keyUrlLabel}</a></div>
-                  <div className="api-key-step"><span className="api-key-step-num">2</span> Click the model button in the header to open settings</div>
-                  <div className="api-key-step"><span className="api-key-step-num">3</span> Paste the key in the <strong>{provider.name}</strong> card</div>
+                  {provider.id === 'custom' ? (
+                    <>
+                      <div className="api-key-step"><span className="api-key-step-num">1</span> {t('overlay.customStep1')}</div>
+                      <div className="api-key-step"><span className="api-key-step-num">2</span> {t('overlay.customStep2')}</div>
+                      <div className="api-key-step"><span className="api-key-step-num">3</span> {t('overlay.customStep3')}</div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="api-key-step"><span className="api-key-step-num">1</span> {t('overlay.step1', { label: provider.keyUrlLabel })}</div>
+                      <div className="api-key-step"><span className="api-key-step-num">2</span> {t('overlay.step2')}</div>
+                      <div className="api-key-step"><span className="api-key-step-num">3</span> {t('overlay.step3', { provider: provider.name })}</div>
+                    </>
+                  )}
                 </div>
                 <button className="btn btn-primary" style={{ marginTop: '16px', width: '100%' }} onClick={() => setShowSettings(true)}>
-                  Open Settings
+                  {t('overlay.openSettings')}
                 </button>
               </div>
             </div>
           )}
           <div className="preview-container">
-            <Preview html={lastHTML} iframeRef={previewRef} />
+            <Preview html={lastHTML} iframeRef={previewRef} t={t} />
             {generating && !planMode && (
               <StreamOverlay
                 streamText={streamText}
                 thinkingText={thinkingText}
                 tokenCount={streamTokenCount}
                 done={streamDone}
+                t={t}
               />
             )}
             {generating && planMode && (
@@ -783,6 +813,7 @@ ${SYSTEM_PROMPT}`
                 streamText={streamText}
                 streamTokenCount={streamTokenCount}
                 streamDone={streamDone}
+                t={t}
               />
             )}
           </div>
@@ -791,11 +822,11 @@ ${SYSTEM_PROMPT}`
               <div className="preview-toolbar-left">
                 <button className="btn btn-secondary" onClick={() => {
                   navigator.clipboard.writeText(lastHTML)
-                }}>COPY</button>
+                }}>{t('preview.copy')}</button>
                 <button className="btn btn-secondary" onClick={() => {
                   const w = window.open()
                   if (w) { w.document.write(lastHTML); w.document.close() }
-                }}>OPEN</button>
+                }}>{t('preview.open')}</button>
               </div>
               <span className="mono preview-meta">
                 {iteration > 0 && `#${iteration}`}

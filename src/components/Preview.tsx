@@ -1,12 +1,14 @@
 import React from 'react'
+import type { Translate } from '../lib/i18n'
 import './Preview.css'
 
 interface Props {
   html: string
   iframeRef: React.RefObject<HTMLIFrameElement | null>
+  t: Translate
 }
 
-export function Preview({ html, iframeRef }: Props) {
+export function Preview({ html, iframeRef, t }: Props) {
   if (!html) {
     return (
       <div className="preview-empty">
@@ -14,8 +16,8 @@ export function Preview({ html, iframeRef }: Props) {
           <rect width="18" height="18" x="3" y="3" rx="2" />
           <path d="m9 8 6 4-6 4Z" />
         </svg>
-        <p>Draw or drop references in frames, describe it, and hit Generate</p>
-        <span className="preview-hint">GLM-5V will turn your sketch into code</span>
+        <p>{t('preview.empty')}</p>
+        <span className="preview-hint">{t('preview.hint')}</span>
       </div>
     )
   }
@@ -26,7 +28,7 @@ export function Preview({ html, iframeRef }: Props) {
       className="preview-frame"
       srcDoc={html}
       sandbox="allow-scripts allow-same-origin"
-      title="Preview"
+      title={t('preview.open')}
     />
   )
 }

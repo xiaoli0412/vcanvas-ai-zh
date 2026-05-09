@@ -1,11 +1,12 @@
 import React, { useState, useRef, useCallback } from 'react'
+import type { Translate } from '../lib/i18n'
 import './PromptBar.css'
 
 const INSPIRATION = [
-  { label: 'Generative Art', prompt: 'As a master of creative programming, create an interactive generative art piece with given reference image as direction / inspiration. You may use canvas2d, shader, p5.js or similar.' },
-  { label: 'Wireframe → App', prompt: 'As a frontend expert, turn this wireframe into a polished, production-ready web application with clean UI and good UX, take reference image as direction & inspiration.' },
-  { label: 'Landing Page', prompt: 'As a frontend expert, Build a modern SaaS landing page with hero, features, pricing, and CTA sections, make use of stock CSS and Font library instead of improvising.' },
-  { label: 'Dashboard', prompt: 'Create a data dashboard with charts, stats cards, and a clean sidebar navigation' }
+  { labelKey: 'prompt.inspiration.generativeArt', prompt: 'As a master of creative programming, create an interactive generative art piece with given reference image as direction / inspiration. You may use canvas2d, shader, p5.js or similar.' },
+  { labelKey: 'prompt.inspiration.wireframe', prompt: 'As a frontend expert, turn this wireframe into a polished, production-ready web application with clean UI and good UX, take reference image as direction & inspiration.' },
+  { labelKey: 'prompt.inspiration.landing', prompt: 'As a frontend expert, Build a modern SaaS landing page with hero, features, pricing, and CTA sections, make use of stock CSS and Font library instead of improvising.' },
+  { labelKey: 'prompt.inspiration.dashboard', prompt: 'Create a data dashboard with charts, stats cards, and a clean sidebar navigation' }
 ]
 
 interface Props {
@@ -17,9 +18,10 @@ interface Props {
   planMode: boolean
   onPlanModeToggle: () => void
   hasKey: boolean
+  t: Translate
 }
 
-export function PromptBar({ onGenerate, onRefine, onClear, hasOutput, generating, planMode, onPlanModeToggle, hasKey }: Props) {
+export function PromptBar({ onGenerate, onRefine, onClear, hasOutput, generating, planMode, onPlanModeToggle, hasKey, t }: Props) {
   const [prompt, setPrompt] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -53,12 +55,12 @@ export function PromptBar({ onGenerate, onRefine, onClear, hasOutput, generating
         <div className="inspiration-strip">
           {INSPIRATION.map((item) => (
             <button
-              key={item.label}
+              key={item.labelKey}
               className="inspiration-chip"
               onClick={() => handleInspiration(item.prompt)}
               disabled={generating}
             >
-              {item.label}
+              {t(item.labelKey)}
             </button>
           ))}
         </div>
@@ -71,8 +73,8 @@ export function PromptBar({ onGenerate, onRefine, onClear, hasOutput, generating
         onChange={(e) => setPrompt(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={hasOutput
-          ? 'Describe changes, or leave empty and hit Refine…'
-          : 'Describe what you want to build…'
+          ? t('prompt.placeholder.refine')
+          : t('prompt.placeholder.generate')
         }
         rows={4}
         disabled={generating}
@@ -83,11 +85,11 @@ export function PromptBar({ onGenerate, onRefine, onClear, hasOutput, generating
           className={`plan-toggle ${planMode ? 'active' : ''}`}
           onClick={onPlanModeToggle}
           disabled={generating}
-          title={planMode ? 'Plan mode ON — Gaze, Dream, then Create' : 'Enable Plan mode for deeper, multi-step generation'}
+          title={planMode ? t('prompt.plan.title.on') : t('prompt.plan.title.off')}
         >
           <span className="plan-toggle-orb" />
-          <span className="plan-toggle-label">Plan</span>
-          {planMode && <span className="plan-toggle-hint">Gaze · Dream · Create</span>}
+          <span className="plan-toggle-label">{t('prompt.plan.label')}</span>
+          {planMode && <span className="plan-toggle-hint">{t('prompt.plan.hint')}</span>}
         </button>
 
         <div className="prompt-footer-right">
@@ -97,7 +99,7 @@ export function PromptBar({ onGenerate, onRefine, onClear, hasOutput, generating
               onClick={onClear}
               disabled={generating}
             >
-              Clear
+              {t('prompt.clear')}
             </button>
           )}
           <button
@@ -106,16 +108,16 @@ export function PromptBar({ onGenerate, onRefine, onClear, hasOutput, generating
             disabled={!hasKey || generating || (!hasOutput && !prompt.trim())}
           >
             {!hasKey ? (
-              <>⚠ No Key</>
+              <>{t('prompt.noKey')}</>
             ) : generating ? (
               <span className="btn-spinner" />
             ) : hasOutput ? (
-              <>↻ Refine</>
+              <>{t('prompt.refine')}</>
             ) : (
-              <>↑ Generate</>
+              <>{t('prompt.generate')}</>
             )}
           </button>
-          <span className="prompt-hint mono">{hasKey ? '⌘↵' : 'Paste API key above'}</span>
+          <span className="prompt-hint mono">{hasKey ? t('prompt.shortcut') : t('prompt.keyHint')}</span>
         </div>
       </div>
     </div>

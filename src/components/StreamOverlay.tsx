@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react'
+import type { Translate } from '../lib/i18n'
 import './StreamOverlay.css'
 
 interface Props {
@@ -6,6 +7,7 @@ interface Props {
   thinkingText?: string
   tokenCount: number
   done: boolean
+  t: Translate
 }
 
 const PHASES = ['thinking', 'doctype', 'head', 'style', 'body', 'script', 'complete'] as const
@@ -28,7 +30,7 @@ function escapeLine(line: string): string {
     .replace(/>/g, '&gt;')
 }
 
-export function StreamOverlay({ streamText, thinkingText, tokenCount, done }: Props) {
+export function StreamOverlay({ streamText, thinkingText, tokenCount, done, t }: Props) {
   const codeRef = useRef<HTMLDivElement>(null)
   const thinkRef = useRef<HTMLDivElement>(null)
   const [startTime] = useState(() => performance.now())
@@ -115,7 +117,7 @@ export function StreamOverlay({ streamText, thinkingText, tokenCount, done }: Pr
       <div className="stream-header">
         <div className="stream-status">
           <div className={`stream-dot ${done ? 'done' : isThinking ? 'thinking' : ''}`} />
-          <span>{done ? 'COMPLETE' : isThinking ? 'THINKING' : 'STREAMING'}</span>
+          <span>{done ? t('stream.complete') : isThinking ? t('stream.thinking') : t('stream.streaming')}</span>
         </div>
         <div className="stream-meta mono">
           <span>{tokenCount} tok</span>
@@ -133,7 +135,7 @@ export function StreamOverlay({ streamText, thinkingText, tokenCount, done }: Pr
             onClick={() => setThinkingExpanded(e => !e)}
           >
             <span className="stream-thinking-icon">{thinkingExpanded ? '▾' : '▸'}</span>
-            <span className="stream-thinking-label">THINKING</span>
+            <span className="stream-thinking-label">{t('stream.thinking')}</span>
             <span className="stream-thinking-count">{thinkingText!.length.toLocaleString()} chr</span>
           </button>
           {thinkingExpanded && (
@@ -153,7 +155,7 @@ export function StreamOverlay({ streamText, thinkingText, tokenCount, done }: Pr
             className={`phase-pill ${i < phaseIdx ? 'done' : ''} ${i === phaseIdx ? 'active' : ''}`}
           >
             <span className="pill-indicator">{i < phaseIdx ? 'ok' : i + 1}</span>
-            {p === 'doctype' ? 'DOCTYPE' : p === 'complete' ? 'DONE' : `<${p}>`}
+            {p === 'doctype' ? t('stream.doctype') : p === 'complete' ? t('stream.donePill') : `<${p}>`}
           </div>
         ))}
       </div>
@@ -174,7 +176,7 @@ export function StreamOverlay({ streamText, thinkingText, tokenCount, done }: Pr
       <div className="stream-footer mono">
         <span>
           {done
-            ? `${tokenCount} tok / ${elapsed}s / avg ${avgSpeed} tok/s`
+            ? `${tokenCount} tok / ${elapsed}s / ${t('stream.avg', { speed: avgSpeed })}`
             : `${currentSpeed} tok/s`
           }
         </span>
