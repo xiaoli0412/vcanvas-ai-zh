@@ -70,6 +70,41 @@ npm run proxy
 
 The proxy listens on `http://127.0.0.1:8765` and forwards custom provider requests without hardcoding any upstream endpoint.
 
+For deployed servers, the same proxy handler can also be exposed through the same origin at `/_vcanvas_proxy` so browser requests do not depend on a local desktop proxy.
+
+## Remote Deploy
+
+This repo includes a repeatable remote deployment script for the current static build and custom proxy service.
+
+```bash
+node scripts/deploy-remote.mjs \
+  --host YOUR_SERVER_IP \
+  --user root \
+  --password 'YOUR_SERVER_PASSWORD'
+```
+
+The script will:
+
+- build the current frontend locally
+- upload the `dist` output and proxy script to the server
+- replace `/opt/vcanvas/dist`
+- install or update a unified `vcanvas.service`
+- restart `vcanvas.service`
+
+The deployed `vcanvas.service` serves both:
+
+- static frontend files from `/opt/vcanvas/dist`
+- same-origin proxy requests on `/_vcanvas_proxy`
+
+You can also provide credentials through environment variables:
+
+```bash
+VCANVAS_DEPLOY_HOST=YOUR_SERVER_IP
+VCANVAS_DEPLOY_USER=root
+VCANVAS_DEPLOY_PASSWORD=YOUR_SERVER_PASSWORD
+node scripts/deploy-remote.mjs
+```
+
 ## Build
 
 ```bash

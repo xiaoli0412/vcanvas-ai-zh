@@ -2,6 +2,7 @@ import http from 'node:http'
 
 const port = Number(process.env.VCANVAS_PROXY_PORT || 8765)
 const host = process.env.VCANVAS_PROXY_HOST || '127.0.0.1'
+const PROXY_PATHS = new Set(['/proxy', '/_vcanvas_proxy'])
 
 function writeCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -46,7 +47,7 @@ const server = http.createServer(async (req, res) => {
     return
   }
 
-  if (req.method !== 'POST' || req.url !== '/proxy') {
+  if (req.method !== 'POST' || !PROXY_PATHS.has(req.url || '')) {
     sendJson(res, 404, { error: 'Not found' })
     return
   }
@@ -94,4 +95,3 @@ const server = http.createServer(async (req, res) => {
 server.listen(port, host, () => {
   console.log(`VCanvas custom OpenAI proxy listening on http://${host}:${port}`)
 })
-

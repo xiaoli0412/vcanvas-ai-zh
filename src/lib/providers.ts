@@ -1,5 +1,7 @@
 /** Provider and model configuration */
 
+import { resolveProxyUrl, shouldUseProxyFirst } from './proxy'
+
 export type ApiType = 'openai' | 'gemini'
 export type CustomMode = 'openai' | 'azure' | 'compatible'
 
@@ -55,8 +57,6 @@ export interface ResolvedProviderRequest {
   useProxy?: boolean
 }
 
-const VCANVAS_PROXY_URL = 'http://127.0.0.1:8765/proxy'
-
 function withBearer(apiKey: string): Record<string, string> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -69,6 +69,21 @@ function withBearer(apiKey: string): Record<string, string> {
 
 async function fetchWithOptionalProxy(url: string, options: FetchOptions = {}, useProxy = false) {
   const method = options.method || (options.body ? 'POST' : 'GET')
+  const proxyRequest = () => resolveProxyUrl().then((proxyUrl) => fetch(proxyUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      url,
+      method,
+      headers: options.headers || {},
+      body: options.body,
+    }),
+    signal: options.signal,
+  }))
+
+  if (useProxy && await shouldUseProxyFirst()) {
+    return proxyRequest()
+  }
 
   try {
     return await fetch(url, {
@@ -81,17 +96,7 @@ async function fetchWithOptionalProxy(url: string, options: FetchOptions = {}, u
     if (!useProxy) throw error
   }
 
-  return fetch(VCANVAS_PROXY_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      url,
-      method,
-      headers: options.headers || {},
-      body: options.body,
-    }),
-    signal: options.signal,
-  })
+  return proxyRequest()
 }
 
 const DEFAULT_CUSTOM: CustomProviderConfig = {
@@ -445,7 +450,19 @@ export async function fetchCustomModels(state: ProviderState, apiKey: string): P
 
   if (!response.ok) {
     const errText = await response.text().catch(() => '')
-    throw new Error(errText ? `Custom models ${response.status}: ${errText}` : `Custom models ${response.status}`)
+    let detail = errText.trim()
+
+    if (detail) {
+      try {
+        const parsed = JSON.parse(detail)
+        detail = parsed?.error?.message || parsed?.error || parsed?.message || detail
+      } catch {
+        detail = detail.replace(/\s+/g, ' ').trim()
+      }
+    }
+
+    const statusLabel = `Custom models ${response.status}`
+    throw new Error(detail ? `${statusLabel}: ${detail}` : statusLabel)
   }
 
   const data = await response.json()

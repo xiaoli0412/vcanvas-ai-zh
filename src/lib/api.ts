@@ -1,6 +1,5 @@
 import { resolveProviderRequest, type ProviderDef, type ProviderState } from './providers'
-
-const VCANVAS_PROXY_URL = 'http://127.0.0.1:8765/proxy'
+import { resolveProxyUrl, shouldUseProxyFirst } from './proxy'
 
 export interface StreamCallbacks {
   onChunk: (text: string, tokenIndex: number) => void
@@ -238,23 +237,29 @@ export async function streamChat(
     signal,
   }
 
-  let response: Response
-  try {
-    response = await fetch(apiUrl.toString(), directInit)
-  } catch (error) {
-    if (!request.useProxy) throw error
-
-    response = await fetch(VCANVAS_PROXY_URL, {
+  const proxyRequest = () => resolveProxyUrl().then((proxyUrl) => fetch(proxyUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      url: apiUrl.toString(),
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        url: apiUrl.toString(),
-        method: 'POST',
-        headers: request.headers,
-        body: JSON.stringify(body),
-      }),
-      signal,
-    })
+      headers: request.headers,
+      body: JSON.stringify(body),
+    }),
+    signal,
+  }))
+
+  let response: Response
+  if (request.useProxy && await shouldUseProxyFirst()) {
+    response = await proxyRequest()
+  } else {
+    try {
+      response = await fetch(apiUrl.toString(), directInit)
+    } catch (error) {
+      if (!request.useProxy) throw error
+
+      response = await proxyRequest()
+    }
   }
 
   if (!response.ok) {
