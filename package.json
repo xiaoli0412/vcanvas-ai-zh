@@ -1,12 +1,12 @@
 {
   "name": "vcanvas",
-  "version": "1.10.5",
+  "version": "1.10.6",
   "description": "A visual canvas playground for vision-language models. Draw, describe, generate.",
   "private": true,
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:gh": "node -e \"const { spawnSync } = require('node:child_process'); const bin = process.platform === 'win32' ? 'npx.cmd' : 'npx'; const result = spawnSync(bin, ['vite', 'build'], { stdio: 'inherit', env: { ...process.env, VCANVAS_BASE: '/vcanvas-ai-zh/' } }); process.exit(result.status ?? 1);\"",
+    "build:gh": "node scripts/build-gh.mjs",
     "preview": "vite preview",
     "proxy": "node scripts/custom-openai-proxy.mjs"
   },
