@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # VCanvas Remix
 
 A visual canvas playground for vision-language models. Draw sketches, describe what you want, and the model generates complete HTML/CSS/JS rendered live in a side-by-side preview.
@@ -127,3 +128,6 @@ Built on [Excalidraw](https://github.com/excalidraw/excalidraw) — the open-sou
 ## License
 
 MIT
+=======
+# vcanvas-ai-zh
+>>>>>>> publish/main
