@@ -77,6 +77,17 @@ The workflow runs on:
 - `codex/v1.10.5-remix-release`
 - `codex/style-presets-workflow-lab`
 
+### Tagged release publishing
+
+If you push a git tag such as:
+
+```bash
+git tag v1.10.8
+git push publish v1.10.8
+```
+
+the desktop workflow will also publish a GitHub Release and attach the packaged installers from all supported platforms.
+
 ## Language Support
 
 - English and Simplified Chinese UI toggle
