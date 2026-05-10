@@ -320,11 +320,6 @@ export function App() {
     })
   }, [providerState, visionProviderState, visionSupportMap])
 
-  const visionRoutingError = getVisionRoutingError(providerState, {
-    supportMap: visionSupportMap,
-    analyzerState: visionProviderState,
-  })
-
   const handleGenerate = useCallback(async (prompt: string) => {
     if (!isProviderConfigured(providerState) || generating) return
 
@@ -755,7 +750,7 @@ ${SYSTEM_PROMPT}`
     }
   }, [providerState, generating, lastHTML, capturePreview, getSelectedFrameImages, addChip, runPlanPhase, t])
 
-  const canGenerate = isProviderConfigured(providerState) && !visionRoutingError
+  const canGenerate = isProviderConfigured(providerState)
   const needsKey = !canGenerate
 
   return (
