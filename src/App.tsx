@@ -16,6 +16,18 @@ import { streamChat, extractHTML } from './lib/api'
 import { exportSourceAsPng, exportAllAsPng, getSources } from './lib/export'
 import { createTranslator, getInitialLocale, saveLocale, type Locale } from './lib/i18n'
 import {
+  formatPromptStudioSummary,
+  loadPromptStudioState,
+  savePromptStudioState,
+  type PromptStudioState,
+} from './lib/promptPresets'
+import {
+  buildGeneratePrompt,
+  buildPlanPhaseContext,
+  buildRefinePrompt,
+  buildSystemPrompt,
+} from './lib/promptBuilder'
+import {
   PROVIDER_STATE_STORAGE_KEY,
   VISION_PROVIDER_STATE_STORAGE_KEY,
   getActiveModelId,
@@ -126,6 +138,7 @@ export function App() {
   const [providerState, setProviderState] = useState<ProviderState>(() => loadProviderState(PROVIDER_STATE_STORAGE_KEY))
   const [visionProviderState, setVisionProviderState] = useState<ProviderState>(() => loadProviderState(VISION_PROVIDER_STATE_STORAGE_KEY))
   const [visionSupportMap, setVisionSupportMap] = useState<VisionSupportMap>(loadVisionSupportMap)
+  const [promptStudio, setPromptStudio] = useState<PromptStudioState>(loadPromptStudioState)
   const [showSettings, setShowSettings] = useState(false)
 
   const t = useMemo(() => createTranslator(locale), [locale])
@@ -156,6 +169,15 @@ export function App() {
   const [planTokenCount, setPlanTokenCount] = useState(0)
   const [planDone, setPlanDone] = useState(false)
 
+  const compiledSystemPrompt = useMemo(
+    () => buildSystemPrompt(SYSTEM_PROMPT, promptStudio),
+    [promptStudio],
+  )
+  const promptStudioSummary = useMemo(
+    () => formatPromptStudioSummary(promptStudio, t),
+    [promptStudio, t],
+  )
+
   const previewRef = useRef<HTMLIFrameElement>(null)
   const panelLeftRef = useRef<HTMLDivElement>(null)
 
@@ -163,6 +185,10 @@ export function App() {
     document.documentElement.lang = locale
     saveLocale(locale)
   }, [locale])
+
+  useEffect(() => {
+    savePromptStudioState(promptStudio)
+  }, [promptStudio])
 
   const handleProviderUpdate = useCallback((newState: ProviderState) => {
     setProviderState(newState)
@@ -332,6 +358,8 @@ export function App() {
 
     const frameImages = await getSelectedFrameImages()
 
+    const compiledPrompt = buildGeneratePrompt(prompt, promptStudio)
+
     // Build user message content
     const userContent: Message['content'] = []
     const chipImages: ChatChip['images'] = []
@@ -343,10 +371,10 @@ export function App() {
       })
       chipImages.push({ src: 'data:image/png;base64,' + img.base64, label: img.label })
     }
-    userContent.push({ type: 'text', text: prompt })
+    userContent.push({ type: 'text', text: compiledPrompt })
 
     const newMessages: Message[] = [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: compiledSystemPrompt },
       { role: 'user', content: userContent },
     ]
 
@@ -354,7 +382,7 @@ export function App() {
       const dispatch = await prepareMessagesForCodeModel(newMessages)
 
       setMessages(dispatch.preparedMessages)
-      addChip({ role: 'user', text: prompt, images: chipImages })
+      addChip({ role: 'user', text: `${promptStudioSummary}\n${prompt}`, images: chipImages })
       if (dispatch.analyzerSummary) {
         addChip({ role: 'assistant', text: dispatch.analyzerSummary })
       }
@@ -396,7 +424,7 @@ export function App() {
       setGenerating(false)
       addChip({ role: 'assistant', text: 'ERR:' + (t(err.message) === err.message ? err.message : t(err.message)) })
     }
-  }, [provider, providerState, apiKey, modelId, generating, getSelectedFrameImages, addChip, prepareMessagesForCodeModel, t])
+  }, [provider, providerState, apiKey, modelId, generating, getSelectedFrameImages, addChip, prepareMessagesForCodeModel, t, compiledSystemPrompt, promptStudio, promptStudioSummary])
 
   const handleRefine = useCallback(async (prompt: string) => {
     if (!isProviderConfigured(providerState) || generating) return
@@ -412,7 +440,7 @@ export function App() {
     const screenshotB64 = await capturePreview()
     setPreviewScreenshot(screenshotB64 ? 'data:image/png;base64,' + screenshotB64 : null)
 
-    const refinementPrompt = prompt || t('system.prompt.refineDefault')
+    const refinementPrompt = buildRefinePrompt(prompt, promptStudio, t('system.prompt.refineDefault'))
 
     const userContent: Message['content'] = []
     const chipImages: ChatChip['images'] = []
@@ -444,7 +472,7 @@ export function App() {
 
     // Flat message list: system + single user turn (no conversation history)
     const newMessages: Message[] = [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: compiledSystemPrompt },
       { role: 'user', content: userContent },
     ]
 
@@ -452,7 +480,7 @@ export function App() {
       const dispatch = await prepareMessagesForCodeModel(newMessages)
 
       setMessages(dispatch.preparedMessages)
-      addChip({ role: 'user', text: prompt || t('system.chip.refineAction'), images: chipImages.length ? chipImages : undefined })
+      addChip({ role: 'user', text: `${promptStudioSummary}\n${prompt || t('system.chip.refineAction')}`, images: chipImages.length ? chipImages : undefined })
       if (dispatch.analyzerSummary) {
         addChip({ role: 'assistant', text: dispatch.analyzerSummary })
       }
@@ -489,14 +517,18 @@ export function App() {
       setGenerating(false)
       addChip({ role: 'assistant', text: 'ERR:' + (t(err.message) === err.message ? err.message : t(err.message)) })
     }
-  }, [provider, providerState, apiKey, modelId, generating, lastHTML, capturePreview, getSelectedFrameImages, addChip, prepareMessagesForCodeModel, t])
+  }, [provider, providerState, apiKey, modelId, generating, lastHTML, capturePreview, getSelectedFrameImages, addChip, prepareMessagesForCodeModel, t, compiledSystemPrompt, promptStudio, promptStudioSummary])
 
   // ── Plan Mode: multi-step Gaze → Dream → Create ──
 
-  const makeGazePrompt = (userRequest: string) =>
+  const planPhaseContext = useMemo(() => buildPlanPhaseContext(promptStudio), [promptStudio])
+
+  const makeGazePrompt = useCallback((userRequest: string) =>
     `You are an artist and visual thinker. Gaze deeply into this image. Let it speak to you.
 
 The user's request: "${userRequest}"
+
+${planPhaseContext}
 
 Now describe what you see — not clinically, but with feeling:
 - What story is the image telling? What is its essence?
@@ -506,12 +538,15 @@ Now describe what you see — not clinically, but with feeling:
 - What does this WANT to become? A sleek app? A wild art piece? A polished page?
 - What emotions or associations does it evoke?
 
-Be poetic but specific. See beyond the obvious. This is the foundation of everything that follows.`
+Be poetic but specific. See beyond the obvious. This is the foundation of everything that follows.`,
+  [planPhaseContext])
 
-  const makeDreamPrompt = (userRequest: string) =>
+  const makeDreamPrompt = useCallback((userRequest: string) =>
     `You are a visionary designer in a flow state. Based on what you saw in the image, now DREAM.
 
 The user's request: "${userRequest}"
+
+${planPhaseContext}
 
 Let your imagination run wild, then focus it:
 - **What is this becoming?** Not just "a landing page" — what KIND? What's the vibe, the world it lives in?
@@ -521,13 +556,17 @@ Let your imagination run wild, then focus it:
 - **Wild ideas** — Throw out 3-5 creative ideas that could elevate this beyond generic. Go bold. Particle effects? Asymmetric grids? Cinematic typography? Interactive physics?
 - **The vibe board** — If this were a mood board, what's on it? Be specific.
 
-Dream big, then crystallize it into a vision someone could build. Be opinionated. Be brave.`
+Dream big, then crystallize it into a vision someone could build. Be opinionated. Be brave.`,
+  [planPhaseContext])
 
-  const makePlanCreatePrompt = (gazeResult: string, dreamResult: string, userRequest: string) =>
+  const makePlanCreatePrompt = useCallback((gazeResult: string, dreamResult: string, userRequest: string) =>
     `You are implementing a design based on deep observation and creative vision.
 
 ## The User's Request:
 ${userRequest}
+
+## Studio Direction:
+${planPhaseContext}
 
 ## What Was Seen (Gaze):
 ${gazeResult}
@@ -537,7 +576,8 @@ ${dreamResult}
 
 Now bring this vision to life. Generate the COMPLETE HTML file that realizes this dream. Every font, color, interaction, and detail from the vision should be faithfully implemented. Make it extraordinary.
 
-${SYSTEM_PROMPT}`
+${compiledSystemPrompt}`,
+  [compiledSystemPrompt, planPhaseContext])
 
   const runPlanPhase = useCallback(async (
     messages: Message[],
@@ -585,7 +625,7 @@ ${SYSTEM_PROMPT}`
       chipImages.push({ src: 'data:image/png;base64,' + img.base64, label: img.label })
     }
 
-    addChip({ role: 'user', text: `${t('system.chip.planTag')} ${prompt}`, images: chipImages })
+    addChip({ role: 'user', text: `${t('system.chip.planTag')} ${promptStudioSummary}\n${prompt}`, images: chipImages })
 
     try {
       // Phase 1: Gaze
@@ -651,7 +691,7 @@ ${SYSTEM_PROMPT}`
       setPlanDone(true)
       addChip({ role: 'assistant', text: 'ERR: ' + (t(err.message) === err.message ? err.message : t(err.message)) })
     }
-  }, [providerState, generating, getSelectedFrameImages, addChip, runPlanPhase, t])
+  }, [providerState, generating, getSelectedFrameImages, addChip, runPlanPhase, t, promptStudioSummary, makeGazePrompt, makeDreamPrompt, makePlanCreatePrompt])
 
   const handlePlanRefine = useCallback(async (prompt: string) => {
     if (!isProviderConfigured(providerState) || generating) return
@@ -690,8 +730,8 @@ ${SYSTEM_PROMPT}`
       chipImages.push({ src: 'data:image/png;base64,' + img.base64, label: img.label })
     }
 
-    const refinementPrompt = prompt || t('system.prompt.planRefineDefault')
-    addChip({ role: 'user', text: `${t('system.chip.planRefineTag')} ${refinementPrompt}`, images: chipImages })
+    const refinementPrompt = buildRefinePrompt(prompt, promptStudio, t('system.prompt.planRefineDefault'))
+    addChip({ role: 'user', text: `${t('system.chip.planRefineTag')} ${promptStudioSummary}\n${prompt || t('system.prompt.planRefineDefault')}`, images: chipImages })
 
     try {
       // Gaze at both screenshot and canvas
@@ -748,7 +788,7 @@ ${SYSTEM_PROMPT}`
       setPlanDone(true)
       addChip({ role: 'assistant', text: 'ERR: ' + (t(err.message) === err.message ? err.message : t(err.message)) })
     }
-  }, [providerState, generating, lastHTML, capturePreview, getSelectedFrameImages, addChip, runPlanPhase, t])
+  }, [providerState, generating, lastHTML, capturePreview, getSelectedFrameImages, addChip, runPlanPhase, t, promptStudio, promptStudioSummary, makeGazePrompt, makeDreamPrompt, makePlanCreatePrompt])
 
   const canGenerate = isProviderConfigured(providerState)
   const needsKey = !canGenerate
@@ -758,6 +798,7 @@ ${SYSTEM_PROMPT}`
       <Header
         providerName={provider.name}
         modelLabel={modelLabel}
+        studioSummary={promptStudioSummary}
         hasKey={canGenerate}
         onOpenSettings={() => setShowSettings(true)}
         locale={locale}
@@ -795,6 +836,8 @@ ${SYSTEM_PROMPT}`
             onGenerate={planMode ? handlePlanGenerate : handleGenerate}
             onRefine={planMode ? handlePlanRefine : handleRefine}
             onClear={handleClear}
+            studio={promptStudio}
+            onStudioChange={setPromptStudio}
             hasOutput={!!lastHTML}
             generating={generating}
             planMode={planMode}

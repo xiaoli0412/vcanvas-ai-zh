@@ -1,5 +1,16 @@
-import React, { useState, useRef, useCallback } from 'react'
+import React, { useState, useRef, useCallback, useMemo } from 'react'
 import type { Translate } from '../lib/i18n'
+import {
+  BRAND_STYLE_PRESETS,
+  DENSITY_OPTIONS,
+  FIDELITY_OPTIONS,
+  MOTION_OPTIONS,
+  SURFACE_OPTIONS,
+  TONE_OPTIONS,
+  WORKFLOW_PRESETS,
+  type BrandStyleId,
+  type PromptStudioState,
+} from '../lib/promptPresets'
 import './PromptBar.css'
 
 const INSPIRATION = [
@@ -13,6 +24,8 @@ interface Props {
   onGenerate: (prompt: string) => void
   onRefine: (prompt: string) => void
   onClear: () => void
+  studio: PromptStudioState
+  onStudioChange: (state: PromptStudioState) => void
   hasOutput: boolean
   generating: boolean
   planMode: boolean
@@ -21,9 +34,39 @@ interface Props {
   t: Translate
 }
 
-export function PromptBar({ onGenerate, onRefine, onClear, hasOutput, generating, planMode, onPlanModeToggle, hasKey, t }: Props) {
+export function PromptBar({
+  onGenerate,
+  onRefine,
+  onClear,
+  studio,
+  onStudioChange,
+  hasOutput,
+  generating,
+  planMode,
+  onPlanModeToggle,
+  hasKey,
+  t,
+}: Props) {
   const [prompt, setPrompt] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const selectedWorkflow = useMemo(
+    () => WORKFLOW_PRESETS.find((preset) => preset.id === studio.workflowId) || WORKFLOW_PRESETS[0],
+    [studio.workflowId],
+  )
+
+  const applyStudioPatch = useCallback((patch: Partial<PromptStudioState>) => {
+    onStudioChange({ ...studio, ...patch })
+  }, [onStudioChange, studio])
+
+  const toggleStyle = useCallback((styleId: BrandStyleId) => {
+    const next = studio.styleIds.includes(styleId)
+      ? studio.styleIds.filter((id) => id !== styleId)
+      : [...studio.styleIds, styleId].slice(0, 3)
+
+    if (next.length === 0) return
+    applyStudioPatch({ styleIds: next })
+  }, [applyStudioPatch, studio.styleIds])
 
   const handleSubmit = useCallback(() => {
     const text = prompt.trim()
@@ -65,6 +108,124 @@ export function PromptBar({ onGenerate, onRefine, onClear, hasOutput, generating
           ))}
         </div>
       )}
+
+      <div className="studio-panel">
+        <div className="studio-row studio-row-primary">
+          <div className="studio-section">
+            <div className="studio-label-row">
+              <span className="studio-label">{t('studio.workflow.label')}</span>
+              <span className="studio-meta">{t(selectedWorkflow.descriptionKey)}</span>
+            </div>
+            <div className="studio-chip-strip">
+              {WORKFLOW_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  className={`studio-chip ${studio.workflowId === preset.id ? 'selected' : ''}`}
+                  onClick={() => applyStudioPatch({ workflowId: preset.id })}
+                  disabled={generating}
+                >
+                  {t(preset.labelKey)}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="studio-row">
+          <div className="studio-section">
+            <div className="studio-label-row">
+              <span className="studio-label">{t('studio.style.label')}</span>
+              <span className="studio-meta">{t('studio.style.meta')}</span>
+            </div>
+            <div className="studio-chip-strip">
+              {BRAND_STYLE_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  className={`studio-chip ${studio.styleIds.includes(preset.id) ? 'selected' : ''}`}
+                  onClick={() => toggleStyle(preset.id)}
+                  disabled={generating}
+                >
+                  {t(preset.labelKey)}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="studio-grid">
+          <label className="studio-select-block">
+            <span className="studio-label">{t('studio.surface.label')}</span>
+            <select
+              className="studio-select"
+              value={studio.surface}
+              onChange={(e) => applyStudioPatch({ surface: e.target.value as PromptStudioState['surface'] })}
+              disabled={generating}
+            >
+              {SURFACE_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>{t(option.labelKey)}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="studio-select-block">
+            <span className="studio-label">{t('studio.tone.label')}</span>
+            <select
+              className="studio-select"
+              value={studio.tone}
+              onChange={(e) => applyStudioPatch({ tone: e.target.value as PromptStudioState['tone'] })}
+              disabled={generating}
+            >
+              {TONE_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>{t(option.labelKey)}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="studio-select-block">
+            <span className="studio-label">{t('studio.density.label')}</span>
+            <select
+              className="studio-select"
+              value={studio.density}
+              onChange={(e) => applyStudioPatch({ density: e.target.value as PromptStudioState['density'] })}
+              disabled={generating}
+            >
+              {DENSITY_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>{t(option.labelKey)}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="studio-select-block">
+            <span className="studio-label">{t('studio.motion.label')}</span>
+            <select
+              className="studio-select"
+              value={studio.motion}
+              onChange={(e) => applyStudioPatch({ motion: e.target.value as PromptStudioState['motion'] })}
+              disabled={generating}
+            >
+              {MOTION_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>{t(option.labelKey)}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="studio-select-block">
+            <span className="studio-label">{t('studio.fidelity.label')}</span>
+            <select
+              className="studio-select"
+              value={studio.fidelity}
+              onChange={(e) => applyStudioPatch({ fidelity: e.target.value as PromptStudioState['fidelity'] })}
+              disabled={generating}
+            >
+              {FIDELITY_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>{t(option.labelKey)}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </div>
 
       <textarea
         ref={textareaRef}

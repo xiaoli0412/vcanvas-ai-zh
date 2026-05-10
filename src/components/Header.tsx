@@ -5,6 +5,7 @@ import './Header.css'
 interface Props {
   providerName: string
   modelLabel: string
+  studioSummary: string
   hasKey: boolean
   onOpenSettings: () => void
   locale: Locale
@@ -12,7 +13,7 @@ interface Props {
   t: Translate
 }
 
-export function Header({ providerName, modelLabel, hasKey, onOpenSettings, locale, onToggleLocale, t }: Props) {
+export function Header({ providerName, modelLabel, studioSummary, hasKey, onOpenSettings, locale, onToggleLocale, t }: Props) {
   const [showAbout, setShowAbout] = useState(false)
 
   return (
@@ -25,6 +26,10 @@ export function Header({ providerName, modelLabel, hasKey, onOpenSettings, local
           <span className="header-by">by <a href="https://e01.ai" target="_blank" rel="noopener" className="header-by-link">E01.ai</a></span>
         </div>
         <div className="header-right">
+          <div className="header-studio-pill" title={studioSummary}>
+            <span className="header-studio-label">Studio</span>
+            <span className="header-studio-value">{studioSummary}</span>
+          </div>
           <a
             className="header-gh-btn"
             href="https://github.com/xiaoli0412/vcanvas-ai-zh"
