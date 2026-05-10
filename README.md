@@ -38,6 +38,45 @@ npm run dev
 
 Open `http://localhost:5173`. Click the model button in the header to configure your provider and API key.
 
+## Desktop Apps
+
+The project can be packaged as installable desktop apps for Windows, macOS, and Linux using Electron.
+
+### Local desktop run
+
+```bash
+npm install
+npm run desktop
+```
+
+This will:
+
+- build a desktop-safe frontend bundle with relative asset paths
+- launch Electron in a resizable desktop window
+- start an embedded local proxy automatically for custom OpenAI-compatible endpoints
+
+### Build installable packages
+
+```bash
+npm run dist:desktop
+```
+
+Artifacts are written to the `release/` directory.
+
+### CI packaging
+
+GitHub Actions includes `.github/workflows/desktop.yml`, which builds desktop artifacts for:
+
+- Windows (`nsis` installer)
+- macOS (`dmg`)
+- Linux (`AppImage`, `deb`)
+
+The workflow runs on:
+
+- `main`
+- `codex/v1.10.5-remix-release`
+- `codex/style-presets-workflow-lab`
+
 ## Language Support
 
 - English and Simplified Chinese UI toggle
@@ -69,6 +108,8 @@ npm run proxy
 ```
 
 The proxy listens on `http://127.0.0.1:8765` and forwards custom provider requests without hardcoding any upstream endpoint.
+
+In the desktop build, this proxy is started automatically inside the Electron app, so custom compatible endpoints still work without requiring a separate browser or manual proxy process.
 
 For deployed servers, the same proxy handler can also be exposed through the same origin at `/_vcanvas_proxy` so browser requests do not depend on a local desktop proxy.
 
