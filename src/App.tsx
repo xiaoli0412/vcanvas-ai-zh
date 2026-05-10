@@ -15,10 +15,22 @@ import { ResizeHandle } from './components/ResizeHandle'
 import { streamChat, extractHTML } from './lib/api'
 import { exportSourceAsPng, exportAllAsPng, getSources } from './lib/export'
 import { createTranslator, getInitialLocale, saveLocale, type Locale } from './lib/i18n'
-import { getActiveModelId, getProvider, isProviderConfigured, loadProviderState, saveProviderState } from './lib/providers'
-import type { ProviderState } from './lib/providers'
+import {
+  PROVIDER_STATE_STORAGE_KEY,
+  VISION_PROVIDER_STATE_STORAGE_KEY,
+  getActiveModelId,
+  getProvider,
+  isProviderConfigured,
+  loadProviderState,
+  loadVisionSupportMap,
+  saveProviderState,
+  saveVisionSupportMap,
+  type ProviderState,
+  type VisionSupportMap,
+} from './lib/providers'
 import type { Message } from './lib/api'
 import type { ChatChip } from './lib/store'
+import { getVisionRoutingError, prepareVisionMessages } from './lib/vision'
 import './styles/app.css'
 
 const SYSTEM_PROMPT = `You are an expert frontend developer. The user will show you a sketch/wireframe/reference and describe what they want. Generate a COMPLETE, self-contained HTML file.
@@ -111,7 +123,9 @@ export function App() {
   const editorRef = useRef<ExcalidrawImperativeAPI | null>(null)
   const [editor, setEditor] = useState<ExcalidrawImperativeAPI | null>(null)
   const [locale, setLocale] = useState<Locale>(getInitialLocale)
-  const [providerState, setProviderState] = useState<ProviderState>(loadProviderState)
+  const [providerState, setProviderState] = useState<ProviderState>(() => loadProviderState(PROVIDER_STATE_STORAGE_KEY))
+  const [visionProviderState, setVisionProviderState] = useState<ProviderState>(() => loadProviderState(VISION_PROVIDER_STATE_STORAGE_KEY))
+  const [visionSupportMap, setVisionSupportMap] = useState<VisionSupportMap>(loadVisionSupportMap)
   const [showSettings, setShowSettings] = useState(false)
 
   const t = useMemo(() => createTranslator(locale), [locale])
@@ -152,7 +166,17 @@ export function App() {
 
   const handleProviderUpdate = useCallback((newState: ProviderState) => {
     setProviderState(newState)
-    saveProviderState(newState)
+    saveProviderState(newState, PROVIDER_STATE_STORAGE_KEY)
+  }, [])
+
+  const handleVisionProviderUpdate = useCallback((newState: ProviderState) => {
+    setVisionProviderState(newState)
+    saveProviderState(newState, VISION_PROVIDER_STATE_STORAGE_KEY)
+  }, [])
+
+  const handleVisionSupportUpdate = useCallback((map: VisionSupportMap) => {
+    setVisionSupportMap(map)
+    saveVisionSupportMap(map)
   }, [])
 
   const addChip = useCallback((chip: ChatChip) => {
@@ -289,6 +313,18 @@ export function App() {
     }
   }, [])
 
+  const prepareMessagesForCodeModel = useCallback(async (messages: Message[]) => {
+    return prepareVisionMessages(providerState, messages, {
+      supportMap: visionSupportMap,
+      analyzerState: visionProviderState,
+    })
+  }, [providerState, visionProviderState, visionSupportMap])
+
+  const visionRoutingError = getVisionRoutingError(providerState, {
+    supportMap: visionSupportMap,
+    analyzerState: visionProviderState,
+  })
+
   const handleGenerate = useCallback(async (prompt: string) => {
     if (!isProviderConfigured(providerState) || generating) return
 
@@ -319,12 +355,17 @@ export function App() {
       { role: 'user', content: userContent },
     ]
 
-    setMessages(newMessages)
-    addChip({ role: 'user', text: prompt, images: chipImages })
-    setIteration((i) => i + 1)
-
     try {
-      await streamChat(provider, providerState, apiKey, modelId, newMessages, {
+      const dispatch = await prepareMessagesForCodeModel(newMessages)
+
+      setMessages(dispatch.preparedMessages)
+      addChip({ role: 'user', text: prompt, images: chipImages })
+      if (dispatch.analyzerSummary) {
+        addChip({ role: 'assistant', text: dispatch.analyzerSummary })
+      }
+      setIteration((i) => i + 1)
+
+      await streamChat(provider, providerState, apiKey, modelId, dispatch.preparedMessages, {
         onChunk: (text, tokenIdx) => {
           setStreamText((prev) => prev + text)
           setStreamTokenCount(tokenIdx)
@@ -360,7 +401,7 @@ export function App() {
       setGenerating(false)
       addChip({ role: 'assistant', text: 'ERR:' + (t(err.message) === err.message ? err.message : t(err.message)) })
     }
-  }, [provider, providerState, apiKey, modelId, generating, getSelectedFrameImages, addChip, t])
+  }, [provider, providerState, apiKey, modelId, generating, getSelectedFrameImages, addChip, prepareMessagesForCodeModel, t])
 
   const handleRefine = useCallback(async (prompt: string) => {
     if (!isProviderConfigured(providerState) || generating) return
@@ -412,12 +453,17 @@ export function App() {
       { role: 'user', content: userContent },
     ]
 
-    setMessages(newMessages)
-    addChip({ role: 'user', text: prompt || t('system.chip.refineAction'), images: chipImages.length ? chipImages : undefined })
-    setIteration((i) => i + 1)
-
     try {
-      await streamChat(provider, providerState, apiKey, modelId, newMessages, {
+      const dispatch = await prepareMessagesForCodeModel(newMessages)
+
+      setMessages(dispatch.preparedMessages)
+      addChip({ role: 'user', text: prompt || t('system.chip.refineAction'), images: chipImages.length ? chipImages : undefined })
+      if (dispatch.analyzerSummary) {
+        addChip({ role: 'assistant', text: dispatch.analyzerSummary })
+      }
+      setIteration((i) => i + 1)
+
+      await streamChat(provider, providerState, apiKey, modelId, dispatch.preparedMessages, {
         onChunk: (text, tokenIdx) => {
           setStreamText((prev) => prev + text)
           setStreamTokenCount(tokenIdx)
@@ -448,7 +494,7 @@ export function App() {
       setGenerating(false)
       addChip({ role: 'assistant', text: 'ERR:' + (t(err.message) === err.message ? err.message : t(err.message)) })
     }
-  }, [provider, providerState, apiKey, modelId, generating, lastHTML, capturePreview, getSelectedFrameImages, addChip, t])
+  }, [provider, providerState, apiKey, modelId, generating, lastHTML, capturePreview, getSelectedFrameImages, addChip, prepareMessagesForCodeModel, t])
 
   // ── Plan Mode: multi-step Gaze → Dream → Create ──
 
@@ -504,16 +550,18 @@ ${SYSTEM_PROMPT}`
     onText: (text: string) => void,
   ): Promise<string> => {
     return new Promise((resolve, reject) => {
-      streamChat(provider, providerState, apiKey, modelId, messages, {
+      prepareMessagesForCodeModel(messages)
+        .then((dispatch) => streamChat(provider, providerState, apiKey, modelId, dispatch.preparedMessages, {
         onChunk: (text, tokenIdx) => {
           onText(text)
           setPlanTokenCount(tokenIdx)
         },
         onDone: (fullText) => resolve(fullText),
         onError: (err) => reject(err),
-      })
+      }))
+        .catch(reject)
     })
-  }, [provider, providerState, apiKey, modelId])
+  }, [provider, providerState, apiKey, modelId, prepareMessagesForCodeModel])
 
   const handlePlanGenerate = useCallback(async (prompt: string) => {
     if (!isProviderConfigured(providerState) || generating) return
@@ -707,7 +755,7 @@ ${SYSTEM_PROMPT}`
     }
   }, [providerState, generating, lastHTML, capturePreview, getSelectedFrameImages, addChip, runPlanPhase, t])
 
-  const canGenerate = isProviderConfigured(providerState)
+  const canGenerate = isProviderConfigured(providerState) && !visionRoutingError
   const needsKey = !canGenerate
 
   return (
@@ -724,7 +772,11 @@ ${SYSTEM_PROMPT}`
       {showSettings && (
         <ProviderModal
           state={providerState}
+          visionState={visionProviderState}
+          visionSupportMap={visionSupportMap}
           onUpdate={handleProviderUpdate}
+          onUpdateVisionState={handleVisionProviderUpdate}
+          onUpdateVisionSupportMap={handleVisionSupportUpdate}
           onClose={() => setShowSettings(false)}
           t={t}
         />
@@ -778,6 +830,7 @@ ${SYSTEM_PROMPT}`
                       <div className="api-key-step"><span className="api-key-step-num">1</span> {t('overlay.customStep1')}</div>
                       <div className="api-key-step"><span className="api-key-step-num">2</span> {t('overlay.customStep2')}</div>
                       <div className="api-key-step"><span className="api-key-step-num">3</span> {t('overlay.customStep3')}</div>
+                      <div className="api-key-step"><span className="api-key-step-num">4</span> {t('overlay.customStep4')}</div>
                     </>
                   ) : (
                     <>

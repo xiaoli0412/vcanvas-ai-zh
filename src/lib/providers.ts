@@ -42,6 +42,8 @@ export interface ProviderState {
   custom: CustomProviderConfig
 }
 
+export type VisionSupportMap = Record<string, boolean>
+
 export interface FetchOptions {
   headers?: Record<string, string>
   body?: string
@@ -181,7 +183,79 @@ export const PROVIDERS: ProviderDef[] = [
   },
 ]
 
-const STORAGE_KEY = 'vcanvas_provider_state'
+export const PROVIDER_STATE_STORAGE_KEY = 'vcanvas_provider_state'
+export const VISION_PROVIDER_STATE_STORAGE_KEY = 'vcanvas_vision_provider_state'
+export const VISION_SUPPORT_STORAGE_KEY = 'vcanvas_model_vision_support'
+
+function getCustomVisionFingerprint(custom?: CustomProviderConfig): string {
+  if (!custom) return 'custom::unknown'
+
+  if (custom.mode === 'azure') {
+    return [
+      'azure',
+      normalizeUrl(custom.resourceUrl),
+      (custom.deployment || '').trim(),
+      (custom.apiVersion || '').trim(),
+    ].join('::')
+  }
+
+  if (custom.mode === 'openai') {
+    return ['openai', normalizeUrl(custom.baseUrl)].join('::')
+  }
+
+  return ['compatible', normalizeUrl(custom.endpoint || custom.baseUrl)].join('::')
+}
+
+export function getProviderModelKey(providerId: string, modelId: string, custom?: CustomProviderConfig): string {
+  if (providerId === 'custom') {
+    return `${providerId}::${getCustomVisionFingerprint(custom)}::${modelId}`
+  }
+
+  return `${providerId}::${modelId}`
+}
+
+function readStorageJson<T>(storage: Storage, key: string, fallback: T): T {
+  try {
+    const raw = storage.getItem(key)
+    if (!raw) return fallback
+    return JSON.parse(raw) as T
+  } catch {
+    return fallback
+  }
+}
+
+function writeStorageJson(storage: Storage, key: string, value: unknown) {
+  storage.setItem(key, JSON.stringify(value))
+}
+
+export function loadVisionSupportMap(): VisionSupportMap {
+  try {
+    if (typeof sessionStorage === 'undefined') return {}
+    return readStorageJson<VisionSupportMap>(sessionStorage, VISION_SUPPORT_STORAGE_KEY, {})
+  } catch {
+    return {}
+  }
+}
+
+export function saveVisionSupportMap(map: VisionSupportMap) {
+  try {
+    if (typeof sessionStorage === 'undefined') return
+    writeStorageJson(sessionStorage, VISION_SUPPORT_STORAGE_KEY, map)
+  } catch { /* ignore */ }
+}
+
+export function isModelVisionEnabled(
+  provider: ProviderDef,
+  modelId: string,
+  supportMap: VisionSupportMap = {},
+  custom?: CustomProviderConfig,
+): boolean {
+  const key = getProviderModelKey(provider.id, modelId, custom)
+  if (key in supportMap) return supportMap[key]
+  const model = provider.models.find(m => m.id === modelId)
+  if (typeof model?.vision === 'boolean') return model.vision
+  return provider.type === 'gemini'
+}
 
 export function getProvider(id: string): ProviderDef {
   return PROVIDERS.find(p => p.id === id) || PROVIDERS[0]
@@ -250,9 +324,18 @@ export function makeDefaultProviderState(): ProviderState {
   }
 }
 
-export function loadProviderState(): ProviderState {
+export function makeDefaultVisionProviderState(): ProviderState {
+  const state = makeDefaultProviderState()
+  return {
+    ...state,
+    activeProviderId: 'google',
+    activeModelId: getProvider('google').models[0]?.id || '',
+  }
+}
+
+export function loadProviderState(storageKey = PROVIDER_STATE_STORAGE_KEY): ProviderState {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = localStorage.getItem(storageKey)
     if (raw) {
       const parsed = JSON.parse(raw)
       if (!parsed.keys) parsed.keys = {}
@@ -279,11 +362,13 @@ export function loadProviderState(): ProviderState {
     }
   } catch { /* ignore */ }
 
-  return makeDefaultProviderState()
+  return storageKey === VISION_PROVIDER_STATE_STORAGE_KEY
+    ? makeDefaultVisionProviderState()
+    : makeDefaultProviderState()
 }
 
-export function saveProviderState(state: ProviderState) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+export function saveProviderState(state: ProviderState, storageKey = PROVIDER_STATE_STORAGE_KEY) {
+  localStorage.setItem(storageKey, JSON.stringify(state))
 }
 
 export function getActiveModelId(state: ProviderState): string {

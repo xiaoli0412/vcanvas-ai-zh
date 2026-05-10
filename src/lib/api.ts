@@ -13,6 +13,16 @@ export interface Message {
   content: any[] | string
 }
 
+export interface VisionSummary {
+  rawText: string
+  summaryText: string
+}
+
+export interface StreamResult {
+  fullText: string
+  usage: { input_tokens: number | string; output_tokens: number | string }
+}
+
 // ── Message format converters ──
 
 function toOpenAIMessages(messages: Message[]): any[] {
@@ -75,12 +85,18 @@ function toGeminiPayload(messages: Message[]): { systemInstruction?: any; conten
   return { systemInstruction, contents }
 }
 
+function extractTextFromResponse(text: string): string {
+  const fence = text.match(/```(?:json|text)?\s*\n([\s\S]*?)```/i)
+  if (fence) return fence[1].trim()
+  return text.trim()
+}
+
 // ── SSE stream readers ──
 
 async function readOpenAIStream(
   response: Response,
   callbacks: StreamCallbacks
-) {
+): Promise<StreamResult> {
   const reader = response.body!.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
@@ -126,12 +142,13 @@ async function readOpenAIStream(
   }
 
   callbacks.onDone(fullText, usage)
+  return { fullText, usage }
 }
 
 async function readGeminiStream(
   response: Response,
   callbacks: StreamCallbacks
-) {
+): Promise<StreamResult> {
   const reader = response.body!.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
@@ -179,6 +196,7 @@ async function readGeminiStream(
   }
 
   callbacks.onDone(fullText, usage)
+  return { fullText, usage }
 }
 
 // ── Unified streaming entry point ──
@@ -191,7 +209,7 @@ export async function streamChat(
   messages: Message[],
   callbacks: StreamCallbacks,
   signal?: AbortSignal,
-) {
+): Promise<StreamResult> {
   if (provider.type === 'gemini') {
     const endpoint = provider.endpoint
     if (!endpoint) throw new Error('provider.error.noEndpoint')
@@ -268,6 +286,26 @@ export async function streamChat(
   }
 
   return readOpenAIStream(response, callbacks)
+}
+
+export async function analyzeVision(
+  provider: ProviderDef,
+  state: ProviderState,
+  apiKey: string,
+  modelId: string,
+  messages: Message[],
+  signal?: AbortSignal,
+): Promise<VisionSummary> {
+  const result = await streamChat(provider, state, apiKey, modelId, messages, {
+    onChunk: () => {},
+    onDone: () => {},
+    onError: () => {},
+  }, signal)
+
+  return {
+    rawText: result.fullText,
+    summaryText: extractTextFromResponse(result.fullText),
+  }
 }
 
 // ── HTML extraction + cleanup ──
