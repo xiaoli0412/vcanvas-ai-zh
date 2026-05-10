@@ -26,12 +26,14 @@
     "@types/react-dom": "^19.2.3",
     "electron": "^36.2.0",
     "electron-builder": "^26.0.12",
+    "icon-gen": "^5.0.0",
     "typescript": "^6.0.2",
     "vite": "^8.0.3"
   },
   "build": {
     "appId": "ai.e01.vcanvas",
     "productName": "VCanvas",
+    "copyright": "Copyright © 2026 VCanvas",
     "directories": {
       "output": "release"
     },
@@ -44,6 +46,7 @@
     ],
     "asar": true,
     "win": {
+      "icon": "assets/icons/app.ico",
       "target": [
         {
           "target": "nsis",
@@ -59,6 +62,7 @@
       "artifactName": "${productName}-${version}-Windows-Setup.${ext}"
     },
     "linux": {
+      "icon": "assets/icons",
       "target": [
         "AppImage",
         "deb"
@@ -67,6 +71,7 @@
       "category": "Graphics"
     },
     "mac": {
+      "icon": "assets/icons/app.icns",
       "target": [
         "dmg"
       ],

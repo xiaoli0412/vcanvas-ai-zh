@@ -54,6 +54,7 @@ This will:
 - build a desktop-safe frontend bundle with relative asset paths
 - launch Electron in a resizable desktop window
 - start an embedded local proxy automatically for custom OpenAI-compatible endpoints
+- use dedicated desktop app icons and application menu wiring
 
 ### Build installable packages
 
