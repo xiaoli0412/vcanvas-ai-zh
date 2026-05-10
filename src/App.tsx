@@ -3,6 +3,7 @@ import { convertToExcalidrawElements } from '@excalidraw/excalidraw'
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import { Header } from './components/Header'
 import { ProviderModal } from './components/ProviderModal'
+import { PresetLibraryModal } from './components/PresetLibraryModal'
 import { Canvas } from './components/Canvas'
 import { FramePicker } from './components/FramePicker'
 import { PromptBar } from './components/PromptBar'
@@ -15,6 +16,16 @@ import { ResizeHandle } from './components/ResizeHandle'
 import { streamChat, extractHTML } from './lib/api'
 import { exportSourceAsPng, exportAllAsPng, getSources } from './lib/export'
 import { createTranslator, getInitialLocale, saveLocale, type Locale } from './lib/i18n'
+import {
+  applyPromptPreset,
+  createPromptPresetPayload,
+  createUserPromptPreset,
+  loadUserPromptPresets,
+  overwriteUserPromptPreset,
+  renameUserPromptPreset,
+  saveUserPromptPresets,
+  type PromptPresetRecord,
+} from './lib/presetLibrary'
 import {
   formatPromptStudioSummary,
   loadPromptStudioState,
@@ -139,7 +150,10 @@ export function App() {
   const [visionProviderState, setVisionProviderState] = useState<ProviderState>(() => loadProviderState(VISION_PROVIDER_STATE_STORAGE_KEY))
   const [visionSupportMap, setVisionSupportMap] = useState<VisionSupportMap>(loadVisionSupportMap)
   const [promptStudio, setPromptStudio] = useState<PromptStudioState>(loadPromptStudioState)
+  const [promptDraft, setPromptDraft] = useState('')
+  const [savedPresets, setSavedPresets] = useState<PromptPresetRecord[]>(loadUserPromptPresets)
   const [showSettings, setShowSettings] = useState(false)
+  const [showPresetLibrary, setShowPresetLibrary] = useState(false)
 
   const t = useMemo(() => createTranslator(locale), [locale])
   const provider = getProvider(providerState.activeProviderId)
@@ -190,20 +204,71 @@ export function App() {
     savePromptStudioState(promptStudio)
   }, [promptStudio])
 
-  const handleProviderUpdate = useCallback((newState: ProviderState) => {
+  useEffect(() => {
+    saveUserPromptPresets(savedPresets)
+  }, [savedPresets])
+
+  const persistProviderState = useCallback((newState: ProviderState) => {
     setProviderState(newState)
     saveProviderState(newState, PROVIDER_STATE_STORAGE_KEY)
   }, [])
 
-  const handleVisionProviderUpdate = useCallback((newState: ProviderState) => {
+  const persistVisionProviderState = useCallback((newState: ProviderState) => {
     setVisionProviderState(newState)
     saveProviderState(newState, VISION_PROVIDER_STATE_STORAGE_KEY)
   }, [])
 
-  const handleVisionSupportUpdate = useCallback((map: VisionSupportMap) => {
+  const persistVisionSupportMap = useCallback((map: VisionSupportMap) => {
     setVisionSupportMap(map)
     saveVisionSupportMap(map)
   }, [])
+
+  const handleProviderUpdate = useCallback((newState: ProviderState) => {
+    persistProviderState(newState)
+  }, [persistProviderState])
+
+  const handleVisionProviderUpdate = useCallback((newState: ProviderState) => {
+    persistVisionProviderState(newState)
+  }, [persistVisionProviderState])
+
+  const handleVisionSupportUpdate = useCallback((map: VisionSupportMap) => {
+    persistVisionSupportMap(map)
+  }, [persistVisionSupportMap])
+
+  const buildCurrentPresetPayload = useCallback(() => {
+    return createPromptPresetPayload(promptStudio, promptDraft, providerState, visionProviderState, visionSupportMap)
+  }, [promptStudio, promptDraft, providerState, visionProviderState, visionSupportMap])
+
+  const handleSavePresetAsNew = useCallback((name: string) => {
+    const next = createUserPromptPreset(name, buildCurrentPresetPayload())
+    setSavedPresets((prev) => [next, ...prev])
+  }, [buildCurrentPresetPayload])
+
+  const handleOverwritePreset = useCallback((presetId: string) => {
+    setSavedPresets((prev) => prev.map((preset) => (
+      preset.id === presetId ? overwriteUserPromptPreset(preset, buildCurrentPresetPayload()) : preset
+    )))
+  }, [buildCurrentPresetPayload])
+
+  const handleRenamePreset = useCallback((presetId: string, name: string) => {
+    setSavedPresets((prev) => prev.map((preset) => (
+      preset.id === presetId ? renameUserPromptPreset(preset, name) : preset
+    )))
+  }, [])
+
+  const handleDeletePreset = useCallback((presetId: string) => {
+    setSavedPresets((prev) => prev.filter((preset) => preset.id !== presetId))
+  }, [])
+
+  const handleApplyPreset = useCallback((preset: PromptPresetRecord) => {
+    const applied = applyPromptPreset(preset, providerState, visionProviderState, visionSupportMap)
+    setPromptStudio(applied.promptStudio)
+    setPromptDraft(applied.promptDraft)
+    persistProviderState(applied.providerState)
+    persistVisionProviderState(applied.visionProviderState)
+    persistVisionSupportMap(applied.visionSupportMap)
+    setShowPresetLibrary(false)
+  }, [persistProviderState, persistVisionProviderState, persistVisionSupportMap, providerState, visionProviderState, visionSupportMap])
 
   const addChip = useCallback((chip: ChatChip) => {
     setChips((prev) => [...prev, chip])
@@ -214,6 +279,7 @@ export function App() {
     setChips([])
     setIteration(0)
     setLastHTML('')
+    setPromptDraft('')
     setStreamText('')
     setThinkingText('')
     setStreamTokenCount(0)
@@ -817,6 +883,18 @@ ${compiledSystemPrompt}`,
           t={t}
         />
       )}
+      {showPresetLibrary && (
+        <PresetLibraryModal
+          savedPresets={savedPresets}
+          onApply={handleApplyPreset}
+          onSaveCurrent={handleSavePresetAsNew}
+          onOverwrite={handleOverwritePreset}
+          onRename={handleRenamePreset}
+          onDelete={handleDeletePreset}
+          onClose={() => setShowPresetLibrary(false)}
+          t={t}
+        />
+      )}
       <div className="workspace">
         <div className="panel-left" ref={panelLeftRef}>
           <Canvas onEditorReady={(e) => { editorRef.current = e; setEditor(e) }} onCanvasChange={handleCanvasChange} locale={locale} />
@@ -836,8 +914,11 @@ ${compiledSystemPrompt}`,
             onGenerate={planMode ? handlePlanGenerate : handleGenerate}
             onRefine={planMode ? handlePlanRefine : handleRefine}
             onClear={handleClear}
+            prompt={promptDraft}
+            onPromptChange={setPromptDraft}
             studio={promptStudio}
             onStudioChange={setPromptStudio}
+            onOpenLibrary={() => setShowPresetLibrary(true)}
             hasOutput={!!lastHTML}
             generating={generating}
             planMode={planMode}

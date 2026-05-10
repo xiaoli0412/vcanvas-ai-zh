@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useMemo } from 'react'
+import React, { useRef, useCallback, useMemo } from 'react'
 import type { Translate } from '../lib/i18n'
 import {
   BRAND_STYLE_PRESETS,
@@ -24,8 +24,11 @@ interface Props {
   onGenerate: (prompt: string) => void
   onRefine: (prompt: string) => void
   onClear: () => void
+  prompt: string
+  onPromptChange: (value: string) => void
   studio: PromptStudioState
   onStudioChange: (state: PromptStudioState) => void
+  onOpenLibrary: () => void
   hasOutput: boolean
   generating: boolean
   planMode: boolean
@@ -38,8 +41,11 @@ export function PromptBar({
   onGenerate,
   onRefine,
   onClear,
+  prompt,
+  onPromptChange,
   studio,
   onStudioChange,
+  onOpenLibrary,
   hasOutput,
   generating,
   planMode,
@@ -47,7 +53,6 @@ export function PromptBar({
   hasKey,
   t,
 }: Props) {
-  const [prompt, setPrompt] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const selectedWorkflow = useMemo(
@@ -77,8 +82,8 @@ export function PromptBar({
       if (!text) return
       onGenerate(text)
     }
-    setPrompt('')
-  }, [prompt, generating, hasOutput, onGenerate, onRefine])
+    onPromptChange('')
+  }, [prompt, generating, hasOutput, onGenerate, onRefine, onPromptChange])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
@@ -88,9 +93,9 @@ export function PromptBar({
   }, [handleSubmit])
 
   const handleInspiration = useCallback((text: string) => {
-    setPrompt(text)
+    onPromptChange(text)
     textareaRef.current?.focus()
-  }, [])
+  }, [onPromptChange])
 
   return (
     <div className={`prompt-bar ${planMode ? 'plan-active' : ''}`}>
@@ -114,7 +119,12 @@ export function PromptBar({
           <div className="studio-section">
             <div className="studio-label-row">
               <span className="studio-label">{t('studio.workflow.label')}</span>
-              <span className="studio-meta">{t(selectedWorkflow.descriptionKey)}</span>
+              <div className="studio-meta-row">
+                <span className="studio-meta">{t(selectedWorkflow.descriptionKey)}</span>
+                <button className="btn btn-secondary studio-library-btn" type="button" onClick={onOpenLibrary}>
+                  {t('preset.library.open')}
+                </button>
+              </div>
             </div>
             <div className="studio-chip-strip">
               {WORKFLOW_PRESETS.map((preset) => (
@@ -231,7 +241,7 @@ export function PromptBar({
         ref={textareaRef}
         className="prompt-input"
         value={prompt}
-        onChange={(e) => setPrompt(e.target.value)}
+        onChange={(e) => onPromptChange(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={hasOutput
           ? t('prompt.placeholder.refine')

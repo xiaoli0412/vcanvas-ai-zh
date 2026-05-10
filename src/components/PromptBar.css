@@ -89,6 +89,17 @@
   text-align: right;
 }
 
+.studio-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.studio-library-btn {
+  font-size: 10px !important;
+  padding: 5px 10px !important;
+}
+
 .studio-chip-strip {
   display: flex;
   flex-wrap: wrap;
@@ -340,6 +351,11 @@
   .prompt-footer {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .studio-meta-row {
+    width: 100%;
+    justify-content: space-between;
   }
 
   .prompt-footer-right {
