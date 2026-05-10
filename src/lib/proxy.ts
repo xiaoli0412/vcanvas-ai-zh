@@ -14,6 +14,10 @@ function getSameOriginProxyUrl(origin: string) {
 async function detectProxyUrl() {
   if (typeof window === 'undefined') return LOCAL_PROXY_URL
 
+  if (window.vcanvasDesktop?.proxyUrl) {
+    return window.vcanvasDesktop.proxyUrl
+  }
+
   const { origin } = window.location
   const healthUrl = `${origin.replace(/\/$/, '')}/health`
 
@@ -48,6 +52,7 @@ export async function resolveProxyUrl(): Promise<string> {
 
 export async function shouldUseProxyFirst(): Promise<boolean> {
   if (typeof window === 'undefined') return false
+  if (window.vcanvasDesktop?.proxyUrl) return true
   if (isLocalHostname(window.location.hostname)) return false
 
   return (await resolveProxyUrl()) !== LOCAL_PROXY_URL
