@@ -36,10 +36,30 @@
   border: 1px solid var(--border);
 }
 
+.chip-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
 .msg-chip.user {
   background: var(--accent-dim);
   color: var(--accent);
   border-color: rgba(74, 158, 142, 0.15);
+}
+
+.msg-chip.user .chip-badge {
+  background: rgba(12, 14, 17, 0.14);
+  color: var(--accent);
+  border-color: rgba(74, 158, 142, 0.18);
 }
 
 .msg-chip.assistant {

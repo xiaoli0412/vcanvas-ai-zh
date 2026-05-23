@@ -3,6 +3,7 @@ import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import type { Translate } from '../lib/i18n'
 import { getSources, exportSourceAsPng, exportAllAsPng } from '../lib/export'
 import type { SourceInfo } from '../lib/export'
+import { normalizeWebsiteUrl } from '../lib/websiteReference'
 import './FramePicker.css'
 
 interface SourceThumb extends SourceInfo {
@@ -14,6 +15,8 @@ interface Props {
   selectedIds: Set<string>
   onSelectionChange: (ids: Set<string>) => void
   onAddFrame: () => void
+  onImportImage: () => void
+  onImportVideo: () => void
   canvasVersion: number
   onSave: () => void
   onLoad: () => void
@@ -21,9 +24,24 @@ interface Props {
   t: Translate
 }
 
-export function FramePicker({ editor, selectedIds, onSelectionChange, onAddFrame, canvasVersion, onSave, onLoad, previewScreenshot, t }: Props) {
+export function FramePicker({
+  editor,
+  selectedIds,
+  onSelectionChange,
+  onAddFrame,
+  onImportImage,
+  onImportVideo,
+  canvasVersion,
+  onSave,
+  onLoad,
+  previewScreenshot,
+  t,
+}: Props) {
   const [sources, setSources] = useState<SourceThumb[]>([])
   const [hasDrawing, setHasDrawing] = useState(false)
+  const [embedEditorOpen, setEmbedEditorOpen] = useState(false)
+  const [embedUrl, setEmbedUrl] = useState('')
+  const [embedMessage, setEmbedMessage] = useState<string | null>(null)
   const prevCountRef = useRef(0)
 
   const refreshSources = useCallback(async () => {
@@ -67,24 +85,109 @@ export function FramePicker({ editor, selectedIds, onSelectionChange, onAddFrame
     onSelectionChange(new Set())
   }, [onSelectionChange])
 
+  const getSelectedEmbeddable = useCallback(() => {
+    if (!editor) return null
+    const selectedIds = Object.keys(editor.getAppState().selectedElementIds || {})
+    return editor.getSceneElements().find((element: any) => (
+      selectedIds.includes(element.id) && element.type === 'embeddable'
+    )) as (ReturnType<ExcalidrawImperativeAPI['getSceneElements']>[number] & { link?: string }) | null
+  }, [editor])
+
+  const openEmbedEditor = useCallback(() => {
+    const selectedEmbeddable = getSelectedEmbeddable()
+    setEmbedEditorOpen((prev) => selectedEmbeddable ? true : !prev)
+    setEmbedUrl(selectedEmbeddable?.link || '')
+    setEmbedMessage(selectedEmbeddable?.link ? t('canvas.embedReady') : t('canvas.embedHint'))
+  }, [getSelectedEmbeddable, t])
+
+  const handleEmbedSubmit = useCallback(() => {
+    if (!editor) return
+
+    const normalizedUrl = normalizeWebsiteUrl(embedUrl)
+    if (!normalizedUrl) {
+      setEmbedMessage(t('canvas.embedInvalid'))
+      return
+    }
+
+    const selectedEmbeddable = getSelectedEmbeddable() as any
+    if (selectedEmbeddable) {
+      editor.updateScene({
+        elements: editor.getSceneElements().map((element: any) => (
+          element.id === selectedEmbeddable.id
+            ? {
+                ...element,
+                link: normalizedUrl,
+                updated: Date.now(),
+                version: element.version + 1,
+                versionNonce: Math.floor(Math.random() * 1000000000),
+              }
+            : element
+        )),
+      })
+    } else {
+      const appState = editor.getAppState()
+      editor.insertEmbeddableElement({
+        sceneX: appState.width / (2 * appState.zoom.value) - appState.scrollX,
+        sceneY: appState.height / (2 * appState.zoom.value) - appState.scrollY,
+        link: normalizedUrl,
+      })
+    }
+
+    setEmbedUrl(normalizedUrl)
+    setEmbedEditorOpen(true)
+    setEmbedMessage(t('canvas.embedUnavailable'))
+  }, [editor, embedUrl, getSelectedEmbeddable, t])
+
+  const embedEditor = embedEditorOpen ? (
+    <div className="frame-embed-editor">
+      <div className="frame-embed-editor-header">
+        <span className="frame-embed-label">{t('canvas.embedEditorTitle')}</span>
+        <button className="btn btn-secondary frame-embed-submit" onClick={handleEmbedSubmit}>
+          {getSelectedEmbeddable() ? t('canvas.embedUpdate') : t('canvas.embedAdd')}
+        </button>
+      </div>
+      <input
+        type="text"
+        className="frame-embed-input"
+        value={embedUrl}
+        onChange={(e) => setEmbedUrl(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            handleEmbedSubmit()
+          }
+        }}
+        placeholder={t('canvas.embedPlaceholder')}
+        spellCheck={false}
+      />
+      <div className="frame-embed-help">{embedMessage || t('canvas.embedHint')}</div>
+    </div>
+  ) : null
+
   const hasFrames = sources.some(s => s.kind === 'frame')
 
   // ── No frames: single-line status bar ──
   if (!hasFrames) {
     return (
-      <div className="frame-picker-bar">
-        <span className="fpb-status">
-          <span className={`fpb-dot ${hasDrawing ? 'on' : ''}`} />
-          {hasDrawing ? t('canvas.fullCanvasWillBeSent') : t('canvas.drawToStart')}
-        </span>
-        {previewScreenshot && (
-          <span className="fpb-badge">{t('canvas.previousOutput')}</span>
-        )}
-        <div className="fpb-actions">
-          <button className="btn btn-ghost" onClick={onAddFrame}>{t('canvas.frame')}</button>
-          <button className="btn btn-ghost" onClick={onSave}>{t('canvas.save')}</button>
-          <button className="btn btn-ghost" onClick={onLoad}>{t('canvas.load')}</button>
+      <div className="frame-picker-block">
+        <div className="frame-picker-bar">
+          <span className="fpb-status">
+            <span className={`fpb-dot ${hasDrawing ? 'on' : ''}`} />
+            {hasDrawing ? t('canvas.fullCanvasWillBeSent') : t('canvas.drawToStart')}
+          </span>
+          {previewScreenshot && (
+            <span className="fpb-badge">{t('canvas.previousOutput')}</span>
+          )}
+          <div className="fpb-actions">
+            <button className="btn btn-ghost" onClick={onAddFrame}>{t('canvas.frame')}</button>
+            <button className="btn btn-ghost" onClick={onImportImage}>{t('canvas.importImage')}</button>
+            <button className="btn btn-ghost" onClick={onImportVideo}>{t('canvas.importVideo')}</button>
+            <button className="btn btn-ghost" onClick={openEmbedEditor}>{t('canvas.embed')}</button>
+            <button className="btn btn-ghost" onClick={onSave}>{t('canvas.save')}</button>
+            <button className="btn btn-ghost" onClick={onLoad}>{t('canvas.load')}</button>
+          </div>
         </div>
+        {embedEditor}
       </div>
     )
   }
@@ -99,6 +202,9 @@ export function FramePicker({ editor, selectedIds, onSelectionChange, onAddFrame
         </span>
         <div className="frame-picker-actions">
           <button className="btn btn-ghost" onClick={onAddFrame}>{t('canvas.frame')}</button>
+          <button className="btn btn-ghost" onClick={onImportImage}>{t('canvas.importImage')}</button>
+          <button className="btn btn-ghost" onClick={onImportVideo}>{t('canvas.importVideo')}</button>
+          <button className="btn btn-ghost" onClick={openEmbedEditor}>{t('canvas.embed')}</button>
           <button className="btn btn-ghost" onClick={selectAll}>{t('canvas.all')}</button>
           <button className="btn btn-ghost" onClick={selectNone}>{t('canvas.none')}</button>
           <span className="fpb-sep" />
@@ -136,6 +242,7 @@ export function FramePicker({ editor, selectedIds, onSelectionChange, onAddFrame
           </div>
         )}
       </div>
+      {embedEditor}
     </div>
   )
 }

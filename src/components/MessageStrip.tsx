@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react'
 import type { Translate } from '../lib/i18n'
-import type { ChatChip } from '../lib/store'
+import { trimChipText, type ChatChip } from '../lib/store'
 import './MessageStrip.css'
 
 interface Props {
@@ -51,8 +51,9 @@ export function MessageStrip({ chips, t }: Props) {
                   </div>
                 )}
                 {isError && <span className="chip-error-icon">!</span>}
+                {chip.badge && chip.role === 'user' && <span className="chip-badge">{chip.badge}</span>}
                 <span className="chip-text">
-                  {isError ? t('msg.error') : chip.text.length > 40 ? chip.text.slice(0, 40) + '…' : chip.text}
+                  {isError ? t('msg.error') : trimChipText(chip.text)}
                 </span>
               </div>
             </React.Fragment>

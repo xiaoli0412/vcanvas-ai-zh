@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import type { Translate } from '../lib/i18n'
+import type { CanvasModeDefinition } from '../lib/canvasModes'
 import { StreamOverlay } from './StreamOverlay'
 import './PlanOverlay.css'
 
@@ -11,6 +12,7 @@ export interface PlanPhase {
 }
 
 interface Props {
+  modeDefinition: CanvasModeDefinition
   phases: PlanPhase[]
   activePhaseIndex: number
   tokenCount: number
@@ -28,7 +30,17 @@ const PHASE_ICONS: Record<string, string> = {
   create: '▣',
 }
 
-export function PlanOverlay({ phases, activePhaseIndex, tokenCount, done, streamText, streamTokenCount, streamDone, t }: Props) {
+export function PlanOverlay({
+  modeDefinition,
+  phases,
+  activePhaseIndex,
+  tokenCount,
+  done,
+  streamText,
+  streamTokenCount,
+  streamDone,
+  t,
+}: Props) {
   const contentRef = useRef<HTMLDivElement>(null)
   const [startTime] = useState(() => performance.now())
   const [elapsed, setElapsed] = useState('0.0')
@@ -125,6 +137,7 @@ export function PlanOverlay({ phases, activePhaseIndex, tokenCount, done, stream
       {isCreatePhase && (
         <div className="plan-stream-wrapper">
           <StreamOverlay
+            modeDefinition={modeDefinition}
             streamText={streamText}
             tokenCount={streamTokenCount}
             done={streamDone}

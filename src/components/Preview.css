@@ -11,18 +11,20 @@
 }
 
 .preview-empty svg {
-  opacity: 0.2;
-  stroke: var(--text-muted);
+  opacity: 0.3;
+  stroke: var(--accent);
 }
 
 .preview-empty p {
   font-size: 12px;
   letter-spacing: 0.02em;
+  color: var(--text-secondary);
 }
 
 .preview-hint {
   font-size: 10px;
-  opacity: 0.5;
+  color: var(--accent);
+  opacity: 0.7;
   letter-spacing: 0.04em;
 }
 

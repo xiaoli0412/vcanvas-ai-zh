@@ -3,6 +3,10 @@
   position: relative;
   overflow: hidden;
   min-height: 0;
+  background:
+    radial-gradient(circle at top left, var(--accent-dim), transparent 26%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.01), rgba(255, 255, 255, 0)),
+    var(--bg-primary);
 }
 
 /* Excalidraw requires a container with explicit dimensions.

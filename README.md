@@ -19,15 +19,17 @@ BYOK (Bring Your Own Key). The default app runs in the browser. For custom endpo
 
 | Provider | Models | Get a key |
 |----------|--------|-----------|
+| **Compatible OpenAI** | OpenAI, Azure OpenAI, and compatible endpoints | — |
+| **ChatGPT** | GPT-4.1, GPT-4.1 Mini, GPT-4o, GPT-4o Mini | [OpenAI](https://platform.openai.com/api-keys) |
+| **Kimi** | Kimi K2.6, Kimi K2.5, Kimi K2, Kimi K2 Thinking, Moonshot V1 | [Moonshot](https://platform.moonshot.ai) |
 | **z.ai** | GLM-5V Turbo | [z.ai](https://z.ai) |
 | **Google** | Gemini 3.1 Pro, Flash, Flash Lite | [AI Studio](https://aistudio.google.com/apikey) |
 | **Fireworks** | Kimi K2.5 Turbo (Fire Pass) | [Fire Pass](https://app.fireworks.ai/fire-pass) |
 | **OpenRouter** | Claude 4.6, Gemini 3, Grok 4.1, Qwen 3.5, MiMo V2, Kimi K2.5 | [OpenRouter](https://openrouter.ai/keys) |
-| **Custom OpenAI** | OpenAI, Azure OpenAI, and compatible endpoints | — |
 
 OpenRouter also supports searching and selecting from 100+ vision models via the API.
 
-The custom provider does not hardcode any endpoint or model. Users provide their own connection details, and model IDs can be fetched dynamically from the upstream `/models` API.
+The compatible provider does not hardcode any endpoint or model. Users provide their own connection details, and model IDs can be fetched dynamically from the upstream `/models` API.
 
 ## Setup
 
@@ -95,9 +97,9 @@ the desktop workflow will also publish a GitHub Release and attach the packaged 
 - Locale follows browser language on first load and persists locally
 - Excalidraw locale follows the selected app locale
 
-## Custom OpenAI
+## Compatible OpenAI
 
-The `Custom OpenAI` provider supports three modes:
+The `Compatible OpenAI` provider supports three modes:
 
 - `OpenAI`: enter a base URL such as `https://api.openai.com` or `https://api.openai.com/v1`; the app completes the chat completions path automatically.
 - `Azure OpenAI`: enter the resource URL, deployment name, API version, and API key; the app builds the Azure chat completions route automatically.

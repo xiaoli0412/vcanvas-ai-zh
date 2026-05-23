@@ -19,6 +19,7 @@ export function Canvas({ onEditorReady, onCanvasChange, locale }: Props) {
         onChange={onCanvasChange}
         theme={THEME.DARK}
         langCode={locale}
+        validateEmbeddable={(link) => /^https?:\/\//i.test(link)}
         UIOptions={{
           canvasActions: {
             loadScene: false,

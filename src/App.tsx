@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react'
+import React, { startTransition, useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { convertToExcalidrawElements } from '@excalidraw/excalidraw'
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import { Header } from './components/Header'
@@ -33,11 +33,36 @@ import {
   type PromptStudioState,
 } from './lib/promptPresets'
 import {
+  CANVAS_MODE_LIST,
+  applySurprisePrompt,
+  formatCanvasModeSummary,
+  getCanvasMode,
+  getModePromptStudioState,
+  getModeUrlDraft,
+  loadModeSessionState,
+  mergeModeSessionStudioState,
+  mergeModeSessionUrlDraft,
+  saveModeSessionState,
+  setActiveCanvasMode,
+  type ModeSessionState,
+} from './lib/canvasModes'
+import {
   buildGeneratePrompt,
   buildPlanPhaseContext,
   buildRefinePrompt,
   buildSystemPrompt,
 } from './lib/promptBuilder'
+import {
+  fetchWebsiteReference,
+  formatWebsiteReferenceSummary,
+  normalizeWebsiteUrl,
+  type WebsiteReferenceContext,
+} from './lib/websiteReference'
+import {
+  fitImportedMediaSize,
+  prepareImportedImage,
+  prepareImportedVideo,
+} from './lib/canvasMedia'
 import {
   PROVIDER_STATE_STORAGE_KEY,
   VISION_PROVIDER_STATE_STORAGE_KEY,
@@ -52,9 +77,16 @@ import {
   type VisionSupportMap,
 } from './lib/providers'
 import type { Message } from './lib/api'
-import type { ChatChip } from './lib/store'
+import { createModeChip, formatOutcomeText, type ChatChip } from './lib/store'
 import { getVisionRoutingError, prepareVisionMessages } from './lib/vision'
 import './styles/app.css'
+
+interface PreviousRoundContext {
+  prompt: string
+  html: string
+  modeLabel: string
+  studioSummary: string
+}
 
 const SYSTEM_PROMPT = `You are an expert frontend developer. The user will show you a sketch/wireframe/reference and describe what they want. Generate a COMPLETE, self-contained HTML file.
 
@@ -149,13 +181,30 @@ export function App() {
   const [providerState, setProviderState] = useState<ProviderState>(() => loadProviderState(PROVIDER_STATE_STORAGE_KEY))
   const [visionProviderState, setVisionProviderState] = useState<ProviderState>(() => loadProviderState(VISION_PROVIDER_STATE_STORAGE_KEY))
   const [visionSupportMap, setVisionSupportMap] = useState<VisionSupportMap>(loadVisionSupportMap)
-  const [promptStudio, setPromptStudio] = useState<PromptStudioState>(loadPromptStudioState)
+  const [modeSession, setModeSession] = useState<ModeSessionState>(() => {
+    const classicStudio = loadPromptStudioState()
+    return loadModeSessionState({
+      existingClassicStudio: classicStudio,
+    })
+  })
+  const [websiteReference, setWebsiteReference] = useState<WebsiteReferenceContext | null>(null)
+  const [remixFetchLoading, setRemixFetchLoading] = useState(false)
+  const [remixFetchError, setRemixFetchError] = useState<string | null>(null)
   const [promptDraft, setPromptDraft] = useState('')
   const [savedPresets, setSavedPresets] = useState<PromptPresetRecord[]>(loadUserPromptPresets)
   const [showSettings, setShowSettings] = useState(false)
   const [showPresetLibrary, setShowPresetLibrary] = useState(false)
+  const [fineTuneExpanded, setFineTuneExpanded] = useState(() => modeSession.activeModeId === 'classic-studio')
+  const [includePreviousRoundContext, setIncludePreviousRoundContext] = useState(true)
+  const [previousRoundContext, setPreviousRoundContext] = useState<PreviousRoundContext | null>(null)
 
   const t = useMemo(() => createTranslator(locale), [locale])
+  const activeMode = useMemo(() => getCanvasMode(modeSession.activeModeId), [modeSession.activeModeId])
+  const promptStudio = useMemo(
+    () => getModePromptStudioState(modeSession, activeMode.id),
+    [modeSession, activeMode.id],
+  )
+  const remixUrl = useMemo(() => getModeUrlDraft(modeSession, 'remix'), [modeSession])
   const provider = getProvider(providerState.activeProviderId)
   const modelId = getActiveModelId(providerState)
   const apiKey = providerState.keys[provider.id] || ''
@@ -183,14 +232,32 @@ export function App() {
   const [planTokenCount, setPlanTokenCount] = useState(0)
   const [planDone, setPlanDone] = useState(false)
 
-  const compiledSystemPrompt = useMemo(
-    () => buildSystemPrompt(SYSTEM_PROMPT, promptStudio),
-    [promptStudio],
+  const currentWebsiteReference = activeMode.id === 'remix' ? websiteReference : null
+  const remixReferenceSummary = useMemo(
+    () => formatWebsiteReferenceSummary(currentWebsiteReference),
+    [currentWebsiteReference],
   )
-  const promptStudioSummary = useMemo(
+  const compiledSystemPrompt = useMemo(
+    () => buildSystemPrompt(SYSTEM_PROMPT, promptStudio, activeMode, currentWebsiteReference),
+    [promptStudio, activeMode, currentWebsiteReference],
+  )
+  const modeSummary = useMemo(
+    () => formatCanvasModeSummary(activeMode, t),
+    [activeMode, t],
+  )
+  const studioSummary = useMemo(
     () => formatPromptStudioSummary(promptStudio, t),
     [promptStudio, t],
   )
+  const promptStudioSummary = useMemo(
+    () => activeMode.id === 'classic-studio'
+      ? studioSummary
+      : `${t(activeMode.labelKey)} · ${studioSummary}`,
+    [activeMode, studioSummary, t],
+  )
+  const modeBadge = useMemo(() => t(activeMode.labelKey), [activeMode, t])
+  const generateActionLabel = useMemo(() => t(activeMode.ui.generateActionKey), [activeMode, t])
+  const refineActionLabel = useMemo(() => t(activeMode.ui.refineActionKey), [activeMode, t])
 
   const previewRef = useRef<HTMLIFrameElement>(null)
   const panelLeftRef = useRef<HTMLDivElement>(null)
@@ -201,8 +268,9 @@ export function App() {
   }, [locale])
 
   useEffect(() => {
-    savePromptStudioState(promptStudio)
-  }, [promptStudio])
+    saveModeSessionState(modeSession)
+    savePromptStudioState(getModePromptStudioState(modeSession, 'classic-studio'))
+  }, [modeSession])
 
   useEffect(() => {
     saveUserPromptPresets(savedPresets)
@@ -235,6 +303,55 @@ export function App() {
     persistVisionSupportMap(map)
   }, [persistVisionSupportMap])
 
+  const handleModeChange = useCallback((modeId: ModeSessionState['activeModeId']) => {
+    startTransition(() => {
+      setModeSession((prev) => setActiveCanvasMode(prev, modeId))
+    })
+    setFineTuneExpanded(modeId === 'classic-studio')
+  }, [])
+
+  const handlePromptStudioChange = useCallback((nextStudio: PromptStudioState) => {
+    setModeSession((prev) => mergeModeSessionStudioState(prev, activeMode.id, nextStudio))
+  }, [activeMode.id])
+
+  const handleRemixUrlChange = useCallback((nextUrl: string) => {
+    setModeSession((prev) => mergeModeSessionUrlDraft(prev, 'remix', nextUrl))
+    if (websiteReference && normalizeWebsiteUrl(nextUrl) !== websiteReference.url) {
+      setWebsiteReference(null)
+    }
+    if (remixFetchError) setRemixFetchError(null)
+  }, [remixFetchError, websiteReference])
+
+  const handleFetchWebsite = useCallback(async () => {
+    const nextUrl = normalizeWebsiteUrl(remixUrl)
+    if (!nextUrl || remixFetchLoading) {
+      setRemixFetchError(t('canvas.embedInvalid'))
+      return
+    }
+
+    setRemixFetchLoading(true)
+    setRemixFetchError(null)
+    try {
+      const reference = await fetchWebsiteReference(nextUrl)
+      setWebsiteReference(reference)
+      setModeSession((prev) => mergeModeSessionUrlDraft(prev, 'remix', reference.url))
+    } catch (error: any) {
+      setWebsiteReference(null)
+      setRemixFetchError(error?.message || String(error))
+    } finally {
+      setRemixFetchLoading(false)
+    }
+  }, [remixFetchLoading, remixUrl, t])
+
+  const handleClearWebsiteReference = useCallback(() => {
+    setWebsiteReference(null)
+    setRemixFetchError(null)
+  }, [])
+
+  const handleSurprise = useCallback((currentPrompt: string) => {
+    setPromptDraft(applySurprisePrompt(currentPrompt, activeMode))
+  }, [activeMode])
+
   const buildCurrentPresetPayload = useCallback(() => {
     return createPromptPresetPayload(promptStudio, promptDraft, providerState, visionProviderState, visionSupportMap)
   }, [promptStudio, promptDraft, providerState, visionProviderState, visionSupportMap])
@@ -262,17 +379,20 @@ export function App() {
 
   const handleApplyPreset = useCallback((preset: PromptPresetRecord) => {
     const applied = applyPromptPreset(preset, providerState, visionProviderState, visionSupportMap)
-    setPromptStudio(applied.promptStudio)
+    setModeSession((prev) => mergeModeSessionStudioState(prev, activeMode.id, applied.promptStudio))
     setPromptDraft(applied.promptDraft)
     persistProviderState(applied.providerState)
     persistVisionProviderState(applied.visionProviderState)
     persistVisionSupportMap(applied.visionSupportMap)
     setShowPresetLibrary(false)
-  }, [persistProviderState, persistVisionProviderState, persistVisionSupportMap, providerState, visionProviderState, visionSupportMap])
+  }, [activeMode.id, persistProviderState, persistVisionProviderState, persistVisionSupportMap, providerState, visionProviderState, visionSupportMap])
 
   const addChip = useCallback((chip: ChatChip) => {
-    setChips((prev) => [...prev, chip])
-  }, [])
+    setChips((prev) => [
+      ...prev,
+      createModeChip(chip.role, chip.text, modeBadge, chip),
+    ])
+  }, [modeBadge])
 
   const handleClear = useCallback(() => {
     setMessages([])
@@ -286,6 +406,7 @@ export function App() {
     setStreamDone(false)
     setUsage(null)
     setPreviewScreenshot(null)
+    setPreviousRoundContext(null)
   }, [])
 
   const handleResize = useCallback((deltaX: number) => {
@@ -312,6 +433,75 @@ export function App() {
       elements: [...api.getSceneElements(), ...newElements],
     })
   }, [t])
+
+  const insertImportedMedia = useCallback(async (
+    media: Awaited<ReturnType<typeof prepareImportedImage>>,
+    caption?: string,
+  ) => {
+    const api = editorRef.current
+    if (!api) return
+
+    api.addFiles([media.fileData])
+
+    const appState = api.getAppState()
+    const fitted = fitImportedMediaSize(media.width, media.height)
+    const sceneX = appState.width / (2 * appState.zoom.value) - appState.scrollX - fitted.width / 2
+    const sceneY = appState.height / (2 * appState.zoom.value) - appState.scrollY - fitted.height / 2
+
+    const skeletons: Parameters<typeof convertToExcalidrawElements>[0] = [
+      {
+        type: 'image',
+        x: sceneX,
+        y: sceneY,
+        width: fitted.width,
+        height: fitted.height,
+        fileId: media.fileData.id as any,
+        status: 'saved',
+        scale: [1, 1],
+      },
+    ]
+
+    if (caption) {
+      skeletons.push({
+        type: 'text',
+        text: caption,
+        x: sceneX,
+        y: sceneY + fitted.height + 12,
+        fontSize: 16,
+      })
+    }
+
+    const newElements = convertToExcalidrawElements(skeletons)
+    api.updateScene({
+      elements: [...api.getSceneElements(), ...newElements],
+    })
+  }, [])
+
+  const handleImportImage = useCallback(() => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'image/*'
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      if (!file) return
+      const media = await prepareImportedImage(file)
+      await insertImportedMedia(media)
+    }
+    input.click()
+  }, [insertImportedMedia])
+
+  const handleImportVideo = useCallback(() => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'video/*'
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      if (!file) return
+      const media = await prepareImportedVideo(file)
+      await insertImportedMedia(media, file.name)
+    }
+    input.click()
+  }, [insertImportedMedia])
 
   const handleSave = useCallback(() => {
     const api = editorRef.current
@@ -385,6 +575,32 @@ export function App() {
     return results
   }, [selectedFrameIds, t])
 
+  const getEmbeddedWebsiteReferenceText = useCallback(() => {
+    const api = editorRef.current
+    if (!api) return ''
+
+    const links = Array.from(new Set(
+      api.getSceneElements()
+        .map((element: any) => (element.type === 'embeddable' || element.type === 'iframe') ? element.link : '')
+        .filter((link: string) => typeof link === 'string' && link.trim()),
+    )).slice(0, 5)
+
+    if (links.length === 0) return ''
+
+    return `\n\nEmbedded web references:\n${links.map((link) => `- ${link}`).join('\n')}`
+  }, [])
+
+  const handleExportHtml = useCallback(() => {
+    if (!lastHTML) return
+    const blob = new Blob([lastHTML], { type: 'text/html;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `${t('system.export.filename')}-${Date.now()}.html`
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }, [lastHTML, t])
+
   // Capture preview iframe as screenshot
   const capturePreview = useCallback(async (): Promise<string | null> => {
     const iframe = previewRef.current
@@ -405,6 +621,51 @@ export function App() {
     }
   }, [])
 
+  const buildWebsiteReferenceInputs = useCallback(() => {
+    const reference = currentWebsiteReference
+    if (!reference?.screenshotDataUrl) {
+      return { imageContent: [] as Message['content'], chipImages: [] as ChatChip['images'] }
+    }
+
+    const match = reference.screenshotDataUrl.match(/^data:([^;]+);base64,(.+)$/)
+    if (!match) {
+      return { imageContent: [] as Message['content'], chipImages: [] as ChatChip['images'] }
+    }
+
+    return {
+      imageContent: [{
+        type: 'image',
+        source: { type: 'base64', media_type: match[1], data: match[2] },
+      }] as Message['content'],
+      chipImages: [{ src: reference.screenshotDataUrl, label: reference.url }],
+    }
+  }, [currentWebsiteReference])
+
+  const buildPreviousRoundContextBlock = useCallback(() => {
+    if (!includePreviousRoundContext || !previousRoundContext) return ''
+
+    return [
+      '## Previous Round Context',
+      `Mode: ${previousRoundContext.modeLabel}`,
+      `Studio: ${previousRoundContext.studioSummary}`,
+      'Previous round prompt:',
+      previousRoundContext.prompt,
+      'Previous round HTML output:',
+      '```html',
+      previousRoundContext.html,
+      '```',
+    ].join('\n')
+  }, [includePreviousRoundContext, previousRoundContext])
+
+  const rememberPreviousRound = useCallback((prompt: string, html: string) => {
+    setPreviousRoundContext({
+      prompt,
+      html,
+      modeLabel: modeBadge,
+      studioSummary: promptStudioSummary,
+    })
+  }, [modeBadge, promptStudioSummary])
+
   const prepareMessagesForCodeModel = useCallback(async (messages: Message[]) => {
     return prepareVisionMessages(providerState, messages, {
       supportMap: visionSupportMap,
@@ -423,12 +684,23 @@ export function App() {
     setUsage(null)
 
     const frameImages = await getSelectedFrameImages()
+    const promptWithEmbeddedReferences = `${prompt}${getEmbeddedWebsiteReferenceText()}`.trim()
+    const effectivePrompt = promptWithEmbeddedReferences
+      || (currentWebsiteReference
+        ? 'Reconstruct a homepage inspired by the referenced site while making it clean, original, and production-ready.'
+        : '')
 
-    const compiledPrompt = buildGeneratePrompt(prompt, promptStudio)
+    const compiledPrompt = buildGeneratePrompt(promptWithEmbeddedReferences, promptStudio, activeMode, currentWebsiteReference)
 
     // Build user message content
     const userContent: Message['content'] = []
     const chipImages: ChatChip['images'] = []
+    const websiteReferenceInputs = buildWebsiteReferenceInputs()
+
+    for (const part of websiteReferenceInputs.imageContent) {
+      userContent.push(part)
+    }
+    chipImages.push(...websiteReferenceInputs.chipImages)
 
     for (const img of frameImages) {
       userContent.push({
@@ -448,7 +720,11 @@ export function App() {
       const dispatch = await prepareMessagesForCodeModel(newMessages)
 
       setMessages(dispatch.preparedMessages)
-      addChip({ role: 'user', text: `${promptStudioSummary}\n${prompt}`, images: chipImages })
+      addChip({
+        role: 'user',
+        text: `${promptStudioSummary}${remixReferenceSummary ? `\n${remixReferenceSummary}` : ''}\n${promptWithEmbeddedReferences || compiledPrompt}`,
+        images: chipImages,
+      })
       if (dispatch.analyzerSummary) {
         addChip({ role: 'assistant', text: dispatch.analyzerSummary })
       }
@@ -468,8 +744,9 @@ export function App() {
           if (html) {
             setTimeout(() => {
               setLastHTML(html)
+              rememberPreviousRound(effectivePrompt || compiledPrompt, html)
               setGenerating(false)
-              addChip({ role: 'assistant', text: t('system.chip.generated') })
+              addChip({ role: 'assistant', text: formatOutcomeText(generateActionLabel) })
             }, 500)
           } else {
             setGenerating(false)
@@ -490,7 +767,7 @@ export function App() {
       setGenerating(false)
       addChip({ role: 'assistant', text: 'ERR:' + (t(err.message) === err.message ? err.message : t(err.message)) })
     }
-  }, [provider, providerState, apiKey, modelId, generating, getSelectedFrameImages, addChip, prepareMessagesForCodeModel, t, compiledSystemPrompt, promptStudio, promptStudioSummary])
+  }, [provider, providerState, apiKey, modelId, generating, getSelectedFrameImages, addChip, prepareMessagesForCodeModel, t, compiledSystemPrompt, promptStudio, promptStudioSummary, activeMode, currentWebsiteReference, buildWebsiteReferenceInputs, remixReferenceSummary, getEmbeddedWebsiteReferenceText, rememberPreviousRound, generateActionLabel])
 
   const handleRefine = useCallback(async (prompt: string) => {
     if (!isProviderConfigured(providerState) || generating) return
@@ -506,10 +783,14 @@ export function App() {
     const screenshotB64 = await capturePreview()
     setPreviewScreenshot(screenshotB64 ? 'data:image/png;base64,' + screenshotB64 : null)
 
-    const refinementPrompt = buildRefinePrompt(prompt, promptStudio, t('system.prompt.refineDefault'))
+    const promptWithEmbeddedReferences = `${prompt}${getEmbeddedWebsiteReferenceText()}`.trim()
+    const refinementPrompt = buildRefinePrompt(promptWithEmbeddedReferences, promptStudio, t('system.prompt.refineDefault'), activeMode, currentWebsiteReference)
+    const previousRoundContextBlock = buildPreviousRoundContextBlock()
+    const effectivePrompt = promptWithEmbeddedReferences || t('system.prompt.refineDefault')
 
     const userContent: Message['content'] = []
     const chipImages: ChatChip['images'] = []
+    const websiteReferenceInputs = buildWebsiteReferenceInputs()
 
     // 1. Screenshot of current rendered output
     if (screenshotB64) {
@@ -520,7 +801,13 @@ export function App() {
       chipImages.push({ src: 'data:image/png;base64,' + screenshotB64, label: t('system.prompt.currentOutput') })
     }
 
-    // 2. Canvas sketches (original reference)
+    // 2. Website reference (when in remix mode)
+    for (const part of websiteReferenceInputs.imageContent) {
+      userContent.push(part)
+    }
+    chipImages.push(...websiteReferenceInputs.chipImages)
+
+    // 3. Canvas sketches (original reference)
     const frameImages = await getSelectedFrameImages()
     for (const img of frameImages) {
       userContent.push({
@@ -530,10 +817,15 @@ export function App() {
       chipImages.push({ src: 'data:image/png;base64,' + img.base64, label: img.label })
     }
 
-    // 3. Previous HTML + refinement prompt (flat, no stacked history)
+    // 4. Previous HTML + refinement prompt (flat, no stacked history)
     userContent.push({
       type: 'text',
-      text: `Here is the current HTML output:\n\n\`\`\`html\n${lastHTML}\n\`\`\`\n\nHere's a screenshot of how it currently renders. ${refinementPrompt}\n\nPlease provide the COMPLETE updated HTML file in a \`\`\`html code fence.`,
+      text: [
+        previousRoundContextBlock || `Here is the current HTML output:\n\n\`\`\`html\n${lastHTML}\n\`\`\``,
+        `Here's a screenshot of how it currently renders.`,
+        refinementPrompt,
+        'Please provide the COMPLETE updated HTML file in a ```html code fence.',
+      ].filter(Boolean).join('\n\n'),
     })
 
     // Flat message list: system + single user turn (no conversation history)
@@ -546,7 +838,11 @@ export function App() {
       const dispatch = await prepareMessagesForCodeModel(newMessages)
 
       setMessages(dispatch.preparedMessages)
-      addChip({ role: 'user', text: `${promptStudioSummary}\n${prompt || t('system.chip.refineAction')}`, images: chipImages.length ? chipImages : undefined })
+      addChip({
+        role: 'user',
+        text: `${promptStudioSummary}${remixReferenceSummary ? `\n${remixReferenceSummary}` : ''}\n${promptWithEmbeddedReferences || t('system.chip.refineAction')}`,
+        images: chipImages.length ? chipImages : undefined,
+      })
       if (dispatch.analyzerSummary) {
         addChip({ role: 'assistant', text: dispatch.analyzerSummary })
       }
@@ -566,8 +862,9 @@ export function App() {
           if (html) {
             setTimeout(() => {
               setLastHTML(html)
+              rememberPreviousRound(effectivePrompt, html)
               setGenerating(false)
-              addChip({ role: 'assistant', text: t('system.chip.refined') })
+              addChip({ role: 'assistant', text: formatOutcomeText(refineActionLabel) })
             }, 500)
           } else {
             setGenerating(false)
@@ -583,11 +880,14 @@ export function App() {
       setGenerating(false)
       addChip({ role: 'assistant', text: 'ERR:' + (t(err.message) === err.message ? err.message : t(err.message)) })
     }
-  }, [provider, providerState, apiKey, modelId, generating, lastHTML, capturePreview, getSelectedFrameImages, addChip, prepareMessagesForCodeModel, t, compiledSystemPrompt, promptStudio, promptStudioSummary])
+  }, [provider, providerState, apiKey, modelId, generating, lastHTML, capturePreview, getSelectedFrameImages, addChip, prepareMessagesForCodeModel, t, compiledSystemPrompt, promptStudio, promptStudioSummary, activeMode, currentWebsiteReference, buildWebsiteReferenceInputs, remixReferenceSummary, getEmbeddedWebsiteReferenceText, buildPreviousRoundContextBlock, rememberPreviousRound, refineActionLabel])
 
   // ── Plan Mode: multi-step Gaze → Dream → Create ──
 
-  const planPhaseContext = useMemo(() => buildPlanPhaseContext(promptStudio), [promptStudio])
+  const planPhaseContext = useMemo(
+    () => buildPlanPhaseContext(promptStudio, activeMode, currentWebsiteReference),
+    [promptStudio, activeMode, currentWebsiteReference],
+  )
 
   const makeGazePrompt = useCallback((userRequest: string) =>
     `You are an artist and visual thinker. Gaze deeply into this image. Let it speak to you.
@@ -680,8 +980,19 @@ ${compiledSystemPrompt}`,
     setPlanPhases(initialPhases)
 
     const frameImages = await getSelectedFrameImages()
+    const promptWithEmbeddedReferences = `${prompt}${getEmbeddedWebsiteReferenceText()}`.trim()
+    const effectivePrompt = promptWithEmbeddedReferences
+      || (currentWebsiteReference
+        ? 'Reconstruct a homepage inspired by the referenced site while making it clean, original, and production-ready.'
+        : '')
     const chipImages: ChatChip['images'] = []
     const imageContent: Message['content'] = []
+    const websiteReferenceInputs = buildWebsiteReferenceInputs()
+
+    for (const part of websiteReferenceInputs.imageContent) {
+      imageContent.push(part)
+    }
+    chipImages.push(...websiteReferenceInputs.chipImages)
 
     for (const img of frameImages) {
       imageContent.push({
@@ -691,12 +1002,16 @@ ${compiledSystemPrompt}`,
       chipImages.push({ src: 'data:image/png;base64,' + img.base64, label: img.label })
     }
 
-    addChip({ role: 'user', text: `${t('system.chip.planTag')} ${promptStudioSummary}\n${prompt}`, images: chipImages })
+    addChip({
+      role: 'user',
+      text: `${t('system.chip.planTag')} ${promptStudioSummary}${remixReferenceSummary ? `\n${remixReferenceSummary}` : ''}\n${promptWithEmbeddedReferences}`,
+      images: chipImages,
+    })
 
     try {
       // Phase 1: Gaze
       const gazeResult = await runPlanPhase([
-        { role: 'user', content: [...imageContent, { type: 'text', text: makeGazePrompt(prompt) }] },
+        { role: 'user', content: [...imageContent, { type: 'text', text: makeGazePrompt(promptWithEmbeddedReferences) }] },
       ], 0, (text) => {
         setPlanPhases(prev => prev.map((p, i) => i === 0 ? { ...p, text: p.text + text } : p))
       })
@@ -708,9 +1023,9 @@ ${compiledSystemPrompt}`,
       setPlanActiveIndex(1)
 
       const dreamResult = await runPlanPhase([
-        { role: 'user', content: [...imageContent, { type: 'text', text: makeGazePrompt(prompt) }] },
+        { role: 'user', content: [...imageContent, { type: 'text', text: makeGazePrompt(promptWithEmbeddedReferences) }] },
         { role: 'assistant', content: gazeResult },
-        { role: 'user', content: [{ type: 'text', text: makeDreamPrompt(prompt) }] },
+        { role: 'user', content: [{ type: 'text', text: makeDreamPrompt(promptWithEmbeddedReferences) }] },
       ], 1, (text) => {
         setPlanPhases(prev => prev.map((p, i) => i === 1 ? { ...p, text: p.text + text } : p))
       })
@@ -725,7 +1040,7 @@ ${compiledSystemPrompt}`,
       setStreamDone(false)
 
       const createMessages: Message[] = [
-        { role: 'user', content: [...imageContent, { type: 'text', text: makePlanCreatePrompt(gazeResult, dreamResult, prompt) }] },
+        { role: 'user', content: [...imageContent, { type: 'text', text: makePlanCreatePrompt(gazeResult, dreamResult, promptWithEmbeddedReferences) }] },
       ]
 
       let createTokenIdx = 0
@@ -744,9 +1059,10 @@ ${compiledSystemPrompt}`,
       if (html) {
         setTimeout(() => {
           setLastHTML(html)
+          rememberPreviousRound(effectivePrompt || promptWithEmbeddedReferences, html)
           setGenerating(false)
           setIteration((i) => i + 1)
-          addChip({ role: 'assistant', text: t('system.chip.planComplete') })
+          addChip({ role: 'assistant', text: formatOutcomeText(`${t('prompt.plan.label')} · ${generateActionLabel}`) })
         }, 800)
       } else {
         setGenerating(false)
@@ -757,7 +1073,7 @@ ${compiledSystemPrompt}`,
       setPlanDone(true)
       addChip({ role: 'assistant', text: 'ERR: ' + (t(err.message) === err.message ? err.message : t(err.message)) })
     }
-  }, [providerState, generating, getSelectedFrameImages, addChip, runPlanPhase, t, promptStudioSummary, makeGazePrompt, makeDreamPrompt, makePlanCreatePrompt])
+  }, [providerState, generating, getSelectedFrameImages, addChip, runPlanPhase, t, promptStudioSummary, makeGazePrompt, makeDreamPrompt, makePlanCreatePrompt, buildWebsiteReferenceInputs, remixReferenceSummary, getEmbeddedWebsiteReferenceText, currentWebsiteReference, rememberPreviousRound, generateActionLabel])
 
   const handlePlanRefine = useCallback(async (prompt: string) => {
     if (!isProviderConfigured(providerState) || generating) return
@@ -778,8 +1094,12 @@ ${compiledSystemPrompt}`,
     setPreviewScreenshot(screenshotB64 ? 'data:image/png;base64,' + screenshotB64 : null)
 
     const frameImages = await getSelectedFrameImages()
+    const promptWithEmbeddedReferences = `${prompt}${getEmbeddedWebsiteReferenceText()}`.trim()
+    const effectivePrompt = promptWithEmbeddedReferences || t('system.prompt.planRefineDefault')
     const chipImages: ChatChip['images'] = []
     const imageContent: Message['content'] = []
+    const websiteReferenceInputs = buildWebsiteReferenceInputs()
+    const previousRoundContextBlock = buildPreviousRoundContextBlock()
 
     if (screenshotB64) {
       imageContent.push({
@@ -788,6 +1108,10 @@ ${compiledSystemPrompt}`,
       })
       chipImages.push({ src: 'data:image/png;base64,' + screenshotB64, label: t('system.prompt.currentOutput') })
     }
+    for (const part of websiteReferenceInputs.imageContent) {
+      imageContent.push(part)
+    }
+    chipImages.push(...websiteReferenceInputs.chipImages)
     for (const img of frameImages) {
       imageContent.push({
         type: 'image',
@@ -796,13 +1120,17 @@ ${compiledSystemPrompt}`,
       chipImages.push({ src: 'data:image/png;base64,' + img.base64, label: img.label })
     }
 
-    const refinementPrompt = buildRefinePrompt(prompt, promptStudio, t('system.prompt.planRefineDefault'))
-    addChip({ role: 'user', text: `${t('system.chip.planRefineTag')} ${promptStudioSummary}\n${prompt || t('system.prompt.planRefineDefault')}`, images: chipImages })
+    const refinementPrompt = buildRefinePrompt(promptWithEmbeddedReferences, promptStudio, t('system.prompt.planRefineDefault'), activeMode, currentWebsiteReference)
+    addChip({
+      role: 'user',
+      text: `${t('system.chip.planRefineTag')} ${promptStudioSummary}${remixReferenceSummary ? `\n${remixReferenceSummary}` : ''}\n${promptWithEmbeddedReferences || t('system.prompt.planRefineDefault')}`,
+      images: chipImages,
+    })
 
     try {
       // Gaze at both screenshot and canvas
       const gazeResult = await runPlanPhase([
-        { role: 'user', content: [...imageContent, { type: 'text', text: makeGazePrompt(refinementPrompt) + '\n\nThe first image is the current rendered output. Subsequent images are the original sketches/references.' }] },
+        { role: 'user', content: [...imageContent, { type: 'text', text: makeGazePrompt(refinementPrompt) + '\n\nThe first image is the current rendered output. Subsequent images are the original sketches/references.' + (previousRoundContextBlock ? `\n\n${previousRoundContextBlock}` : '') }] },
       ], 0, (text) => {
         setPlanPhases(prev => prev.map((p, i) => i === 0 ? { ...p, text: p.text + text } : p))
       })
@@ -811,9 +1139,9 @@ ${compiledSystemPrompt}`,
       setPlanActiveIndex(1)
 
       const dreamResult = await runPlanPhase([
-        { role: 'user', content: [...imageContent, { type: 'text', text: makeGazePrompt(refinementPrompt) }] },
+        { role: 'user', content: [...imageContent, { type: 'text', text: makeGazePrompt(refinementPrompt) + (previousRoundContextBlock ? `\n\n${previousRoundContextBlock}` : '') }] },
         { role: 'assistant', content: gazeResult },
-        { role: 'user', content: [{ type: 'text', text: makeDreamPrompt(refinementPrompt) + `\n\nThis is a REFINEMENT. Here is the current HTML to evolve:\n\`\`\`html\n${lastHTML}\n\`\`\`` }] },
+        { role: 'user', content: [{ type: 'text', text: makeDreamPrompt(refinementPrompt) + `\n\n${previousRoundContextBlock || `This is a REFINEMENT. Here is the current HTML to evolve:\n\`\`\`html\n${lastHTML}\n\`\`\``}` }] },
       ], 1, (text) => {
         setPlanPhases(prev => prev.map((p, i) => i === 1 ? { ...p, text: p.text + text } : p))
       })
@@ -826,7 +1154,7 @@ ${compiledSystemPrompt}`,
 
       let createTokenIdx2 = 0
       const createResult = await runPlanPhase([
-        { role: 'user', content: [...imageContent, { type: 'text', text: makePlanCreatePrompt(gazeResult, dreamResult, refinementPrompt) + `\n\nHere is the previous HTML to improve upon:\n\`\`\`html\n${lastHTML}\n\`\`\`` }] },
+        { role: 'user', content: [...imageContent, { type: 'text', text: makePlanCreatePrompt(gazeResult, dreamResult, refinementPrompt) + `\n\n${previousRoundContextBlock || `Here is the previous HTML to improve upon:\n\`\`\`html\n${lastHTML}\n\`\`\``}` }] },
       ], 2, (text) => {
         createTokenIdx2++
         setStreamText(prev => prev + text)
@@ -841,9 +1169,10 @@ ${compiledSystemPrompt}`,
       if (html) {
         setTimeout(() => {
           setLastHTML(html)
+          rememberPreviousRound(effectivePrompt, html)
           setGenerating(false)
           setIteration((i) => i + 1)
-          addChip({ role: 'assistant', text: t('system.chip.planRefineComplete') })
+          addChip({ role: 'assistant', text: formatOutcomeText(`${t('prompt.plan.label')} · ${refineActionLabel}`) })
         }, 800)
       } else {
         setGenerating(false)
@@ -854,18 +1183,22 @@ ${compiledSystemPrompt}`,
       setPlanDone(true)
       addChip({ role: 'assistant', text: 'ERR: ' + (t(err.message) === err.message ? err.message : t(err.message)) })
     }
-  }, [providerState, generating, lastHTML, capturePreview, getSelectedFrameImages, addChip, runPlanPhase, t, promptStudio, promptStudioSummary, makeGazePrompt, makeDreamPrompt, makePlanCreatePrompt])
+  }, [providerState, generating, lastHTML, capturePreview, getSelectedFrameImages, addChip, runPlanPhase, t, promptStudio, promptStudioSummary, makeGazePrompt, makeDreamPrompt, makePlanCreatePrompt, activeMode, currentWebsiteReference, buildWebsiteReferenceInputs, remixReferenceSummary, getEmbeddedWebsiteReferenceText, buildPreviousRoundContextBlock, rememberPreviousRound, refineActionLabel])
 
   const canGenerate = isProviderConfigured(providerState)
   const needsKey = !canGenerate
 
   return (
-    <>
+    <div className="app-shell" data-mode={activeMode.id}>
       <Header
+        modes={CANVAS_MODE_LIST}
+        modeId={activeMode.id}
+        modeSummary={modeSummary}
         providerName={provider.name}
         modelLabel={modelLabel}
         studioSummary={promptStudioSummary}
         hasKey={canGenerate}
+        onModeChange={handleModeChange}
         onOpenSettings={() => setShowSettings(true)}
         locale={locale}
         onToggleLocale={() => setLocale(prev => prev === 'zh-CN' ? 'en' : 'zh-CN')}
@@ -903,6 +1236,8 @@ ${compiledSystemPrompt}`,
             selectedIds={selectedFrameIds}
             onSelectionChange={setSelectedFrameIds}
             onAddFrame={handleAddFrame}
+            onImportImage={handleImportImage}
+            onImportVideo={handleImportVideo}
             canvasVersion={canvasVersion}
             onSave={handleSave}
             onLoad={handleLoad}
@@ -911,15 +1246,30 @@ ${compiledSystemPrompt}`,
           />
           <MessageStrip chips={chips} t={t} />
           <PromptBar
+            modeDefinition={activeMode}
             onGenerate={planMode ? handlePlanGenerate : handleGenerate}
             onRefine={planMode ? handlePlanRefine : handleRefine}
             onClear={handleClear}
+            onSurprise={handleSurprise}
             prompt={promptDraft}
             onPromptChange={setPromptDraft}
             studio={promptStudio}
-            onStudioChange={setPromptStudio}
+            onStudioChange={handlePromptStudioChange}
             onOpenLibrary={() => setShowPresetLibrary(true)}
+            fineTuneExpanded={fineTuneExpanded}
+            onFineTuneToggle={() => setFineTuneExpanded((prev) => !prev)}
+            remixUrl={remixUrl}
+            onRemixUrlChange={handleRemixUrlChange}
+            onFetchRemixReference={handleFetchWebsite}
+            remixFetchLoading={remixFetchLoading}
+            remixFetchError={remixFetchError}
+            hasWebsiteReference={!!websiteReference}
+            websiteReferenceSummary={remixReferenceSummary || t('mode.remix.referenceReady')}
+            onClearWebsiteReference={handleClearWebsiteReference}
             hasOutput={!!lastHTML}
+            previousRoundAvailable={!!previousRoundContext}
+            includePreviousRoundContext={includePreviousRoundContext}
+            onIncludePreviousRoundContextChange={setIncludePreviousRoundContext}
             generating={generating}
             planMode={planMode}
             onPlanModeToggle={() => setPlanMode(p => !p)}
@@ -966,9 +1316,10 @@ ${compiledSystemPrompt}`,
             </div>
           )}
           <div className="preview-container">
-            <Preview html={lastHTML} iframeRef={previewRef} t={t} />
+            <Preview html={lastHTML} iframeRef={previewRef} modeDefinition={activeMode} t={t} />
             {generating && !planMode && (
               <StreamOverlay
+                modeDefinition={activeMode}
                 streamText={streamText}
                 thinkingText={thinkingText}
                 tokenCount={streamTokenCount}
@@ -978,6 +1329,7 @@ ${compiledSystemPrompt}`,
             )}
             {generating && planMode && (
               <PlanOverlay
+                modeDefinition={activeMode}
                 phases={planPhases}
                 activePhaseIndex={planActiveIndex}
                 tokenCount={planTokenCount}
@@ -995,6 +1347,7 @@ ${compiledSystemPrompt}`,
                 <button className="btn btn-secondary" onClick={() => {
                   navigator.clipboard.writeText(lastHTML)
                 }}>{t('preview.copy')}</button>
+                <button className="btn btn-secondary" onClick={handleExportHtml}>{t('preview.exportHtml')}</button>
                 <button className="btn btn-secondary" onClick={() => {
                   const w = window.open()
                   if (w) { w.document.write(lastHTML); w.document.close() }
@@ -1008,6 +1361,6 @@ ${compiledSystemPrompt}`,
           )}
         </div>
       </div>
-    </>
+    </div>
   )
 }

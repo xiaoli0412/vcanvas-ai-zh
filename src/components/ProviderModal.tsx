@@ -473,7 +473,6 @@ export function ProviderModal({
                     <div className="pm-card-name-row">
                       <span className={`pm-card-dot ${keyStatus}`} />
                       <span className="pm-card-name">{provider.name}</span>
-                      {provider.id === 'custom' && <span className="pm-card-tag">{t('provider.openaiCompat')}</span>}
                     </div>
                     {isActive && <span className="pm-card-active-badge">{t('provider.active')}</span>}
                   </div>

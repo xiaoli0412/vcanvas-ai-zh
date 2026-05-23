@@ -2,6 +2,8 @@ const path = require('node:path')
 const { app, BrowserWindow, Menu, dialog, shell } = require('electron')
 const { startProxyServer } = require('../scripts/proxy-server.cjs')
 
+const PROJECT_REPOSITORY_URL = 'https://github.com/xiaoli0412/vcanvas-ai-zh'
+
 let mainWindow = null
 let proxyHandle = null
 
@@ -62,7 +64,7 @@ function createMenu() {
       submenu: [
         {
           label: 'Project Repository',
-          click: () => shell.openExternal('https://github.com/xiaoli0412/vcanvas-ai-zh'),
+          click: () => shell.openExternal(PROJECT_REPOSITORY_URL),
         },
       ],
     },

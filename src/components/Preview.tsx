@@ -1,14 +1,16 @@
 import React from 'react'
 import type { Translate } from '../lib/i18n'
+import type { CanvasModeDefinition } from '../lib/canvasModes'
 import './Preview.css'
 
 interface Props {
   html: string
   iframeRef: React.RefObject<HTMLIFrameElement | null>
+  modeDefinition: CanvasModeDefinition
   t: Translate
 }
 
-export function Preview({ html, iframeRef, t }: Props) {
+export function Preview({ html, iframeRef, modeDefinition, t }: Props) {
   if (!html) {
     return (
       <div className="preview-empty">
@@ -16,8 +18,8 @@ export function Preview({ html, iframeRef, t }: Props) {
           <rect width="18" height="18" x="3" y="3" rx="2" />
           <path d="m9 8 6 4-6 4Z" />
         </svg>
-        <p>{t('preview.empty')}</p>
-        <span className="preview-hint">{t('preview.hint')}</span>
+        <p>{t(modeDefinition.ui.previewEmptyKey)}</p>
+        <span className="preview-hint">{t(modeDefinition.ui.previewHintKey)}</span>
       </div>
     )
   }

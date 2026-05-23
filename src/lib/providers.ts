@@ -59,6 +59,9 @@ export interface ResolvedProviderRequest {
   useProxy?: boolean
 }
 
+export const COMPATIBLE_OPENAI_PROVIDER_ID = 'custom'
+const LEGACY_DEFAULT_PROVIDER_ID = 'zai'
+
 function withBearer(apiKey: string): Record<string, string> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -109,6 +112,50 @@ const DEFAULT_CUSTOM: CustomProviderConfig = {
 }
 
 export const PROVIDERS: ProviderDef[] = [
+  {
+    id: 'custom',
+    name: 'Compatible OpenAI',
+    type: 'openai',
+    models: [],
+    keyHintKey: 'provider.keyHint.custom',
+    keyUrl: '',
+    keyUrlLabel: '',
+    storageKey: 'custom_key',
+    customConfig: true,
+  },
+  {
+    id: 'chatgpt',
+    name: 'ChatGPT',
+    type: 'openai',
+    endpoint: 'https://api.openai.com/v1/chat/completions',
+    models: [
+      { id: 'gpt-4.1', label: 'GPT-4.1', vision: true },
+      { id: 'gpt-4.1-mini', label: 'GPT-4.1 Mini', vision: true },
+      { id: 'gpt-4o', label: 'GPT-4o', vision: true },
+      { id: 'gpt-4o-mini', label: 'GPT-4o Mini', vision: true },
+    ],
+    keyHintKey: 'provider.keyHint.chatgpt',
+    keyUrl: 'https://platform.openai.com/api-keys',
+    keyUrlLabel: 'OpenAI',
+    storageKey: 'chatgpt_key',
+  },
+  {
+    id: 'kimi',
+    name: 'Kimi',
+    type: 'openai',
+    endpoint: 'https://api.moonshot.ai/v1/chat/completions',
+    models: [
+      { id: 'kimi-k2.6', label: 'Kimi K2.6', vision: true },
+      { id: 'kimi-k2.5', label: 'Kimi K2.5', vision: true },
+      { id: 'kimi-k2', label: 'Kimi K2', vision: true },
+      { id: 'kimi-k2-thinking', label: 'Kimi K2 Thinking', vision: true },
+      { id: 'moonshot-v1', label: 'Moonshot V1', vision: true },
+    ],
+    keyHintKey: 'provider.keyHint.kimi',
+    keyUrl: 'https://platform.moonshot.ai',
+    keyUrlLabel: 'Moonshot',
+    storageKey: 'kimi_key',
+  },
   {
     id: 'zai',
     name: 'z.ai',
@@ -169,17 +216,6 @@ export const PROVIDERS: ProviderDef[] = [
     keyUrl: 'https://openrouter.ai/keys',
     keyUrlLabel: 'OpenRouter',
     storageKey: 'openrouter_key',
-  },
-  {
-    id: 'custom',
-    name: 'Custom OpenAI',
-    type: 'openai',
-    models: [],
-    keyHintKey: 'provider.keyHint.custom',
-    keyUrl: '',
-    keyUrlLabel: '',
-    storageKey: 'custom_key',
-    customConfig: true,
   },
 ]
 
@@ -265,6 +301,10 @@ function normalizeUrl(value?: string) {
   return value?.trim().replace(/\/+$/, '') || ''
 }
 
+function hasConfiguredKey(value?: string) {
+  return (value || '').trim().length > 4
+}
+
 function ensurePath(url: string, path: string) {
   const normalized = normalizeUrl(url)
   if (!normalized) return ''
@@ -296,7 +336,7 @@ function migrateLegacyCustom(raw: any): CustomProviderConfig {
     mode,
     baseUrl: raw?.custom?.baseUrl || '',
     endpoint: raw?.custom?.endpoint || raw?.customEndpoint || '',
-    modelId: raw?.custom?.modelId || raw?.customModelId || raw?.activeModelId || '',
+    modelId: raw?.custom?.modelId || raw?.customModelId || (raw?.activeProviderId === 'custom' ? raw?.activeModelId || '' : ''),
     resourceUrl: raw?.custom?.resourceUrl || '',
     deployment: raw?.custom?.deployment || '',
     apiVersion: raw?.custom?.apiVersion || '2024-10-21',
@@ -311,14 +351,14 @@ export function makeDefaultProviderState(): ProviderState {
   }
 
   const oldProvider = localStorage.getItem('vcanvas_provider')
-  let activeProviderId = PROVIDERS[0].id
-  if (oldProvider === 'glm5v') activeProviderId = 'zai'
-  else if (oldProvider === 'gemini') activeProviderId = 'google'
+  let activeProviderId = COMPATIBLE_OPENAI_PROVIDER_ID
+  if (oldProvider === 'glm5v' && hasConfiguredKey(keys.zai)) activeProviderId = 'zai'
+  else if (oldProvider === 'gemini' && hasConfiguredKey(keys.google)) activeProviderId = 'google'
 
   const provider = getProvider(activeProviderId)
   return {
     activeProviderId,
-    activeModelId: provider.models[0]?.id || '',
+    activeModelId: provider.id === COMPATIBLE_OPENAI_PROVIDER_ID ? '' : (provider.models[0]?.id || ''),
     keys,
     custom: { ...DEFAULT_CUSTOM },
   }
@@ -346,18 +386,30 @@ export function loadProviderState(storageKey = PROVIDER_STATE_STORAGE_KEY): Prov
         }
       }
       if (!PROVIDERS.find(p => p.id === parsed.activeProviderId)) {
-        parsed.activeProviderId = PROVIDERS[0].id
+        parsed.activeProviderId = COMPATIBLE_OPENAI_PROVIDER_ID
       }
       const provider = getProvider(parsed.activeProviderId)
+      const custom = migrateLegacyCustom(parsed)
+      const normalizedKeys = parsed.keys as Record<string, string>
+      const hasAnyConfiguredKey = Object.values(normalizedKeys).some(hasConfiguredKey)
+      const shouldFallbackToCompatible = parsed.activeProviderId === LEGACY_DEFAULT_PROVIDER_ID
+        && !hasConfiguredKey(normalizedKeys[LEGACY_DEFAULT_PROVIDER_ID])
+        && !hasAnyConfiguredKey
       const activeModelId = parsed.activeProviderId === 'custom'
-        ? (parsed.custom?.modelId || parsed.customModelId || '')
+        ? (custom.modelId || parsed.customModelId || '')
         : (parsed.activeModelId || provider.models[0]?.id || '')
 
+      const nextActiveProviderId = shouldFallbackToCompatible
+        ? COMPATIBLE_OPENAI_PROVIDER_ID
+        : parsed.activeProviderId
+
       return {
-        activeProviderId: parsed.activeProviderId,
-        activeModelId,
-        keys: parsed.keys,
-        custom: migrateLegacyCustom(parsed),
+        activeProviderId: nextActiveProviderId,
+        activeModelId: nextActiveProviderId === COMPATIBLE_OPENAI_PROVIDER_ID
+          ? (custom.modelId || '')
+          : activeModelId,
+        keys: normalizedKeys,
+        custom,
       }
     }
   } catch { /* ignore */ }
@@ -408,6 +460,7 @@ export function getCustomConfigErrorForPurpose(
   if (!endpoint) return 'provider.validation.compatibleEndpointRequired'
   if (!isAbsoluteUrl(endpoint)) return 'provider.validation.invalidUrl'
   if (needsModel && !custom.modelId?.trim()) return 'provider.validation.customModelRequired'
+  if (apiKey.trim().length <= 4) return 'provider.validation.apiKeyRequired'
   return null
 }
 

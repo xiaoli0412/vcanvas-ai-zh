@@ -267,3 +267,16 @@
 .plan-stream-wrapper .stream-overlay {
   animation: none;
 }
+
+@media (max-width: 760px) {
+  .plan-timeline,
+  .plan-content {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .plan-footer {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}

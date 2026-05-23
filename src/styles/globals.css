@@ -1,21 +1,21 @@
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
-  --bg-primary: #0c0e11;
-  --bg-secondary: #10131a;
-  --bg-tertiary: #161a24;
-  --bg-elevated: #1c2130;
-  --border: #1e2536;
-  --border-hover: #2a3448;
-  --text-primary: #c8cdd8;
-  --text-secondary: #6b7a94;
-  --text-muted: #3d4b63;
-  --accent: #4a9e8e;
-  --accent-hover: #5abfac;
-  --accent-glow: rgba(74, 158, 142, 0.2);
-  --accent-dim: rgba(74, 158, 142, 0.08);
-  --green: #4a9e8e;
-  --green-glow: rgba(74, 158, 142, 0.15);
+  --bg-primary: #0c0f1a;
+  --bg-secondary: #101425;
+  --bg-tertiary: #171c31;
+  --bg-elevated: #1d2440;
+  --border: #202846;
+  --border-hover: #2b3760;
+  --text-primary: #cbd2ee;
+  --text-secondary: #7b87b7;
+  --text-muted: #49557f;
+  --accent: #7a72ff;
+  --accent-hover: #9992ff;
+  --accent-glow: rgba(122, 114, 255, 0.24);
+  --accent-dim: rgba(122, 114, 255, 0.1);
+  --green: #7a72ff;
+  --green-glow: rgba(122, 114, 255, 0.18);
   --orange: #c89b4a;
   --orange-glow: rgba(200, 155, 74, 0.15);
   --red: #c85a5a;
@@ -45,6 +45,54 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+}
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.app-shell[data-mode="classic-studio"] {
+  --accent: #7a72ff;
+  --accent-hover: #9992ff;
+  --accent-glow: rgba(122, 114, 255, 0.24);
+  --accent-dim: rgba(122, 114, 255, 0.1);
+}
+
+.app-shell[data-mode="spark"] {
+  --accent: #9781ff;
+  --accent-hover: #aea1ff;
+  --accent-glow: rgba(151, 129, 255, 0.22);
+  --accent-dim: rgba(151, 129, 255, 0.1);
+}
+
+.app-shell[data-mode="map"] {
+  --accent: #6f8fff;
+  --accent-hover: #89a6ff;
+  --accent-glow: rgba(111, 143, 255, 0.22);
+  --accent-dim: rgba(111, 143, 255, 0.1);
+}
+
+.app-shell[data-mode="story"] {
+  --accent: #8770ff;
+  --accent-hover: #9d8bff;
+  --accent-glow: rgba(135, 112, 255, 0.22);
+  --accent-dim: rgba(135, 112, 255, 0.1);
+}
+
+.app-shell[data-mode="wild"] {
+  --accent: #6f66ef;
+  --accent-hover: #8a84ff;
+  --accent-glow: rgba(111, 102, 239, 0.22);
+  --accent-dim: rgba(111, 102, 239, 0.1);
+}
+
+.app-shell[data-mode="remix"] {
+  --accent: #5f8fff;
+  --accent-hover: #7aa5ff;
+  --accent-glow: rgba(95, 143, 255, 0.22);
+  --accent-dim: rgba(95, 143, 255, 0.1);
 }
 
 /* Dot grid background */

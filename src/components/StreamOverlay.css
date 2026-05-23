@@ -19,9 +19,17 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   padding: 8px 14px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+}
+
+.stream-header-left {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .stream-status {
@@ -253,4 +261,22 @@
   background: var(--accent);
   border-radius: 1px;
   transition: height 0.15s;
+}
+
+@media (max-width: 760px) {
+  .stream-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .stream-header-left,
+  .stream-meta {
+    width: 100%;
+  }
+
+  .stream-meta {
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
 }

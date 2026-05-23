@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react'
 import type { Translate } from '../lib/i18n'
+import type { CanvasModeDefinition } from '../lib/canvasModes'
 import './StreamOverlay.css'
 
 interface Props {
+  modeDefinition: CanvasModeDefinition
   streamText: string
   thinkingText?: string
   tokenCount: number
@@ -30,7 +32,7 @@ function escapeLine(line: string): string {
     .replace(/>/g, '&gt;')
 }
 
-export function StreamOverlay({ streamText, thinkingText, tokenCount, done, t }: Props) {
+export function StreamOverlay({ modeDefinition, streamText, thinkingText, tokenCount, done, t }: Props) {
   const codeRef = useRef<HTMLDivElement>(null)
   const thinkRef = useRef<HTMLDivElement>(null)
   const [startTime] = useState(() => performance.now())
@@ -115,9 +117,11 @@ export function StreamOverlay({ streamText, thinkingText, tokenCount, done, t }:
     <div className="stream-overlay">
       {/* Header */}
       <div className="stream-header">
-        <div className="stream-status">
-          <div className={`stream-dot ${done ? 'done' : isThinking ? 'thinking' : ''}`} />
-          <span>{done ? t('stream.complete') : isThinking ? t('stream.thinking') : t('stream.streaming')}</span>
+        <div className="stream-header-left">
+          <div className="stream-status">
+            <div className={`stream-dot ${done ? 'done' : isThinking ? 'thinking' : ''}`} />
+            <span>{done ? t('stream.complete') : isThinking ? t('stream.thinking') : t('stream.streaming')}</span>
+          </div>
         </div>
         <div className="stream-meta mono">
           <span>{tokenCount} tok</span>

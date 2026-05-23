@@ -1,29 +1,138 @@
-import React, { useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { Locale, Translate } from '../lib/i18n'
+import type { CanvasModeDefinition, CanvasModeId } from '../lib/canvasModes'
 import './Header.css'
 
+const PROJECT_REPOSITORY_URL = 'https://github.com/xiaoli0412/vcanvas-ai-zh'
+const ORIGINAL_AUTHOR_URL = 'https://e01.ai'
+const REPOSITORY_AUTHOR_URL = 'https://github.com/xiaoli0412'
+
 interface Props {
+  modes: CanvasModeDefinition[]
+  modeId: CanvasModeId
+  modeSummary: string
   providerName: string
   modelLabel: string
   studioSummary: string
   hasKey: boolean
+  onModeChange: (modeId: CanvasModeId) => void
   onOpenSettings: () => void
   locale: Locale
   onToggleLocale: () => void
   t: Translate
 }
 
-export function Header({ providerName, modelLabel, studioSummary, hasKey, onOpenSettings, locale, onToggleLocale, t }: Props) {
+export function Header({
+  modes,
+  modeId,
+  modeSummary,
+  providerName,
+  modelLabel,
+  studioSummary,
+  hasKey,
+  onModeChange,
+  onOpenSettings,
+  locale,
+  onToggleLocale,
+  t,
+}: Props) {
   const [showAbout, setShowAbout] = useState(false)
+  const [showModeMenu, setShowModeMenu] = useState(false)
+  const modeMenuRef = useRef<HTMLDivElement>(null)
+  const modePopoverRef = useRef<HTMLDivElement>(null)
+  const modeTriggerRef = useRef<HTMLButtonElement>(null)
+  const [modeMenuStyle, setModeMenuStyle] = useState<React.CSSProperties>({})
+  const activeMode = useMemo(
+    () => modes.find((mode) => mode.id === modeId) ?? modes[0]!,
+    [modeId, modes],
+  )
+
+  useEffect(() => {
+    if (!showModeMenu) return
+
+    const updatePosition = () => {
+      const rect = modeTriggerRef.current?.getBoundingClientRect()
+      if (!rect) return
+
+      const width = Math.min(360, window.innerWidth - 24)
+      const left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12))
+      const top = Math.min(rect.bottom + 8, window.innerHeight - 80)
+
+      setModeMenuStyle({
+        position: 'fixed',
+        top,
+        left,
+        width,
+      })
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (
+        !modePopoverRef.current?.contains(event.target as Node)
+        && !modeMenuRef.current?.contains(event.target as Node)
+        && !modeTriggerRef.current?.contains(event.target as Node)
+      ) {
+        setShowModeMenu(false)
+      }
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowModeMenu(false)
+      }
+    }
+
+    updatePosition()
+    window.addEventListener('pointerdown', handlePointerDown)
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition, true)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [showModeMenu])
+
+  useEffect(() => {
+    if (showAbout) {
+      setShowModeMenu(false)
+    }
+  }, [showAbout])
 
   return (
     <>
       <header className="app-header">
-        <div className="header-title">
-          <span className="header-title-main">V C A N V A S</span>
-          <span className="header-sep">/</span>
-          <span className="header-title-sub">PLAYGROUND</span>
-          <span className="header-by">by <a href="https://e01.ai" target="_blank" rel="noopener" className="header-by-link">E01.ai</a></span>
+        <div className="header-left">
+          <div className="header-title">
+            <span className="header-title-main">V C A N V A S</span>
+            <span className="header-sep">/</span>
+            <span className="header-title-sub">PLAYGROUND</span>
+            <span className="header-by">
+              by <a href={ORIGINAL_AUTHOR_URL} target="_blank" rel="noopener" className="header-by-link">E01.ai</a>
+              <span className="header-by-join"> × </span>
+              <a href={REPOSITORY_AUTHOR_URL} target="_blank" rel="noopener" className="header-by-link">xiaoli0412</a>
+            </span>
+          </div>
+          <div className={`header-mode-menu ${showModeMenu ? 'open' : ''}`} ref={modeMenuRef}>
+            <button
+              type="button"
+              ref={modeTriggerRef}
+              className="header-mode-trigger"
+              aria-haspopup="menu"
+              aria-expanded={showModeMenu}
+              title={modeSummary}
+              onClick={() => setShowModeMenu((prev) => !prev)}
+            >
+              <span className="header-mode-trigger-label">{t('mode.switcher.current')}</span>
+              <span className="header-mode-trigger-value">{t(activeMode.labelKey)}</span>
+              <svg className="header-mode-trigger-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </button>
+          </div>
         </div>
         <div className="header-right">
           <div className="header-studio-pill" title={studioSummary}>
@@ -32,7 +141,7 @@ export function Header({ providerName, modelLabel, studioSummary, hasKey, onOpen
           </div>
           <a
             className="header-gh-btn"
-            href="https://github.com/xiaoli0412/vcanvas-ai-zh"
+            href={PROJECT_REPOSITORY_URL}
             target="_blank"
             rel="noopener"
           >
@@ -63,23 +172,59 @@ export function Header({ providerName, modelLabel, studioSummary, hasKey, onOpen
         </div>
       </header>
 
+      {showModeMenu && typeof document !== 'undefined' && createPortal(
+        <div
+          className="header-mode-popover"
+          ref={modePopoverRef}
+          style={modeMenuStyle}
+          role="menu"
+          aria-label={t('mode.switcher.label')}
+        >
+          {modes.map((mode) => {
+            const active = mode.id === modeId
+            return (
+              <button
+                key={mode.id}
+                type="button"
+                role="menuitemradio"
+                aria-checked={active}
+                className={`header-mode-item ${active ? 'active' : ''}`}
+                onClick={() => {
+                  onModeChange(mode.id)
+                  setShowModeMenu(false)
+                }}
+              >
+                <span className="header-mode-item-copy">
+                  <span className="header-mode-item-name">{t(mode.labelKey)}</span>
+                  <span className="header-mode-item-summary">{t(mode.summaryKey)}</span>
+                </span>
+                {active && <span className="header-mode-item-check">ok</span>}
+              </button>
+            )
+          })}
+        </div>,
+        document.body,
+      )}
+
       {showAbout && (
         <div className="about-overlay" onClick={() => setShowAbout(false)}>
           <div className="about-card" onClick={(e) => e.stopPropagation()}>
             <button className="about-close" onClick={() => setShowAbout(false)}>&times;</button>
             <h2 className="about-title">{t('header.about.title')}</h2>
-            <p className="about-subtitle"><a href="https://e01.ai" target="_blank" rel="noopener">{t('header.about.subtitle')}</a></p>
+            <p className="about-subtitle">{t('header.about.subtitle')}</p>
 
             <div className="about-body">
               <p>{t('header.about.intro')}</p>
 
               <h3>{t('header.about.providers')}</h3>
               <ul>
+                <li>{t('header.about.providers.custom')}</li>
+                <li>{t('header.about.providers.chatgpt')}</li>
+                <li>{t('header.about.providers.kimi')}</li>
                 <li>{t('header.about.providers.zai')}</li>
                 <li>{t('header.about.providers.google')}</li>
                 <li>{t('header.about.providers.fireworks')}</li>
                 <li>{t('header.about.providers.openrouter')}</li>
-                <li>{t('header.about.providers.custom')}</li>
               </ul>
 
               <h3>{t('header.about.how')}</h3>
