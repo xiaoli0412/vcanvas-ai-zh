@@ -41,7 +41,7 @@ jobs:
         run: npm ci
 
       - name: Build desktop packages
-        run: npm run dist:desktop
+        run: npm run dist:desktop:ci
 
       - name: Upload desktop artifacts
         uses: actions/upload-artifact@v4
