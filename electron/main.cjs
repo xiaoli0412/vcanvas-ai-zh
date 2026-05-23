@@ -81,7 +81,7 @@ async function createMainWindow() {
     autoHideMenuBar: true,
     show: false,
     title: 'VCanvas',
-    icon: path.join(__dirname, '..', 'assets', 'icons', process.platform === 'win32' ? 'app.ico' : 'favicon-128.png'),
+    icon: path.join(__dirname, '..', 'assets', 'icons', process.platform === 'win32' ? 'app.ico' : 'app-256.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
