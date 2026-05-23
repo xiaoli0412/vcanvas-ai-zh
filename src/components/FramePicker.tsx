@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
+import type { Translate } from '../lib/i18n'
 import { getSources, exportSourceAsPng, exportAllAsPng } from '../lib/export'
 import type { SourceInfo } from '../lib/export'
 import './FramePicker.css'
@@ -17,9 +18,10 @@ interface Props {
   onSave: () => void
   onLoad: () => void
   previewScreenshot: string | null
+  t: Translate
 }
 
-export function FramePicker({ editor, selectedIds, onSelectionChange, onAddFrame, canvasVersion, onSave, onLoad, previewScreenshot }: Props) {
+export function FramePicker({ editor, selectedIds, onSelectionChange, onAddFrame, canvasVersion, onSave, onLoad, previewScreenshot, t }: Props) {
   const [sources, setSources] = useState<SourceThumb[]>([])
   const [hasDrawing, setHasDrawing] = useState(false)
   const prevCountRef = useRef(0)
@@ -73,15 +75,15 @@ export function FramePicker({ editor, selectedIds, onSelectionChange, onAddFrame
       <div className="frame-picker-bar">
         <span className="fpb-status">
           <span className={`fpb-dot ${hasDrawing ? 'on' : ''}`} />
-          {hasDrawing ? 'Full canvas will be sent' : 'Draw something to get started'}
+          {hasDrawing ? t('canvas.fullCanvasWillBeSent') : t('canvas.drawToStart')}
         </span>
         {previewScreenshot && (
-          <span className="fpb-badge">+ previous output</span>
+          <span className="fpb-badge">{t('canvas.previousOutput')}</span>
         )}
         <div className="fpb-actions">
-          <button className="btn btn-ghost" onClick={onAddFrame}>+ Frame</button>
-          <button className="btn btn-ghost" onClick={onSave}>Save</button>
-          <button className="btn btn-ghost" onClick={onLoad}>Load</button>
+          <button className="btn btn-ghost" onClick={onAddFrame}>{t('canvas.frame')}</button>
+          <button className="btn btn-ghost" onClick={onSave}>{t('canvas.save')}</button>
+          <button className="btn btn-ghost" onClick={onLoad}>{t('canvas.load')}</button>
         </div>
       </div>
     )
@@ -92,16 +94,16 @@ export function FramePicker({ editor, selectedIds, onSelectionChange, onAddFrame
     <div className="frame-picker">
       <div className="frame-picker-header">
         <span className="frame-picker-label">
-          Sources
+          {t('canvas.sources')}
           <span className="frame-count">{selectedIds.size}/{sources.length}</span>
         </span>
         <div className="frame-picker-actions">
-          <button className="btn btn-ghost" onClick={onAddFrame}>+ Frame</button>
-          <button className="btn btn-ghost" onClick={selectAll}>All</button>
-          <button className="btn btn-ghost" onClick={selectNone}>None</button>
+          <button className="btn btn-ghost" onClick={onAddFrame}>{t('canvas.frame')}</button>
+          <button className="btn btn-ghost" onClick={selectAll}>{t('canvas.all')}</button>
+          <button className="btn btn-ghost" onClick={selectNone}>{t('canvas.none')}</button>
           <span className="fpb-sep" />
-          <button className="btn btn-ghost" onClick={onSave}>Save</button>
-          <button className="btn btn-ghost" onClick={onLoad}>Load</button>
+          <button className="btn btn-ghost" onClick={onSave}>{t('canvas.save')}</button>
+          <button className="btn btn-ghost" onClick={onLoad}>{t('canvas.load')}</button>
         </div>
       </div>
       <div className="frame-picker-strip">
@@ -118,7 +120,7 @@ export function FramePicker({ editor, selectedIds, onSelectionChange, onAddFrame
               <div className="frame-thumb-empty" />
             )}
             <span className="frame-thumb-name">
-              <span className="frame-thumb-kind">{s.kind === 'image' ? 'IMG' : 'FRM'}</span>
+              <span className="frame-thumb-kind">{s.kind === 'image' ? t('canvas.imageShort') : t('canvas.frameShort')}</span>
               {s.name}
             </span>
             {selectedIds.has(s.id) && <div className="frame-thumb-check">ok</div>}
@@ -126,10 +128,10 @@ export function FramePicker({ editor, selectedIds, onSelectionChange, onAddFrame
         ))}
         {previewScreenshot && (
           <div className="frame-thumb screenshot-thumb">
-            <img src={previewScreenshot} alt="Last output" />
+            <img src={previewScreenshot} alt={t('canvas.lastOutput')} />
             <span className="frame-thumb-name">
-              <span className="frame-thumb-kind">PRV</span>
-              Last Output
+              <span className="frame-thumb-kind">{t('canvas.previewShort')}</span>
+              {t('canvas.lastOutput')}
             </span>
           </div>
         )}

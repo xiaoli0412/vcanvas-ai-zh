@@ -214,6 +214,105 @@
   font-weight: 600;
 }
 
+.pm-custom-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.pm-section-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.pm-mode-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pm-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.pm-mode-btn:hover {
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+
+.pm-mode-btn.selected {
+  border-color: rgba(74, 158, 142, 0.35);
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.pm-field-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pm-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.pm-field-span-2 {
+  grid-column: span 2;
+}
+
+.pm-field-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pm-field-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.pm-note {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.pm-validation {
+  border: 1px solid rgba(200, 90, 90, 0.3);
+  background: rgba(200, 90, 90, 0.08);
+  color: var(--red);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+}
+
 /* Tag for custom provider */
 .pm-card-tag {
   font-family: var(--font-mono);
@@ -277,6 +376,122 @@
   color: var(--text-muted);
   white-space: nowrap;
   flex-shrink: 0;
+}
+
+.pm-fetch-models-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.pm-fetch-models-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.pm-fetch-models-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.pm-custom-model-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 168px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.pm-help-text {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.pm-show-more-btn {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 0;
+}
+
+.pm-show-more-btn:hover {
+  color: var(--accent-hover);
+}
+
+.pm-vision-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.pm-vision-toggle input {
+  margin-top: 2px;
+}
+
+.pm-vision-toggle-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pm-vision-toggle-title {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.pm-vision-toggle-hint {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--accent);
+}
+
+.pm-vision-assist-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(74, 158, 142, 0.03);
+}
+
+.pm-select {
+  width: 100%;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 6px 10px;
+  outline: none;
+}
+
+.pm-select:focus {
+  border-color: var(--accent);
+}
+
+.pm-note-secondary {
+  color: var(--text-muted);
 }
 
 .pm-fetch-error {

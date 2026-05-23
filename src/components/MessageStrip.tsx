@@ -1,12 +1,14 @@
 import React, { useRef, useEffect, useState } from 'react'
+import type { Translate } from '../lib/i18n'
 import type { ChatChip } from '../lib/store'
 import './MessageStrip.css'
 
 interface Props {
   chips: ChatChip[]
+  t: Translate
 }
 
-export function MessageStrip({ chips }: Props) {
+export function MessageStrip({ chips, t }: Props) {
   const stripRef = useRef<HTMLDivElement>(null)
   const [hoverImg, setHoverImg] = useState<{ src: string; label: string; x: number; y: number } | null>(null)
   const [hoverText, setHoverText] = useState<{ text: string; isError: boolean; x: number; y: number } | null>(null)
@@ -50,7 +52,7 @@ export function MessageStrip({ chips }: Props) {
                 )}
                 {isError && <span className="chip-error-icon">!</span>}
                 <span className="chip-text">
-                  {isError ? 'Error' : chip.text.length > 40 ? chip.text.slice(0, 40) + '…' : chip.text}
+                  {isError ? t('msg.error') : chip.text.length > 40 ? chip.text.slice(0, 40) + '…' : chip.text}
                 </span>
               </div>
             </React.Fragment>

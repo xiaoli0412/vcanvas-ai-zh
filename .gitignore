@@ -1,5 +1,8 @@
 node_modules/
 dist/
+release/
+release-v*/
+release-icon-test/
 .DS_Store
 *.log
 *.local

@@ -1,23 +1,83 @@
 {
   "name": "vcanvas",
-  "version": "1.0.0",
+  "version": "1.10.8",
   "description": "A visual canvas playground for vision-language models. Draw, describe, generate.",
   "private": true,
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:gh": "VCANVAS_BASE=/vcanvas/ vite build",
-    "preview": "vite preview"
+    "build:desktop": "node scripts/build-desktop.mjs",
+    "build:gh": "node scripts/build-gh.mjs",
+    "desktop": "npm run build:desktop && electron .",
+    "dist:desktop": "npm run build:desktop && electron-builder",
+    "dist:desktop:ci": "npm run build:desktop && electron-builder --publish never",
+    "preview": "vite preview",
+    "proxy": "node scripts/custom-openai-proxy.mjs"
   },
   "license": "MIT",
   "dependencies": {
     "@excalidraw/excalidraw": "^0.18.0",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
     "html2canvas": "^1.4.1",
     "react": "^19.2.4",
-    "react-dom": "^19.2.4",
+    "react-dom": "^19.2.4"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "electron": "^36.2.0",
+    "electron-builder": "^26.0.12",
+    "icon-gen": "^5.0.0",
     "typescript": "^6.0.2",
     "vite": "^8.0.3"
+  },
+  "build": {
+    "appId": "ai.e01.vcanvas",
+    "productName": "VCanvas",
+    "copyright": "Copyright © 2026 VCanvas",
+    "directories": {
+      "output": "release"
+    },
+    "npmRebuild": false,
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "scripts/proxy-server.cjs",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "icon": "assets/icons/app.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "${productName}-${version}-Windows-Setup.${ext}"
+    },
+    "linux": {
+      "icon": "assets/icons",
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "artifactName": "${productName}-${version}-Linux-${arch}.${ext}",
+      "category": "Graphics"
+    },
+    "mac": {
+      "icon": "assets/icons/app.icns",
+      "target": [
+        "dmg"
+      ],
+      "artifactName": "${productName}-${version}-macOS-${arch}.${ext}",
+      "category": "public.app-category.graphics-design"
+    }
   }
 }

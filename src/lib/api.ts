@@ -1,4 +1,5 @@
-import type { ProviderDef } from './providers'
+import { resolveProviderRequest, type ProviderDef, type ProviderState } from './providers'
+import { resolveProxyUrl, shouldUseProxyFirst } from './proxy'
 
 export interface StreamCallbacks {
   onChunk: (text: string, tokenIndex: number) => void
@@ -10,6 +11,16 @@ export interface StreamCallbacks {
 export interface Message {
   role: 'user' | 'assistant' | 'system'
   content: any[] | string
+}
+
+export interface VisionSummary {
+  rawText: string
+  summaryText: string
+}
+
+export interface StreamResult {
+  fullText: string
+  usage: { input_tokens: number | string; output_tokens: number | string }
 }
 
 // ── Message format converters ──
@@ -74,12 +85,18 @@ function toGeminiPayload(messages: Message[]): { systemInstruction?: any; conten
   return { systemInstruction, contents }
 }
 
+function extractTextFromResponse(text: string): string {
+  const fence = text.match(/```(?:json|text)?\s*\n([\s\S]*?)```/i)
+  if (fence) return fence[1].trim()
+  return text.trim()
+}
+
 // ── SSE stream readers ──
 
 async function readOpenAIStream(
   response: Response,
   callbacks: StreamCallbacks
-) {
+): Promise<StreamResult> {
   const reader = response.body!.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
@@ -125,12 +142,13 @@ async function readOpenAIStream(
   }
 
   callbacks.onDone(fullText, usage)
+  return { fullText, usage }
 }
 
 async function readGeminiStream(
   response: Response,
   callbacks: StreamCallbacks
-) {
+): Promise<StreamResult> {
   const reader = response.body!.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
@@ -178,22 +196,23 @@ async function readGeminiStream(
   }
 
   callbacks.onDone(fullText, usage)
+  return { fullText, usage }
 }
 
 // ── Unified streaming entry point ──
 
 export async function streamChat(
   provider: ProviderDef,
+  state: ProviderState,
   apiKey: string,
   modelId: string,
   messages: Message[],
   callbacks: StreamCallbacks,
   signal?: AbortSignal,
-  endpointOverride?: string
-) {
-  const endpoint = endpointOverride || provider.endpoint
-
+): Promise<StreamResult> {
   if (provider.type === 'gemini') {
+    const endpoint = provider.endpoint
+    if (!endpoint) throw new Error('provider.error.noEndpoint')
     const apiUrl = `${endpoint}/models/${modelId}:streamGenerateContent?alt=sse&key=${apiKey}`
     const { systemInstruction, contents } = toGeminiPayload(messages)
     const body: any = { contents }
@@ -215,23 +234,51 @@ export async function streamChat(
   }
 
   // OpenAI-compatible (z.ai, Fireworks, OpenRouter, Custom)
-  if (!endpoint) throw new Error('No endpoint configured. Set a base URL in settings.')
   const openaiMessages = toOpenAIMessages(messages)
+  const request = resolveProviderRequest(provider, state, apiKey)
+  const apiUrl = new URL(request.endpoint)
+  for (const [key, value] of Object.entries(request.query || {})) {
+    apiUrl.searchParams.set(key, value)
+  }
 
-  const response = await fetch(endpoint, {
+  const body: Record<string, unknown> = {
+    max_tokens: 16000,
+    stream: true,
+    messages: openaiMessages,
+  }
+  if (request.modelId) body.model = request.modelId
+
+  const directInit: RequestInit = {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
+    headers: request.headers,
+    body: JSON.stringify(body),
+    signal,
+  }
+
+  const proxyRequest = () => resolveProxyUrl().then((proxyUrl) => fetch(proxyUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: modelId,
-      max_tokens: 16000,
-      stream: true,
-      messages: openaiMessages,
+      url: apiUrl.toString(),
+      method: 'POST',
+      headers: request.headers,
+      body: JSON.stringify(body),
     }),
     signal,
-  })
+  }))
+
+  let response: Response
+  if (request.useProxy && await shouldUseProxyFirst()) {
+    response = await proxyRequest()
+  } else {
+    try {
+      response = await fetch(apiUrl.toString(), directInit)
+    } catch (error) {
+      if (!request.useProxy) throw error
+
+      response = await proxyRequest()
+    }
+  }
 
   if (!response.ok) {
     const errText = await response.text()
@@ -239,6 +286,26 @@ export async function streamChat(
   }
 
   return readOpenAIStream(response, callbacks)
+}
+
+export async function analyzeVision(
+  provider: ProviderDef,
+  state: ProviderState,
+  apiKey: string,
+  modelId: string,
+  messages: Message[],
+  signal?: AbortSignal,
+): Promise<VisionSummary> {
+  const result = await streamChat(provider, state, apiKey, modelId, messages, {
+    onChunk: () => {},
+    onDone: () => {},
+    onError: () => {},
+  }, signal)
+
+  return {
+    rawText: result.fullText,
+    summaryText: extractTextFromResponse(result.fullText),
+  }
 }
 
 // ── HTML extraction + cleanup ──
