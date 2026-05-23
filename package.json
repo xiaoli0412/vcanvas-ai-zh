@@ -11,6 +11,7 @@
     "build:gh": "node scripts/build-gh.mjs",
     "desktop": "npm run build:desktop && electron .",
     "dist:desktop": "npm run build:desktop && electron-builder",
+    "dist:desktop:ci": "npm run build:desktop && electron-builder --publish never",
     "preview": "vite preview",
     "proxy": "node scripts/custom-openai-proxy.mjs"
   },
