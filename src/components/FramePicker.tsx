@@ -135,7 +135,7 @@ export function FramePicker({
 
     setEmbedUrl(normalizedUrl)
     setEmbedEditorOpen(true)
-    setEmbedMessage(t('canvas.embedUnavailable'))
+    setEmbedMessage(t('canvas.embedReady'))
   }, [editor, embedUrl, getSelectedEmbeddable, t])
 
   const embedEditor = embedEditorOpen ? (

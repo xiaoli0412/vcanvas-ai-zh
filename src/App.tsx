@@ -324,7 +324,11 @@ export function App() {
 
   const handleFetchWebsite = useCallback(async () => {
     const nextUrl = normalizeWebsiteUrl(remixUrl)
-    if (!nextUrl || remixFetchLoading) {
+    if (remixFetchLoading) {
+      return
+    }
+
+    if (!nextUrl) {
       setRemixFetchError(t('canvas.embedInvalid'))
       return
     }

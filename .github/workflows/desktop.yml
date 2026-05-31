@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main
-      - codex/v1.10.5-remix-release
-      - codex/style-presets-workflow-lab
     tags:
       - 'v*'
   workflow_dispatch:

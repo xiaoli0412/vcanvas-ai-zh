@@ -1,6 +1,6 @@
 {
   "name": "vcanvas",
-  "version": "1.10.8",
+  "version": "1.11.0",
   "description": "A visual canvas playground for vision-language models. Draw, describe, generate.",
   "private": true,
   "main": "electron/main.cjs",

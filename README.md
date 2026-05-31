@@ -77,16 +77,14 @@ GitHub Actions includes `.github/workflows/desktop.yml`, which builds desktop ar
 The workflow runs on:
 
 - `main`
-- `codex/v1.10.5-remix-release`
-- `codex/style-presets-workflow-lab`
 
 ### Tagged release publishing
 
 If you push a git tag such as:
 
 ```bash
-git tag v1.10.8
-git push publish v1.10.8
+git tag v1.11.0
+git push publish v1.11.0
 ```
 
 the desktop workflow will also publish a GitHub Release and attach the packaged installers from all supported platforms.
