@@ -14,6 +14,7 @@ import { PromptBar } from './components/PromptBar'
 import { Preview } from './components/Preview'
 import { PreviewAnnotations } from './components/PreviewAnnotations'
 import { WebEmbedPanel } from './components/WebEmbedPanel'
+import { WorkCenterModal } from './components/WorkCenterModal'
 import { StreamOverlay } from './components/StreamOverlay'
 import { PlanOverlay } from './components/PlanOverlay'
 import type { PlanPhase } from './components/PlanOverlay'
@@ -210,6 +211,7 @@ export function App() {
   const [showPresetLibrary, setShowPresetLibrary] = useState(false)
   const [showModePanel, setShowModePanel] = useState(false)
   const [showWebEmbedPanel, setShowWebEmbedPanel] = useState(false)
+  const [showWorkCenter, setShowWorkCenter] = useState(false)
   const [fineTuneExpanded, setFineTuneExpanded] = useState(false)
   const [fetchingRemixReference, setFetchingRemixReference] = useState(false)
   const [lastTurnReference, setLastTurnReference] = useState<WorkflowTurnReference | null>(null)
@@ -661,6 +663,18 @@ export function App() {
     a.click()
     URL.revokeObjectURL(url)
   }, [t, lastTurnReference, webEmbeds])
+
+  const buildCurrentCanvasData = useCallback(() => {
+    const api = editorRef.current
+    if (!api) return null
+    const data: ExportedCanvasData = {
+      elements: api.getSceneElements(),
+      files: api.getFiles(),
+      workflowState: lastTurnReference,
+      webEmbeds,
+    }
+    return JSON.stringify(data)
+  }, [lastTurnReference, webEmbeds])
 
   const handleExportHtml = useCallback(() => {
     if (!lastHTML) return
@@ -1529,6 +1543,16 @@ ${compiledSystemPrompt}`,
           t={t}
         />
       )}
+      {showWorkCenter && (
+        <WorkCenterModal
+          lastHTML={lastHTML}
+          modeId={activeModeId}
+          promptDraft={promptDraft}
+          getCanvasData={buildCurrentCanvasData}
+          onClose={() => setShowWorkCenter(false)}
+          t={t}
+        />
+      )}
       <div className="workspace">
         <div className="panel-left" ref={panelLeftRef}>
           <Canvas onEditorReady={(e) => { editorRef.current = e; setEditor(e) }} onCanvasChange={handleCanvasChange} locale={locale} />
@@ -1539,6 +1563,7 @@ ${compiledSystemPrompt}`,
             onAddFrame={handleAddFrame}
             onAddWebEmbed={handleAddWebEmbed}
             onManageWebEmbeds={() => setShowWebEmbedPanel((visible) => !visible)}
+            onOpenWorkCenter={() => setShowWorkCenter(true)}
             webEmbedCount={webEmbeds.length}
             canvasVersion={canvasVersion}
             onSave={handleSave}

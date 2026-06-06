@@ -11,6 +11,7 @@
 - Fastify `npm run server` and deployment `scripts/serve-vcanvas.mjs` now share the core public-server API surface with local JSON persistence.
 - Header model entry is split into a compact quick switch plus secondary `Personal Settings · Models & Channels`; provider editing no longer expands from the canvas header directly.
 - Local/mock public-server v1 now persists users, quota ledgers, redeem codes, blocked IPs, rate-limit events, sign-in records, share links, and gallery entries.
+- A secondary `Works Center` modal is now wired from the compact canvas toolbar, covering current HTML save, HTML import, work metadata edits, share links, gallery submission, export, and delete without adding persistent canvas chrome.
 - Frontend, server typecheck, build, service smoke tests, and desktop/mobile browser screenshots passed on 2026-06-06.
 
 ## Completion Matrix
@@ -70,7 +71,7 @@
 
 ### 7. Works / Gallery / Share
 - `done` HTML export from preview
-- `in_progress` persistent work save/load on server through local JSON store and `/api/works`
+- `in_progress` persistent work save/list/manage on server through local JSON store, `/api/works`, and the secondary Works Center modal
 - `done` import HTML through `/api/works/import-html` with the 10-work owner limit
 - `done` share links through `/api/works/:id/share`
 - `in_progress` gallery / 鉴赏厅 with mock review status and tier quotas

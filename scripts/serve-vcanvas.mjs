@@ -750,8 +750,15 @@ async function handleApi(req, res, url) {
   }
 
   if (url.pathname === '/api/works' && method === 'GET') {
-    const ownerId = url.searchParams.get('ownerId') || 'guest-local'
-    sendJson(res, 200, { ok: true, items: data.works.filter((work) => work.ownerId === ownerId), limit: 10 })
+    const actor = getActor(data, req)
+    const ownerId = url.searchParams.get('ownerId') || actor.id
+    const items = data.works.filter((work) => work.ownerId === ownerId)
+    sendJson(res, 200, {
+      ok: true,
+      items,
+      limit: data.siteSettings.workLimitPerOwner || 10,
+      shareLinks: data.shareLinks.filter((link) => items.some((work) => work.id === link.workId)),
+    })
     return true
   }
 

@@ -27,6 +27,7 @@
 - Frontend provider defaults are OpenAI-compatible first: `custom` remains the storage ID, but the UI label/default entry is `Compatible OpenAI`; ChatGPT and Kimi are distinct cards, and unverified model lists are intentionally not hardcoded.
 - The header model control is now a compact quick switch. Channel/model management moves into `Personal Settings · Models & Channels`, with search, favorites, manual model IDs, capability badges, and batch capability editing through the server provider contract.
 - Video mode now explicitly falls back to keyframe/vision translation notes when the active model is not marked `video=true`; direct video-understanding requests are not assumed for non-video models.
+- `src/components/WorkCenterModal.tsx` adds the first canvas-first Works Center UI layer: save the latest generated HTML with a canvas snapshot, import standalone HTML, edit metadata, export, share, submit to the mock gallery queue, and delete works from a secondary modal opened by the compact canvas toolbar.
 - Classic/custom mode now opens with a compact prompt bar by default. Starter chips, Studio, context carry settings, remix details, video keyframes, and Web Embed management stay behind secondary controls so the canvas remains primary.
 - Mobile/narrow layouts hide the right preview panel and keep the header horizontally scrollable instead of crushing the canvas or stacking the brand vertically.
 

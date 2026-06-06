@@ -123,6 +123,11 @@
     - `/api/quotas/sign-in|redeem`、`/api/ops/status`、`/api/maintenance/cleanup` 落地 local/mock v1
     - Fastify 与 `scripts/serve-vcanvas.mjs` 同步上述核心 API parity
     - 视频模式在当前模型未标记 `video=true` 时明确走关键帧 / 视觉转译，不假设直接视频理解
+  - 2026-06-06 作品中心续推进：
+    - 新增 `WorkCenterModal`，从左下紧凑画布工具栏以二级弹层打开，不增加常驻画布占用
+    - 前端接通 `/api/session/me`、`/api/works`、`/api/works/import-html`、`/api/works/:id/share`、`/api/works/:id/gallery-submit`、`/api/gallery`
+    - 支持保存当前生成 HTML + 当前画布 JSON 快照、导入 HTML、编辑名称/简介、导出 HTML、分享、提交鉴赏厅和删除
+    - 中英 i18n 与暗紫 / 深蓝弹层样式已补齐
 
 ## 已验证
 - `npm run typecheck` 通过

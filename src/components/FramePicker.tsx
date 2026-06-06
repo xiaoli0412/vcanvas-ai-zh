@@ -16,6 +16,7 @@ interface Props {
   onAddFrame: () => void
   onAddWebEmbed: () => void
   onManageWebEmbeds: () => void
+  onOpenWorkCenter: () => void
   webEmbedCount: number
   canvasVersion: number
   onSave: () => void
@@ -24,7 +25,7 @@ interface Props {
   t: Translate
 }
 
-export function FramePicker({ editor, selectedIds, onSelectionChange, onAddFrame, onAddWebEmbed, onManageWebEmbeds, webEmbedCount, canvasVersion, onSave, onLoad, previewScreenshot, t }: Props) {
+export function FramePicker({ editor, selectedIds, onSelectionChange, onAddFrame, onAddWebEmbed, onManageWebEmbeds, onOpenWorkCenter, webEmbedCount, canvasVersion, onSave, onLoad, previewScreenshot, t }: Props) {
   const [sources, setSources] = useState<SourceThumb[]>([])
   const [hasDrawing, setHasDrawing] = useState(false)
   const prevCountRef = useRef(0)
@@ -87,6 +88,7 @@ export function FramePicker({ editor, selectedIds, onSelectionChange, onAddFrame
           <button className="btn btn-ghost" onClick={onAddFrame}>{t('canvas.frame')}</button>
           <button className="btn btn-ghost" onClick={onAddWebEmbed}>{t('webEmbed.add')}</button>
           {webEmbedCount > 0 && <button className="btn btn-ghost" onClick={onManageWebEmbeds}>{t('webEmbed.manage', { count: webEmbedCount })}</button>}
+          <button className="btn btn-ghost" onClick={onOpenWorkCenter}>{t('works.open')}</button>
           <button className="btn btn-ghost" onClick={onSave}>{t('canvas.save')}</button>
           <button className="btn btn-ghost" onClick={onLoad}>{t('canvas.load')}</button>
         </div>
@@ -106,6 +108,7 @@ export function FramePicker({ editor, selectedIds, onSelectionChange, onAddFrame
           <button className="btn btn-ghost" onClick={onAddFrame}>{t('canvas.frame')}</button>
           <button className="btn btn-ghost" onClick={onAddWebEmbed}>{t('webEmbed.add')}</button>
           {webEmbedCount > 0 && <button className="btn btn-ghost" onClick={onManageWebEmbeds}>{t('webEmbed.manage', { count: webEmbedCount })}</button>}
+          <button className="btn btn-ghost" onClick={onOpenWorkCenter}>{t('works.open')}</button>
           <button className="btn btn-ghost" onClick={selectAll}>{t('canvas.all')}</button>
           <button className="btn btn-ghost" onClick={selectNone}>{t('canvas.none')}</button>
           <span className="fpb-sep" />
