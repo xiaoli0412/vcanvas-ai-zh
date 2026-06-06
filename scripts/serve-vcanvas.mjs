@@ -38,6 +38,20 @@ function sendJson(res, statusCode, payload) {
   res.end(JSON.stringify(payload))
 }
 
+function parseRequestUrl(req) {
+  const rawUrl = req.url || '/'
+  const safeUrl = rawUrl.startsWith('//') ? `/${rawUrl.replace(/^\/+/, '')}` : rawUrl
+  const hostHeader = req.headers.host && /^[A-Za-z0-9.[\]:_-]+$/.test(req.headers.host)
+    ? req.headers.host
+    : `${host}:${port}`
+
+  try {
+    return new URL(safeUrl, `http://${hostHeader}`)
+  } catch {
+    return null
+  }
+}
+
 function readBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = []
@@ -1478,7 +1492,12 @@ function serveStatic(req, res, filePath) {
 
 const server = http.createServer(async (req, res) => {
   const method = req.method || 'GET'
-  const url = new URL(req.url || '/', `http://${req.headers.host || `${host}:${port}`}`)
+  const url = parseRequestUrl(req)
+
+  if (!url) {
+    sendJson(res, 400, { ok: false, error: 'Invalid request URL' })
+    return
+  }
 
   if (method === 'OPTIONS' && (proxyPaths.has(url.pathname) || url.pathname.startsWith('/api/'))) {
     writeCors(res)

@@ -1,3 +1,8 @@
+## 1.11.2 - 2026-06-06
+
+### Fixes
+- Hardened the standalone `18087` server against malformed double-slash request paths such as `//data:,` so direct public-port access no longer crashes with an empty response.
+
 ## 1.11.0 - 2026-05-31
 
 ### Highlights
