@@ -13,7 +13,7 @@ const ZERO_TIME = new Date(0).toISOString()
 
 export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   siteName: 'inscanvas Public Server',
-  siteDescription: 'Canvas-first creative workspace with local public-server foundations.',
+  siteDescription: 'inscanvas keeps the drawing surface first while adding local public-server foundations.',
   publicBaseUrl: '',
   defaultModeId: 'custom',
   guestEnabled: true,
@@ -52,13 +52,18 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
     requireVerification: true,
   },
   opsPublicEnabled: false,
+  dispatchPolicy: {
+    enabled: false,
+    strategy: 'round-robin-weighted',
+    nodes: [],
+  },
 }
 
 export const DEFAULT_PERSONAL_SETTINGS: PersonalSettings = {
   userId: 'guest-local',
   displayName: 'Guest',
   avatarUrl: null,
-  motto: 'Canvas first.',
+  motto: '画布优先。',
   preferredModeId: 'custom',
   favoriteModelKeys: [],
   experimental: {
@@ -100,7 +105,7 @@ export const DEFAULT_USERS: UserAccount[] = [
     profile: {
       displayName: 'inscanvas owner',
       avatarUrl: null,
-      motto: 'Canvas first.',
+      motto: '画布优先。',
       qq: null,
     },
     enabled: true,
@@ -139,7 +144,7 @@ export const DEFAULT_NOTICES: NoticeMessage[] = [
     id: 'phase-2-public-server',
     kind: 'announcement',
     title: 'inscanvas public server phase 2',
-    body: 'Canvas-first mode, local persistence, provider governance, and public-server contracts are active in this branch.',
+    body: 'inscanvas compact mode, local persistence, provider governance, and public-server contracts are active in this branch.',
     format: 'plain',
     audience: 'all',
     enabled: true,

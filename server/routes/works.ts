@@ -10,13 +10,13 @@ import {
   tierAtLeast,
 } from '../lib/platformPolicy'
 
-function createSnapshot(id: string, html: string | undefined, canvasData: string | undefined, now: string): WorkSnapshot {
+function createSnapshot(id: string, html: string | undefined, canvasData: string | undefined, previewImageUrl: string | null | undefined, now: string): WorkSnapshot {
   return {
     id: createId('snapshot'),
     workId: id,
     html,
     canvasData,
-    previewImageUrl: null,
+    previewImageUrl: previewImageUrl || null,
     createdAt: now,
   }
 }
@@ -29,7 +29,7 @@ function canAccessWork(data: PublicServerData, request: FastifyRequest, work: Wo
 function buildWork(input: {
   data: PublicServerData
   request: FastifyRequest
-  body: Partial<WorkRecord> & { canvasData?: string }
+  body: Partial<WorkRecord> & { canvasData?: string; previewImageUrl?: string | null }
   ownerId: string
   now: string
 }) {
@@ -40,11 +40,11 @@ function buildWork(input: {
     action: 'save',
   })
   const html = injectDisclaimerComment(input.body.html, comment)
-  const snapshot = createSnapshot(id, html, input.body.canvasData, input.now)
+  const snapshot = createSnapshot(id, html, input.body.canvasData, input.body.previewImageUrl, input.now)
   return {
     id,
     ownerId: input.ownerId,
-    title: input.body.title?.slice(0, 50) || 'Untitled work',
+    title: input.body.title?.slice(0, 50) || '未命名作品',
     description: input.body.description?.slice(0, 50) || '',
     modeId: input.body.modeId || 'custom',
     status: input.body.status || 'saved',
@@ -81,7 +81,7 @@ export async function registerWorkRoutes(app: FastifyInstance) {
   })
 
   app.post('/api/works', async (request, reply) => {
-    const body = (request.body || {}) as Partial<WorkRecord> & { canvasData?: string }
+    const body = (request.body || {}) as Partial<WorkRecord> & { canvasData?: string; previewImageUrl?: string | null }
     const now = new Date().toISOString()
     const result = await localDataStore.update((data) => {
       const actor = getActor(data, request)
@@ -113,7 +113,7 @@ export async function registerWorkRoutes(app: FastifyInstance) {
   })
 
   app.post('/api/works/import-html', async (request, reply) => {
-    const body = (request.body || {}) as Partial<WorkRecord> & { canvasData?: string; html?: string }
+    const body = (request.body || {}) as Partial<WorkRecord> & { canvasData?: string; html?: string; previewImageUrl?: string | null }
     if (!body.html?.trim()) {
       reply.code(400).send({ ok: false, error: 'Missing HTML content.' })
       return
@@ -127,7 +127,7 @@ export async function registerWorkRoutes(app: FastifyInstance) {
       const work = buildWork({
         data,
         request,
-        body: { ...body, title: body.title || 'Imported HTML', status: 'saved' },
+        body: { ...body, title: body.title || '导入 HTML', status: 'saved' },
         ownerId,
         now,
       })
@@ -168,7 +168,7 @@ export async function registerWorkRoutes(app: FastifyInstance) {
 
   app.patch('/api/works/:id', async (request, reply) => {
     const id = (request.params as { id: string }).id
-    const body = (request.body || {}) as Partial<WorkRecord> & { canvasData?: string }
+    const body = (request.body || {}) as Partial<WorkRecord> & { canvasData?: string; previewImageUrl?: string | null }
     const now = new Date().toISOString()
     const work = await localDataStore.update((data) => {
       const index = data.works.findIndex((item) => item.id === id)
@@ -182,7 +182,7 @@ export async function registerWorkRoutes(app: FastifyInstance) {
       })
       const html = body.html ? injectDisclaimerComment(body.html, comment) : current.html
       const snapshots = body.html || body.canvasData
-        ? [...current.snapshots, createSnapshot(id, html, body.canvasData, now)]
+        ? [...current.snapshots, createSnapshot(id, html, body.canvasData, body.previewImageUrl, now)]
         : current.snapshots
       const next: WorkRecord = {
         ...current,

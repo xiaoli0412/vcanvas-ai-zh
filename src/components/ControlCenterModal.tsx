@@ -240,7 +240,11 @@ export function ControlCenterModal({
   })
 
   const guestLogin = () => run(async () => {
-    await fetch('/api/session/guest', { method: 'POST' }).then((response) => readJson(response))
+    await fetch('/api/session/guest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    }).then((response) => readJson(response))
     return t('control.notice.guest')
   })
 
@@ -258,7 +262,11 @@ export function ControlCenterModal({
   })
 
   const signIn = () => run(async () => {
-    await fetch('/api/quotas/sign-in', { method: 'POST' }).then((response) => readJson(response))
+    await fetch('/api/quotas/sign-in', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    }).then((response) => readJson(response))
     return t('control.notice.signIn')
   })
 
@@ -301,7 +309,11 @@ export function ControlCenterModal({
   })
 
   const cleanup = () => run(async () => {
-    await fetch('/api/maintenance/cleanup', { method: 'POST' }).then((response) => readJson(response))
+    await fetch('/api/maintenance/cleanup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    }).then((response) => readJson(response))
     return t('control.notice.cleanup')
   })
 

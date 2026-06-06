@@ -29,9 +29,9 @@ function formatDate(value: string | null | undefined) {
   return date.toLocaleString()
 }
 
-function makeDefaultTitle(promptDraft: string) {
+function makeDefaultTitle(promptDraft: string, fallback: string) {
   const normalized = promptDraft.trim().replace(/\s+/g, ' ')
-  if (!normalized) return 'Untitled work'
+  if (!normalized) return fallback
   return normalized.length > 34 ? `${normalized.slice(0, 34)}...` : normalized
 }
 
@@ -59,7 +59,7 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
   const [galleryEntries, setGalleryEntries] = useState<GalleryEntryWithWork[]>([])
   const [limit, setLimit] = useState(10)
   const [selectedId, setSelectedId] = useState('')
-  const [title, setTitle] = useState(() => makeDefaultTitle(promptDraft))
+  const [title, setTitle] = useState(() => makeDefaultTitle(promptDraft, t('canvas.untitled')))
   const [description, setDescription] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -134,7 +134,7 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ownerId: user?.id,
-        title: title.trim() || makeDefaultTitle(promptDraft),
+        title: title.trim() || makeDefaultTitle(promptDraft, t('canvas.untitled')),
         description: description.trim(),
         modeId,
         status: 'saved',
@@ -161,7 +161,11 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
 
   const shareSelected = () => runAction(async () => {
     if (!selectedWork) return
-    const response = await fetch(`/api/works/${encodeURIComponent(selectedWork.id)}/share`, { method: 'POST' })
+    const response = await fetch(`/api/works/${encodeURIComponent(selectedWork.id)}/share`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    })
     const data = await readJson<{ link: ShareLink }>(response)
     const sharePath = `/share/${data.link.slug}`
     try {
@@ -174,7 +178,11 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
 
   const submitGallery = () => runAction(async () => {
     if (!selectedWork) return
-    const response = await fetch(`/api/works/${encodeURIComponent(selectedWork.id)}/gallery-submit`, { method: 'POST' })
+    const response = await fetch(`/api/works/${encodeURIComponent(selectedWork.id)}/gallery-submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    })
     await readJson(response)
   }, t('works.notice.gallerySubmitted'))
 

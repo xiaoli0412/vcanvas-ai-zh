@@ -7,7 +7,7 @@
 ## Current Baseline
 - Branch: `codex/canvas-lab-public-server`
 - Public-server skeleton exists in `server/` and `shared/`.
-- Canvas-first shell is the active frontend direction.
+- 画布优先 shell is the active frontend direction.
 - Completed frontend capabilities include 12 modes, secondary mode panel, workflow context, preview annotations, video keyframes, HTML export, image/video import, and website remix fetch.
 
 ## Implementation Phases

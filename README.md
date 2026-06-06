@@ -1,10 +1,10 @@
-# VCanvas Remix
+# inscanvas Remix
 
-A visual canvas playground for vision-language models. Draw sketches, describe what you want, and the model generates complete HTML/CSS/JS rendered live in a side-by-side preview.
+inscanvas is a visual creative workspace for vision-language models. Draw sketches, describe what you want, and the model generates complete HTML/CSS/JS rendered live in a side-by-side preview.
 
 BYOK (Bring Your Own Key). The default app runs in the browser. For custom endpoints that do not expose browser CORS headers, an optional local proxy is included.
 
-![VCanvas screenshot](screenshot/sc.png)
+![inscanvas screenshot](screenshot/sc.png)
 
 > A demo recording is available at [`screenshot/rec.mp4`](screenshot/rec.mp4).
 

@@ -19,8 +19,8 @@
   border: 1px solid rgba(108, 117, 190, 0.26);
   border-radius: 14px;
   background:
-    radial-gradient(circle at 12% 0%, rgba(91, 97, 180, 0.22), transparent 34%),
-    linear-gradient(160deg, rgba(26, 30, 58, 0.98), rgba(10, 14, 28, 0.98));
+    radial-gradient(circle at 12% 0%, rgba(73, 88, 164, 0.16), transparent 34%),
+    linear-gradient(160deg, rgba(15, 23, 49, 0.98), rgba(8, 13, 28, 0.98));
   box-shadow: 0 22px 80px rgba(0, 0, 0, 0.55);
 }
 
@@ -37,7 +37,7 @@
   font-size: 9px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: #9aa8ff;
+  color: var(--brand-blue-text);
 }
 
 .psm-header h2 {
@@ -81,12 +81,13 @@
   color: var(--text-secondary);
   text-align: left;
   font-size: 12px;
+  font-family: var(--font-sans);
   cursor: pointer;
 }
 
 .psm-nav.active {
-  border-color: rgba(153, 164, 255, 0.32);
-  background: rgba(119, 129, 232, 0.12);
+  border-color: var(--brand-blue-border);
+  background: var(--brand-blue-soft);
   color: var(--text-primary);
 }
 
@@ -149,6 +150,7 @@
   background: rgba(255, 255, 255, 0.025);
   color: var(--text-secondary);
   text-align: left;
+  min-width: 132px;
   cursor: pointer;
 }
 
@@ -182,6 +184,7 @@
   border-radius: 8px;
   background: rgba(5, 7, 16, 0.5);
   color: var(--text-primary);
+  font-family: var(--font-sans);
   outline: none;
 }
 
@@ -211,11 +214,12 @@
   border: 1px solid var(--border);
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.025);
+  min-width: 0;
 }
 
 .psm-model.selected {
-  border-color: rgba(153, 164, 255, 0.36);
-  background: rgba(119, 129, 232, 0.1);
+  border-color: var(--brand-blue-border);
+  background: var(--brand-blue-soft);
 }
 
 .psm-model-check {
@@ -264,7 +268,7 @@
   border-radius: 999px;
   border: 1px solid rgba(130, 143, 210, 0.28);
   background: rgba(68, 75, 134, 0.18);
-  color: #b8c1ff;
+  color: var(--brand-blue-text);
   font-family: var(--font-mono);
   font-size: 8px;
   font-weight: 800;
@@ -327,6 +331,7 @@
   border-radius: 8px;
   background: rgba(5, 7, 16, 0.5);
   color: var(--text-primary);
+  font-family: var(--font-sans);
   outline: none;
 }
 

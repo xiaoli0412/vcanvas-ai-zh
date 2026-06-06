@@ -5,6 +5,7 @@ import {
   getProvider,
   type ProviderState,
 } from '../lib/providers'
+import type { Translate } from '../lib/i18n'
 import './ModelQuickSwitch.css'
 
 interface Props {
@@ -14,6 +15,7 @@ interface Props {
   onOpenPersonalSettings: () => void
   onOpenConnectionSettings: () => void
   onClose: () => void
+  t: Translate
 }
 
 function hasSavedConnection(state: ProviderState, providerId: string) {
@@ -32,6 +34,7 @@ export function ModelQuickSwitch({
   onOpenPersonalSettings,
   onOpenConnectionSettings,
   onClose,
+  t,
 }: Props) {
   const [query, setQuery] = useState('')
   const activeProvider = getProvider(state.activeProviderId)
@@ -62,8 +65,8 @@ export function ModelQuickSwitch({
       <div className="mqs-card" onClick={(event) => event.stopPropagation()}>
         <div className="mqs-header">
           <div>
-            <div className="mqs-eyebrow">Quick Model Switch</div>
-            <h2>模型快速切换</h2>
+            <div className="mqs-eyebrow">{t('modelQuick.eyebrow')}</div>
+            <h2>{t('modelQuick.title')}</h2>
           </div>
           <button className="mqs-close" onClick={onClose} aria-label="Close">&times;</button>
         </div>
@@ -72,7 +75,7 @@ export function ModelQuickSwitch({
           <span className={`mqs-dot ${hasKey ? 'on' : ''}`} />
           <div>
             <strong>{activeProvider.name}</strong>
-            <span>{activeModelId || '未选择模型'}</span>
+            <span>{activeModelId || t('modelQuick.noModel')}</span>
           </div>
         </div>
 
@@ -80,7 +83,7 @@ export function ModelQuickSwitch({
           className="mqs-search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="搜索已保存渠道..."
+          placeholder={t('modelQuick.search')}
           spellCheck={false}
         />
 
@@ -95,8 +98,8 @@ export function ModelQuickSwitch({
               <span>{provider.name}</span>
               <small>
                 {provider.id === 'custom'
-                  ? (state.custom.modelId || 'Compatible endpoint')
-                  : (provider.models[0]?.label || state.activeModelId || 'Manual model in settings')}
+                  ? (state.custom.modelId || t('modelQuick.compatibleEndpoint'))
+                  : (provider.models[0]?.label || state.activeModelId || t('modelQuick.manualModel'))}
               </small>
             </button>
           ))}
@@ -104,10 +107,10 @@ export function ModelQuickSwitch({
 
         <div className="mqs-actions">
           <button className="btn btn-secondary" onClick={onOpenConnectionSettings} type="button">
-            连接/API Key
+            {t('modelQuick.connection')}
           </button>
           <button className="btn btn-primary" onClick={onOpenPersonalSettings} type="button">
-            个人设置 · 模型与渠道
+            {t('modelQuick.personalSettings')}
           </button>
         </div>
       </div>

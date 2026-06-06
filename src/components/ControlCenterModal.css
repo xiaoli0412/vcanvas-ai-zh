@@ -7,7 +7,7 @@
   justify-content: center;
   padding: 18px;
   background:
-    radial-gradient(circle at 12% 8%, rgba(113, 121, 214, 0.18), transparent 28%),
+    radial-gradient(circle at 12% 8%, rgba(73, 88, 164, 0.14), transparent 28%),
     radial-gradient(circle at 88% 18%, rgba(74, 158, 142, 0.11), transparent 24%),
     rgba(5, 7, 17, 0.72);
   backdrop-filter: blur(10px);
@@ -19,7 +19,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid rgba(108, 117, 190, 0.3);
+  border: 1px solid var(--brand-blue-border);
   border-radius: 20px;
   background: linear-gradient(145deg, rgba(12, 15, 29, 0.98), rgba(17, 20, 36, 0.98));
   box-shadow: 0 34px 100px rgba(0, 0, 0, 0.56), inset 0 1px 0 rgba(255, 255, 255, 0.035);
@@ -39,7 +39,7 @@
   font-weight: 800;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: #9aa8ff;
+  color: var(--brand-blue-text);
 }
 
 .ccm-header h2 {
@@ -92,8 +92,8 @@
 }
 
 .ccm-pill.on {
-  color: #aeb8ff;
-  border-color: rgba(154, 168, 255, 0.28);
+  color: var(--brand-blue-text);
+  border-color: var(--brand-blue-border);
 }
 
 .ccm-status .btn {
@@ -179,7 +179,7 @@
 
 .ccm-nav-item:hover,
 .ccm-nav-item.active {
-  border-color: rgba(154, 168, 255, 0.4);
+  border-color: var(--brand-blue-border);
   background: rgba(31, 35, 58, 0.72);
   color: var(--text-primary);
 }
@@ -340,7 +340,7 @@
 }
 
 .ccm-metric strong {
-  color: #aeb8ff;
+  color: var(--brand-blue-text);
   font-size: 18px;
 }
 
@@ -373,7 +373,7 @@
 
 .ccm-provider-mini small,
 .ccm-ops-grid strong {
-  color: #9aa8ff;
+  color: var(--brand-blue-text);
 }
 
 .ccm-notice,

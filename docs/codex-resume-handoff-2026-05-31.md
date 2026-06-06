@@ -184,7 +184,18 @@
       - 显示 pending-review / published 的 local/mock 条目
       - 有有效分享链接的作品可直接进入 `/share/:slug`
     - `scripts/serve-vcanvas.mjs` 同步 `/share/:slug` 与 `/gallery` parity
-    - 页面风格保持暗紫 / 深蓝，不增加任何常驻画布 chrome
+  - 页面风格保持暗紫 / 深蓝，不增加任何常驻画布 chrome
+  - 2026-06-06 字体 / 语言 / 简约主题推进：
+    - 默认语言改为中文；已有本地语言选择仍保留
+    - Header 语言切换在桌面和移动端都保持可见，不再被窄屏 CSS 隐藏
+    - 全局正文与控件字体改为 HarmonyOS Sans 系统优先栈，mono 继续用于模型 ID、代码和技术徽标
+    - 本地内嵌 OFL 字体：Noto Serif SC 作为高级宋体展示字体，Fusion Pixel 10px Monospaced SC 作为短标题 / 品牌像素字体
+    - 暗紫基调收敛为深蓝微紫：`#080d1c / #0b1024 / #111831` 为主背景，紫色只作为低饱和 accent
+    - `ModelQuickSwitch`、`PersonalSettingsModal`、Header `by/Studio` 等功能文本接入 i18n
+    - Fastify 与 `scripts/serve-vcanvas.mjs` 的 `/gallery`、`/share/:slug` fallback 和状态页默认中文，并共享简约公开页外壳
+    - `/gallery` 进一步收口成轻量瀑布流：优先读取作品快照封面，缺失时使用简洁渐变占位，减少副标题和长说明
+    - 新增 `/api/dispatch/status` 与 `/api/dispatch/route` planned-only 调度口，保留后续多服务器均衡负载接入点
+    - 参考 New API `v1.0.0-rc.10` 的紧凑管理台方向，只吸收信息密度、徽标、卡片和移动端可读性原则，不复制代码或素材
 
 ## 已验证
 - `npm run typecheck` 通过
@@ -211,9 +222,17 @@
   - `npm run build`
   - Fastify 与轻量服务公开路由烟测：保存 HTML、分享、`/share/:slug`、提交鉴赏厅、`/gallery`、`/api/gallery`
   - Playwright 截图：`/gallery` 桌面与移动、`/share/:slug` 桌面
+- 当前字体 / 语言 / 简约主题切片已完成最终验证：
+  - `npm run typecheck`
+  - `npm run typecheck:server`
+  - `node --check scripts/serve-vcanvas.mjs`
+  - `npm run build`
+  - Fastify 与轻量服务 `/gallery`、`/share/not-exist`、有 HTML 的 `/share/:slug`、`/api/gallery`、`/api/dispatch/status`、`POST /api/dispatch/route`
+  - Fastify 静态资源服务修复：`/assets/*.js` 不再回落为 `index.html`
+  - 浏览器截图：主应用、模式面板、模型快速切换、个人设置、控制中心、作品中心、公开 `/gallery` 的桌面与移动布局
 
 ## 当前工作树状态
-- 本轮计划提交信息：`feat: add public share and gallery routes`
+- 本轮计划提交信息：`feat: refine language theme and typography`
 - 推送目标：`publish/codex/canvas-lab-public-server-v1.10.9`
 - 不推送 `origin`
 

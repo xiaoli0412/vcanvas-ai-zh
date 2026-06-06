@@ -7,7 +7,7 @@
 ## Current Phase Summary
 - Branch renamed and pushed as `codex/canvas-lab-public-server`; current owner-cadence work continues on `codex/canvas-lab-public-server-v1.10.9`.
 - Public-server phase-1 skeleton exists in `server/`, `shared/`, and `docs/public-server-baseline.md`.
-- Canvas-first shell is now the enforced default: classic/custom mode opens with a compact bottom prompt bar, while Studio, context, starters, remix, video keyframes, and Web Embed management stay in secondary panels.
+- 画布优先 shell is now the enforced default: classic/custom mode opens with a compact bottom prompt bar, while Studio, context, starters, remix, video keyframes, and Web Embed management stay in secondary panels.
 - Fastify `npm run server` and deployment `scripts/serve-vcanvas.mjs` now share the core public-server API surface with local JSON persistence.
 - Header model entry is split into a compact quick switch plus secondary `Personal Settings · Models & Channels`; provider editing no longer expands from the canvas header directly.
 - Local/mock public-server v1 now persists users, quota ledgers, redeem codes, blocked IPs, rate-limit events, sign-in records, share links, and gallery entries.
@@ -16,6 +16,10 @@
 - Control Center v2 now adds admin-only user management, app-level forced warning popups, and a Works Center over-limit deletion chooser while keeping all controls in secondary modals.
 - Control Center v3 now adds user search plus admin IP block/unblock controls backed by `/api/security/blocked-ips`; self-blocking the current request IP is refused in local/mock mode.
 - Public share and gallery front-desk pages now exist at `/share/:slug` and `/gallery` in both Fastify and the lightweight deployment server, without adding persistent canvas chrome.
+- Typography, language, and theme consistency pass is underway for `1.10.11`: default locale is Chinese, Header language switching stays visible on desktop/mobile, HarmonyOS Sans system-first typography is applied to body/control text, and public fallback pages are simplified into a deep-blue/slightly-purple admin-style shell.
+- `1.10.11` now embeds local OFL display fonts: Noto Serif SC for premium Songti-style titles and Fusion Pixel 10px Monospaced SC for short playful title/brand accents; no external font CDN is required.
+- `/gallery` is being simplified into a lighter Xiaohongshu-style masonry feed with optional snapshot covers, compact metadata, shorter notices, and matching Fastify/lightweight server templates.
+- `/api/dispatch/status` and `/api/dispatch/route` now expose a planned-only distributed dispatch opening with weighted candidate selection and explicit fallback reasons.
 - Frontend, server typecheck, build, service smoke tests, and desktop/mobile browser screenshots passed on 2026-06-06.
 
 ## Completion Matrix
@@ -45,6 +49,7 @@
 - `todo` multi-user concurrency path and async work distribution
 - `in_progress` cleanup endpoint for expired workflows, sessions, rate-limit events, and blocked IPs
 - `in_progress` dynamic server/client execution fallback metadata
+- `in_progress` planned-only distributed dispatch contract through `/api/dispatch/status` and `/api/dispatch/route`
 - `done` server-hosted high-resource toggle for video/web copy in personal settings and workflow policy
 - `done` Control Center v1 surfaces ops status and manual cleanup as secondary controls
 
@@ -90,13 +95,16 @@
 - `done` share links through `/api/works/:id/share`
 - `done` public share route `/share/:slug` renders enabled share links and returns branded 404/410/paused fallback pages
 - `done` public gallery route `/gallery` renders a read-only standalone front desk for pending/published local/mock entries
-- `in_progress` gallery / 鉴赏厅 with mock review status and tier quotas
+- `in_progress` gallery / 鉴赏厅 with mock review status, tier quotas, and lightweight masonry-feed presentation
 - `done` Control Center v1 includes a read-only gallery front desk preview; route-level public gallery now exists separately
 - `in_progress` per-tier work and gallery limits
 
 ### 8. Frontend / Branding
 - `in_progress` replace visible "canvas" branding intro surfaces with `inscanvas` where required while preserving storage/runtime compatibility
+- `done` embedded local OFL font layer: Noto Serif SC display Songti, Fusion Pixel short-title accents, HarmonyOS/system sans for dense controls
 - `done` preserve original dark-purple/deep-blue spirit direction as baseline target
+- `in_progress` default Chinese + English toggle consistency pass; `ModelQuickSwitch`, `PersonalSettingsModal`, Header utility labels, and public fallback pages now share i18n/font/theme rules
+- `in_progress` New API `v1.0.0-rc.10` is used only as a design-direction reference for compact management UI, table/card density, badges, and mobile scanability; no AGPL code or assets are copied
 - `in_progress` full route-level IA for entry/login/personal center/gallery/settings, with `/share/:slug` and `/gallery` now implemented first
 
 ### 9. Backend Logic
@@ -125,6 +133,8 @@
 - Browser screenshot review passed for user search + blocked IP state and ops blocked-IP list; `.workspace` remained `1440x920` before and after opening Control Center.
 - Public route smoke test passed on both Fastify and `scripts/serve-vcanvas.mjs`: mock login, save HTML work, create share link, open `/share/:slug`, submit gallery, open `/gallery`, and confirm `/api/gallery`.
 - Browser screenshot review passed for `/gallery` at `1440x960` and `390x844`, plus `/share/:slug` at `1440x960`; public pages remain standalone and do not add canvas chrome.
+- Language/theme follow-up verification passed for `1.10.11`: default Chinese fallback, embedded Noto Serif SC + Fusion Pixel font loading, mobile Header language toggle visibility, simplified public `/gallery` and `/share/:slug` fallback parity, planned-only `/api/dispatch/*` parity, and no obvious text overlap at `1440x960` / `390x844`.
+- Fastify static resource fallback was fixed so production JS/CSS/font assets stream from `VCANVAS_STATIC_DIR` before the SPA `index.html` fallback.
 
 ### 10. Sign-in / Quota
 - `in_progress` login-as-signin flow through local/mock records

@@ -122,6 +122,13 @@ function mergeSiteSettings(defaults: SiteSettings, input?: Partial<SiteSettings>
     ...(defaults.migrationPolicy || {}),
     ...(input?.migrationPolicy || {}),
   }
+  const dispatchPolicy: NonNullable<SiteSettings['dispatchPolicy']> = {
+    enabled: false,
+    strategy: 'round-robin-weighted',
+    nodes: [],
+    ...(defaults.dispatchPolicy || {}),
+    ...(input?.dispatchPolicy || {}),
+  }
 
   return {
     ...defaults,
@@ -130,6 +137,7 @@ function mergeSiteSettings(defaults: SiteSettings, input?: Partial<SiteSettings>
     noticePolicy,
     updatePolicy,
     migrationPolicy,
+    dispatchPolicy,
   }
 }
 

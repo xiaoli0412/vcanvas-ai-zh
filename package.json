@@ -1,7 +1,7 @@
 {
   "name": "vcanvas",
-  "version": "1.10.10",
-  "description": "A visual canvas playground for vision-language models. Draw, describe, generate.",
+  "version": "1.10.11",
+  "description": "inscanvas is a visual creative workspace for vision-language models. Draw, describe, generate.",
   "private": true,
   "main": "electron/main.cjs",
   "scripts": {
@@ -20,8 +20,8 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@fastify/static": "^8.3.0",
     "@excalidraw/excalidraw": "^0.18.0",
+    "@fastify/static": "^8.3.0",
     "fastify": "^5.6.1",
     "html2canvas": "^1.4.1",
     "react": "^19.2.4",
@@ -33,14 +33,14 @@
     "electron": "^36.2.0",
     "electron-builder": "^26.0.12",
     "icon-gen": "^5.0.0",
-    "typescript": "^6.0.2",
     "tsx": "^4.20.6",
+    "typescript": "^6.0.2",
     "vite": "^8.0.3"
   },
   "build": {
     "appId": "ai.e01.vcanvas",
-    "productName": "VCanvas",
-    "copyright": "Copyright © 2026 VCanvas",
+    "productName": "inscanvas",
+    "copyright": "Copyright © 2026 inscanvas",
     "directories": {
       "output": "release"
     },

@@ -14,7 +14,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-secondary);
   white-space: nowrap;
 }
@@ -34,7 +34,7 @@
 }
 
 .fpb-badge {
-  font-size: 10px;
+  font-size: 9px;
   color: var(--text-muted);
   background: var(--bg-tertiary);
   padding: 1px 8px;
@@ -104,7 +104,7 @@
 }
 
 .frame-picker-actions .btn {
-  font-size: 11px;
+  font-size: 10px;
   padding: 3px 8px;
 }
 

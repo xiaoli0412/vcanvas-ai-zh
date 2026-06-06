@@ -297,6 +297,11 @@ export interface SiteSettings {
     requireVerification: boolean
   }
   opsPublicEnabled?: boolean
+  dispatchPolicy?: {
+    enabled: boolean
+    strategy: 'round-robin-weighted'
+    nodes: DispatchNode[]
+  }
 }
 
 export interface PersonalSettings {
@@ -362,6 +367,24 @@ export interface HostingPolicy {
   fallbackReason?: string | null
 }
 
+export interface DispatchNode {
+  id: string
+  url: string
+  weight: number
+  enabled: boolean
+  currentLoad?: number
+  lastSeenAt?: string | null
+}
+
+export interface DispatchSnapshot {
+  strategy: 'round-robin-weighted'
+  selectedNode?: DispatchNode | null
+  nodes: DispatchNode[]
+  message: string
+  plannedOnly: boolean
+  fallbackReason?: string | null
+}
+
 export interface OpsSnapshot {
   takenAt: string
   counts: {
@@ -380,6 +403,7 @@ export interface OpsSnapshot {
     retentionHours: number
   }
   highLoadMode: boolean
+  dispatch?: DispatchSnapshot
 }
 
 export interface DataExportManifest {

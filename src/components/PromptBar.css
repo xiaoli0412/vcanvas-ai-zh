@@ -25,7 +25,7 @@
   border: 1px solid var(--border);
   border-radius: 100px;
   padding: 5px 14px;
-  font-size: 12px;
+  font-size: 11px;
   font-family: var(--font-sans);
   color: var(--text-secondary);
   cursor: pointer;
@@ -43,8 +43,8 @@
 }
 
 .inspiration-chip-surprise {
-  border-color: rgba(90, 106, 180, 0.32);
-  color: #9aa8ff;
+  border-color: var(--brand-blue-border);
+  color: var(--brand-blue-text);
 }
 
 .studio-panel {
@@ -223,8 +223,8 @@
 }
 
 .video-keyframe-chip.selected {
-  border-color: rgba(180, 140, 255, 0.55);
-  box-shadow: 0 0 0 2px rgba(180, 140, 255, 0.12);
+  border-color: var(--brand-blue-border);
+  box-shadow: 0 0 0 2px var(--brand-blue-dim);
 }
 
 .video-keyframe-chip.selected img {
@@ -364,7 +364,7 @@
   border-radius: var(--radius);
   padding: 10px 14px;
   color: var(--text-primary);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 12px;
   resize: none;
   outline: none;
@@ -387,12 +387,12 @@
 
 /* Plan mode: purple border via box-shadow (no layout shift) */
 .prompt-bar.plan-active .prompt-input {
-  border-color: rgba(180, 140, 255, 0.3);
-  box-shadow: 0 0 0 1px rgba(180, 140, 255, 0.15), 0 0 12px rgba(180, 140, 255, 0.08);
+  border-color: var(--brand-blue-border);
+  box-shadow: 0 0 0 1px var(--brand-blue-dim), 0 0 12px rgba(89, 103, 180, 0.08);
 }
 .prompt-bar.plan-active .prompt-input:focus {
-  border-color: rgba(180, 140, 255, 0.5);
-  box-shadow: 0 0 0 1px rgba(180, 140, 255, 0.25), 0 0 16px rgba(180, 140, 255, 0.12);
+  border-color: rgba(142, 162, 255, 0.48);
+  box-shadow: 0 0 0 1px var(--brand-blue-border), 0 0 16px rgba(89, 103, 180, 0.12);
 }
 
 /* ── Footer: Plan toggle left, Generate right ── */
@@ -433,8 +433,8 @@
 }
 
 .plan-toggle.active {
-  border-color: rgba(180, 140, 255, 0.4);
-  background: rgba(180, 140, 255, 0.06);
+  border-color: var(--brand-blue-border);
+  background: var(--brand-blue-dim);
 }
 
 .plan-toggle:disabled {
@@ -452,24 +452,24 @@
 }
 
 .plan-toggle.active .plan-toggle-orb {
-  background: #b48cff;
-  box-shadow: 0 0 10px rgba(180, 140, 255, 0.6), 0 0 24px rgba(180, 140, 255, 0.25);
+  background: var(--plan-accent);
+  box-shadow: 0 0 10px rgba(142, 162, 255, 0.42), 0 0 22px rgba(89, 103, 180, 0.24);
   animation: orb-breathe 2.5s ease-in-out infinite;
 }
 
 @keyframes orb-breathe {
   0%, 100% {
-    box-shadow: 0 0 10px rgba(180, 140, 255, 0.6), 0 0 24px rgba(180, 140, 255, 0.25);
+    box-shadow: 0 0 10px rgba(142, 162, 255, 0.42), 0 0 22px rgba(89, 103, 180, 0.24);
     transform: scale(1);
   }
   50% {
-    box-shadow: 0 0 14px rgba(180, 140, 255, 0.8), 0 0 36px rgba(180, 140, 255, 0.35);
+    box-shadow: 0 0 14px rgba(142, 162, 255, 0.55), 0 0 34px rgba(89, 103, 180, 0.32);
     transform: scale(1.1);
   }
 }
 
 .plan-toggle-label {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -479,7 +479,7 @@
 }
 
 .plan-toggle.active .plan-toggle-label {
-  color: #b48cff;
+  color: var(--plan-accent);
 }
 
 .compact-fine-tune-btn {
@@ -490,7 +490,7 @@
 
 .plan-toggle-hint {
   font-size: 10px;
-  color: rgba(180, 140, 255, 0.5);
+  color: rgba(169, 183, 255, 0.62);
   font-family: var(--font-sans);
   letter-spacing: 0.02em;
   font-weight: 400;
@@ -500,7 +500,7 @@
 /* ── Generate button ── */
 .generate-btn {
   padding: 8px 18px !important;
-  font-size: 12px !important;
+  font-size: 11px !important;
 }
 
 .prompt-bar.compact .generate-btn {
@@ -509,14 +509,14 @@
 }
 
 .generate-btn.plan-active {
-  border-color: rgba(180, 140, 255, 0.3) !important;
-  background: rgba(180, 140, 255, 0.08) !important;
-  color: #b48cff !important;
+  border-color: var(--brand-blue-border) !important;
+  background: var(--brand-blue-dim) !important;
+  color: var(--plan-accent) !important;
 }
 .generate-btn.plan-active:hover {
-  background: rgba(180, 140, 255, 0.15) !important;
-  border-color: rgba(180, 140, 255, 0.5) !important;
-  box-shadow: 0 0 12px rgba(180, 140, 255, 0.2) !important;
+  background: var(--brand-blue-soft) !important;
+  border-color: rgba(142, 162, 255, 0.48) !important;
+  box-shadow: 0 0 12px rgba(89, 103, 180, 0.18) !important;
 }
 
 .generate-btn.no-key {
@@ -527,7 +527,7 @@
 }
 
 .prompt-hint {
-  font-size: 9px;
+  font-size: 8.5px;
   color: var(--text-muted);
   letter-spacing: 0.04em;
 }
@@ -577,6 +577,12 @@
     margin-left: 0;
     justify-content: space-between;
     flex-wrap: wrap;
+  }
+
+  .inspiration-chip,
+  .plan-toggle-label,
+  .generate-btn {
+    font-size: 10px !important;
   }
 
   .studio-grid {

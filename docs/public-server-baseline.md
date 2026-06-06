@@ -1,4 +1,4 @@
-# VCanvas Public Server Baseline
+# inscanvas Public Server Baseline
 
 ## Branch
 - Current owner-cadence branch: `codex/canvas-lab-public-server-v1.10.9`
@@ -39,7 +39,12 @@
 - Site settings and notice payloads now preserve nested `sharePolicy`, `noticePolicy`, `updatePolicy`, and `migrationPolicy` defaults when old local JSON data is migrated or partially patched.
 - `scripts/serve-vcanvas.mjs` mirrors the Fastify delete semantics for works, including cleanup of share links and gallery entries, so the deployment server does not accumulate orphaned public metadata.
 - Public share pages now resolve enabled share links at `/share/:slug`; saved HTML is returned directly so imported static landing pages are not wrapped or broken, while missing/expired/paused links return branded fallback pages.
-- Public gallery front-desk pages now resolve at `/gallery` in both Fastify and `scripts/serve-vcanvas.mjs`, rendering pending/published local/mock entries as a read-only standalone page in the dark purple/deep blue visual direction.
+- Public gallery front-desk pages now resolve at `/gallery` in both Fastify and `scripts/serve-vcanvas.mjs`, rendering pending/published local/mock entries as a read-only standalone page in the simple deep-blue inscanvas direction.
+- `1.10.11` language/theme baseline aligns the app and public pages around default Chinese, always-available Header language switching, HarmonyOS Sans system-first body/control typography, and a deeper blue with slight purple accent palette (`#080d1c`, `#0b1024`, `#111831`).
+- `ModelQuickSwitch` and `PersonalSettingsModal` are now wired to the shared i18n dictionary; public `/gallery` and `/share/:slug` fallback pages use Chinese copy in both Fastify and the lightweight deployment server while leaving brand/provider/API/model identifiers unchanged.
+- `1.10.11` typography now embeds local OFL fonts: Noto Serif SC / Source Han Serif style for high-quality Songti display titles and Fusion Pixel 10px Monospaced SC for short playful titles/brand accents, while dense controls keep HarmonyOS/system sans fallbacks. Font notices are tracked in `docs/third-party-fonts.md`.
+- `/gallery` now uses a lighter Xiaohongshu-style masonry feed in both Fastify and `scripts/serve-vcanvas.mjs`: optional snapshot covers first, compact metadata, shorter notices, and simple gradient placeholders when no preview image exists.
+- `/api/dispatch/status` and `/api/dispatch/route` now expose a planned-only distributed dispatch contract with weighted candidate selection, current-load awareness, and explicit fallback reasons; no real cross-server queue execution is implied in this phase.
 
 ## 2026-06-06 Verification Snapshot
 - `npm run typecheck`
@@ -54,6 +59,8 @@
 - Browser screenshot review for the security slice confirmed user search, blocked-IP state, and ops blocked-IP list render inside the secondary Control Center modal without changing `.workspace` size (`1440x920` before and after).
 - Public-route smoke test passed on both Fastify and lightweight services: mock user login, work save, share creation, `/share/:slug`, gallery submission, `/gallery`, and `/api/gallery`.
 - Public-page browser screenshot review passed for `/gallery` desktop `1440x960`, `/gallery` mobile `390x844`, and direct `/share/:slug` desktop `1440x960`.
+- `1.10.11` final verification passed for embedded font loading, default Chinese, Header language toggle desktop/mobile, compact PromptBar/FramePicker/MessageStrip typography, public `/gallery` screenshots at `1440x960` and `390x844`, and `/api/dispatch/*` parity.
+- Fastify static serving now streams real files from `VCANVAS_STATIC_DIR` before SPA fallback, so `/assets/*.js`, `/assets/*.css`, and `/fonts/*` no longer fall through to `index.html`.
 
 ## Deferred Beyond This Commit
 - Real auth on top of latest `newapi`, production key encryption, payment-grade quotas, PostgreSQL/Redis persistence, and external `newapi/subapi/octopus` bridges.

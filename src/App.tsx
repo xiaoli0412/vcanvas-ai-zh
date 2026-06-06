@@ -739,7 +739,7 @@ export function App() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `vcanvas-${Date.now()}.html`
+    a.download = `inscanvas-${Date.now()}.html`
     a.click()
     URL.revokeObjectURL(url)
   }, [lastHTML])
@@ -1619,6 +1619,7 @@ ${compiledSystemPrompt}`,
             setShowPersonalSettings(true)
           }}
           onClose={() => setShowModelQuickSwitch(false)}
+          t={t}
         />
       )}
       {showPersonalSettings && (
@@ -1628,6 +1629,7 @@ ${compiledSystemPrompt}`,
             setShowPersonalSettings(false)
             setShowProviderSettings(true)
           }}
+          t={t}
         />
       )}
       {showProviderSettings && (

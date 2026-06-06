@@ -62,7 +62,7 @@ export async function registerRemixRoutes(app: FastifyInstance) {
     try {
       homepage = await fetch(url, {
         headers: {
-          'User-Agent': 'VCanvas Public Server Remix Fetcher',
+          'User-Agent': 'inscanvas Public Server Remix Fetcher',
           Accept: 'text/html,application/xhtml+xml',
         },
       })
@@ -89,7 +89,7 @@ export async function registerRemixRoutes(app: FastifyInstance) {
     for (const stylesheetUrl of stylesheetUrls) {
       try {
         const stylesheetResponse = await fetch(stylesheetUrl, {
-          headers: { 'User-Agent': 'VCanvas Public Server Remix Fetcher' },
+          headers: { 'User-Agent': 'inscanvas Public Server Remix Fetcher' },
         })
         if (!stylesheetResponse.ok) continue
         const css = await stylesheetResponse.text()

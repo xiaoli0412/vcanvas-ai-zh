@@ -6,7 +6,7 @@
   justify-content: flex-end;
   align-items: flex-start;
   padding: 48px 18px 18px;
-  background: rgba(7, 8, 18, 0.34);
+  background: rgba(5, 9, 24, 0.42);
   backdrop-filter: blur(6px);
 }
 
@@ -15,7 +15,7 @@
   border: 1px solid rgba(112, 119, 190, 0.24);
   border-radius: 12px;
   background:
-    linear-gradient(160deg, rgba(28, 31, 58, 0.96), rgba(14, 18, 34, 0.96)),
+    linear-gradient(160deg, rgba(17, 24, 49, 0.98), rgba(8, 13, 28, 0.98)),
     var(--bg-secondary);
   box-shadow: 0 18px 60px rgba(0, 0, 0, 0.48);
   overflow: hidden;
@@ -34,7 +34,7 @@
   font-size: 9px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: #99a4ff;
+  color: var(--brand-blue-text);
 }
 
 .mqs-header h2 {
@@ -102,6 +102,7 @@
   border-radius: 8px;
   background: rgba(5, 7, 16, 0.45);
   color: var(--text-primary);
+  font-family: var(--font-sans);
   font-size: 12px;
   outline: none;
 }
@@ -125,6 +126,7 @@
   color: var(--text-secondary);
   cursor: pointer;
   text-align: left;
+  min-width: 0;
 }
 
 .mqs-provider.active {
@@ -134,6 +136,10 @@
 }
 
 .mqs-provider span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 12px;
   font-weight: 650;
 }

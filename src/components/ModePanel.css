@@ -15,7 +15,7 @@
   overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: 14px;
-  background: rgba(16, 19, 26, 0.96);
+  background: rgba(11, 16, 36, 0.97);
   box-shadow: 0 22px 60px rgba(0, 0, 0, 0.45);
   padding: 18px;
 }
@@ -132,9 +132,9 @@
   flex-shrink: 0;
   padding: 2px 7px;
   border-radius: 999px;
-  border: 1px solid rgba(90, 106, 180, 0.22);
-  background: rgba(90, 106, 180, 0.1);
-  color: #aeb8ff;
+  border: 1px solid var(--brand-blue-border);
+  background: var(--brand-blue-dim);
+  color: var(--brand-blue-text);
   font-size: 9px;
   line-height: 1.2;
   letter-spacing: 0.06em;

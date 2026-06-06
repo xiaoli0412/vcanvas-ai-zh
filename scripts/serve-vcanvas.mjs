@@ -57,9 +57,15 @@ function isAllowedUrl(value) {
 }
 
 function getStaticFilePath(urlPathname) {
-  const relativePath = decodeURIComponent(urlPathname === '/' ? '/index.html' : urlPathname)
+  let relativePath
+  try {
+    relativePath = decodeURIComponent(urlPathname === '/' ? '/index.html' : urlPathname)
+  } catch {
+    return null
+  }
   const resolved = path.resolve(staticDir, `.${relativePath}`)
-  if (!resolved.startsWith(staticDir)) return null
+  const insideStaticDir = resolved === staticDir || resolved.startsWith(staticDir + path.sep)
+  if (!insideStaticDir) return null
 
   if (existsSync(resolved) && statSync(resolved).isFile()) return resolved
 
@@ -113,7 +119,7 @@ function defaultData() {
   return {
     siteSettings: {
       siteName: 'inscanvas Public Server',
-      siteDescription: 'Canvas-first creative workspace with local public-server foundations.',
+      siteDescription: 'inscanvas keeps the drawing surface first while adding local public-server foundations.',
       publicBaseUrl: '',
       defaultModeId: 'custom',
       guestEnabled: true,
@@ -131,12 +137,13 @@ function defaultData() {
       updatePolicy: { githubRepo: 'xiaoli0412/vcanvas-ai-zh', checkEnabled: true, lowTrafficAutoUpdate: false },
       migrationPolicy: { exportEnabled: true, requireVerification: true },
       opsPublicEnabled: false,
+      dispatchPolicy: { enabled: false, strategy: 'round-robin-weighted', nodes: [] },
     },
     personalSettings: {
       userId: 'guest-local',
       displayName: 'Guest',
       avatarUrl: null,
-      motto: 'Canvas first.',
+      motto: '画布优先。',
       preferredModeId: 'custom',
       favoriteModelKeys: [],
       experimental: { serverHighResourceHosting: false },
@@ -168,13 +175,13 @@ function defaultData() {
       { id: 'nvidia', label: 'Nvidia', apiType: 'openai-compatible', models: [], verifiedAt: null, verifiedSourceUrl: 'https://docs.nvidia.com/nim/', enabled: true },
     ],
     notices: [
-      { id: 'phase-2-public-server', kind: 'announcement', title: 'inscanvas public server phase 2', body: 'Canvas-first mode, local persistence, provider governance, and public-server contracts are active in this branch.', format: 'plain', audience: 'all', enabled: true, force: false, dismissible: true, imageUrl: null, expiresAt: null, createdAt: now0, updatedAt: now0 },
+      { id: 'phase-2-public-server', kind: 'announcement', title: 'inscanvas public server phase 2', body: 'inscanvas compact mode, local persistence, provider governance, and public-server contracts are active in this branch.', format: 'plain', audience: 'all', enabled: true, force: false, dismissible: true, imageUrl: null, expiresAt: null, createdAt: now0, updatedAt: now0 },
     ],
     works: [],
     workflows: [],
     sessions: [],
     users: [
-      { id: 'local-admin', email: null, username: 'local-admin', tier: 'host-admin', profile: { displayName: 'inscanvas owner', avatarUrl: null, motto: 'Canvas first.', qq: null }, enabled: true, createdAt: now0, updatedAt: now0, lastLoginAt: null, lastLoginIp: null },
+      { id: 'local-admin', email: null, username: 'local-admin', tier: 'host-admin', profile: { displayName: 'inscanvas owner', avatarUrl: null, motto: '画布优先。', qq: null }, enabled: true, createdAt: now0, updatedAt: now0, lastLoginAt: null, lastLoginIp: null },
     ],
     quotaLedgers: [
       { userId: 'guest-local', tier: 'guest', premiumCredits: 0, baseCallsRemaining: 8, hostedRunsRemaining: 0, hostedRunsUsedToday: 0, resetAt: now0, hostedResetAt: now0 },
@@ -217,6 +224,7 @@ function mergeData(data) {
       noticePolicy: { ...defaults.siteSettings.noticePolicy, ...(data?.siteSettings?.noticePolicy || {}) },
       updatePolicy: { ...defaults.siteSettings.updatePolicy, ...(data?.siteSettings?.updatePolicy || {}) },
       migrationPolicy: { ...defaults.siteSettings.migrationPolicy, ...(data?.siteSettings?.migrationPolicy || {}) },
+      dispatchPolicy: { ...defaults.siteSettings.dispatchPolicy, ...(data?.siteSettings?.dispatchPolicy || {}) },
     },
     personalSettings: {
       ...defaults.personalSettings,
@@ -373,7 +381,7 @@ function upsertUser(data, input) {
     profile: {
       displayName: input.displayName || existing?.profile?.displayName || 'inscanvas user',
       avatarUrl: existing?.profile?.avatarUrl || null,
-      motto: existing?.profile?.motto || 'Canvas first.',
+      motto: existing?.profile?.motto || '画布优先。',
       qq: existing?.profile?.qq || null,
     },
     enabled: existing?.enabled ?? true,
@@ -430,28 +438,30 @@ function isShareExpired(link) {
   return Boolean(link?.expiresAt && Date.parse(link.expiresAt) <= Date.now())
 }
 
-function publicPageShell({ title, eyebrow = 'inscanvas public server', description = '', body, statusCode = 200 }) {
+function publicPageShell({ title, eyebrow = 'inscanvas', description = '', body, statusCode = 200 }) {
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escapeHtml(title)} · inscanvas</title>
+  <link rel="stylesheet" href="/fonts/noto-serif-sc.css" />
+  <link rel="stylesheet" href="/fonts/fusion-pixel.css" />
   <style>
-    :root{color-scheme:dark;--bg:#090b18;--panel:rgba(20,22,45,.72);--line:rgba(190,179,255,.18);--text:#f5f1ff;--muted:rgba(245,241,255,.64);--accent:#9d8cff;--cyan:#79e0ff;--warning:#f6c36a}
-    *{box-sizing:border-box}body{margin:0;min-height:100vh;color:var(--text);font-family:"LXGW WenKai Screen","Noto Serif SC","Microsoft YaHei",serif;background:radial-gradient(circle at 10% 8%,rgba(111,92,255,.34),transparent 28rem),radial-gradient(circle at 86% 12%,rgba(57,181,255,.18),transparent 24rem),linear-gradient(135deg,#070812 0%,#10122a 52%,#17122d 100%)}
-    a{color:inherit;text-decoration:none}.page{width:min(1120px,calc(100vw - 32px));margin:0 auto;padding:42px 0 56px}.hero{display:grid;gap:12px;padding:28px;border:1px solid var(--line);border-radius:28px;background:linear-gradient(145deg,rgba(22,24,51,.84),rgba(11,13,30,.58));box-shadow:0 24px 90px rgba(0,0,0,.42);overflow:hidden;position:relative}.hero:after{content:"";position:absolute;inset:auto -12% -42% 52%;height:220px;background:radial-gradient(circle,rgba(157,140,255,.24),transparent 68%);pointer-events:none}
-    .eyebrow{color:var(--cyan);font-size:12px;font-weight:700;letter-spacing:.18em;text-transform:uppercase}h1{max-width:780px;margin:0;font-size:clamp(34px,5vw,66px);line-height:.96;letter-spacing:-.055em}.hero p{max-width:720px;margin:0;color:var(--muted);font-size:16px;line-height:1.8}
-    .notice{margin-top:18px;padding:14px 16px;border:1px solid rgba(246,195,106,.32);border-radius:18px;color:#ffe3ac;background:rgba(246,195,106,.1)}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px;margin-top:22px}.card{min-height:210px;display:flex;flex-direction:column;justify-content:space-between;gap:18px;padding:18px;border:1px solid var(--line);border-radius:24px;background:linear-gradient(145deg,rgba(255,255,255,.07),rgba(255,255,255,.025)),var(--panel);transition:transform .18s ease,border-color .18s ease,background .18s ease}a.card:hover{transform:translateY(-3px);border-color:rgba(157,140,255,.52);background:linear-gradient(145deg,rgba(157,140,255,.15),rgba(121,224,255,.045)),rgba(32,31,61,.9)}
-    .card h2{margin:0;font-size:22px;line-height:1.15;letter-spacing:-.025em}.card p{margin:10px 0 0;color:var(--muted);font-size:13px;line-height:1.65}.meta{display:flex;flex-wrap:wrap;gap:8px;color:rgba(245,241,255,.58);font-size:11px;letter-spacing:.04em;text-transform:uppercase}.pill{width:fit-content;padding:6px 10px;border:1px solid rgba(157,140,255,.32);border-radius:999px;color:#dcd3ff;background:rgba(157,140,255,.12);font-size:11px;letter-spacing:.08em;text-transform:uppercase}.empty{margin-top:20px;padding:30px;border:1px dashed rgba(245,241,255,.18);border-radius:24px;color:var(--muted);background:rgba(255,255,255,.035)}.footer{margin-top:28px;color:rgba(245,241,255,.42);font-size:12px}
-    @media(max-width:560px){.page{width:min(100vw - 20px,1120px);padding-top:14px}.hero{padding:20px;border-radius:22px}.grid{grid-template-columns:1fr}.card{min-height:180px}}
+    :root{color-scheme:dark;--bg:#080d1c;--panel:rgba(11,16,36,.82);--panel-strong:rgba(17,24,49,.94);--line:rgba(142,162,255,.18);--text:#d8deed;--muted:#8d9ab6;--faint:#55627d;--accent:#8ea2ff;--warning:#f6c36a;--font-sans:"HarmonyOS Sans SC","HarmonyOS Sans","MiSans","PingFang SC","Microsoft YaHei",sans-serif;--font-serif:"Noto Serif SC Variable","Source Han Serif SC","Songti SC","STSong","SimSun",serif;--font-pixel:"Fusion Pixel 10px Monospaced SC","Noto Serif SC Variable","Source Han Serif SC",monospace;--font-mono:"JetBrains Mono","SF Mono","Cascadia Code",monospace}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;color:var(--text);font-family:var(--font-sans);background:radial-gradient(circle at 12% 6%,rgba(89,103,180,.1),transparent 28rem),linear-gradient(135deg,#080d1c 0%,#0b1024 58%,#10172f 100%)}
+    a{color:inherit;text-decoration:none}.page{width:min(1180px,calc(100vw - 32px));margin:0 auto;padding:24px 0 40px}.hero{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding:4px 0 14px;border-bottom:1px solid rgba(142,162,255,.14)}
+    .eyebrow{color:var(--accent);font-family:var(--font-pixel);font-size:11px;font-weight:400;letter-spacing:.04em;text-transform:lowercase}h1{margin:0;font-family:var(--font-serif);font-size:clamp(30px,4.2vw,54px);font-weight:760;line-height:1.08;letter-spacing:-.02em}.hero p{max-width:420px;margin:0;color:var(--muted);font-size:13px;line-height:1.7;text-align:right}
+    .notice{margin-top:16px;padding:10px 12px;border:1px solid rgba(246,195,106,.32);border-radius:14px;color:#ffe3ac;background:rgba(246,195,106,.1);font-size:12px}.gallery-feed{column-count:4;column-gap:14px;margin-top:16px}.card{break-inside:avoid;margin:0 0 14px;display:flex;flex-direction:column;justify-content:space-between;gap:12px;padding:10px;border:1px solid var(--line);border-radius:18px;background:linear-gradient(180deg,rgba(255,255,255,.035),transparent 42%),var(--panel);transition:transform .18s ease,border-color .18s ease,background .18s ease}.card:nth-child(3n + 1) .cover{aspect-ratio:4/5}.card:nth-child(4n + 2) .cover{aspect-ratio:1/1}a.card:hover{transform:translateY(-2px);border-color:rgba(142,162,255,.42);background:var(--panel-strong)}
+    .card h2{margin:6px 5px 0;font-family:var(--font-serif);font-size:clamp(19px,1.7vw,25px);line-height:1.28;letter-spacing:-.005em}.card p{margin:8px 5px 0;color:var(--muted);font-size:11px;line-height:1.55;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.cover{position:relative;width:100%;aspect-ratio:4/3;overflow:hidden;border-radius:14px;background:linear-gradient(135deg,rgba(142,162,255,.22),transparent 44%),linear-gradient(160deg,rgba(107,183,166,.13),rgba(8,13,28,.84))}.cover img{width:100%;height:100%;object-fit:cover;display:block}.cover:after{content:'';position:absolute;inset:0;border:1px solid rgba(255,255,255,.055);border-radius:inherit;pointer-events:none}.cover-fallback{height:100%;display:flex;align-items:flex-end;padding:12px;color:rgba(216,222,237,.54);font-family:var(--font-pixel);font-size:11px;letter-spacing:.03em}.meta{display:flex;flex-wrap:wrap;gap:6px;margin:0 5px 2px;color:var(--faint);font-family:var(--font-sans);font-size:10px;letter-spacing:.02em}.pill{width:fit-content;margin:5px 5px 0;padding:4px 8px;border:1px solid rgba(142,162,255,.3);border-radius:999px;color:var(--accent);background:rgba(89,103,180,.12);font-size:10px}.empty{margin-top:20px;padding:24px;border:1px dashed rgba(142,162,255,.2);border-radius:16px;color:var(--muted);background:rgba(255,255,255,.035);font-size:13px}.footer{margin-top:28px;color:rgba(216,222,237,.42);font-size:12px}
+    @media(max-width:560px){.page{width:min(100vw - 20px,1120px);padding-top:14px}.hero{display:grid;gap:8px;padding-bottom:14px}.hero p{text-align:left;font-size:12px}.gallery-feed{column-count:1}.card:nth-child(3n + 1) .cover,.card:nth-child(4n + 2) .cover{aspect-ratio:4/3}}@media(min-width:561px) and (max-width:900px){.gallery-feed{column-count:2}}@media(min-width:901px) and (max-width:1180px){.gallery-feed{column-count:3}}
   </style>
 </head>
 <body>
   <main class="page">
-    <section class="hero"><div class="eyebrow">${escapeHtml(eyebrow)}</div><h1>${escapeHtml(title)}</h1>${description ? `<p>${escapeHtml(description)}</p>` : ''}</section>
+    <section class="hero"><div><div class="eyebrow">${escapeHtml(eyebrow)}</div><h1>${escapeHtml(title)}</h1></div>${description ? `<p>${escapeHtml(description)}</p>` : ''}</section>
     ${body}
-    <div class="footer">inscanvas · public-server local/mock route · status ${statusCode}</div>
+    <div class="footer">inscanvas · 作品流${statusCode !== 200 ? ` · status ${statusCode}` : ''}</div>
   </main>
 </body>
 </html>`
@@ -460,7 +470,7 @@ function publicPageShell({ title, eyebrow = 'inscanvas public server', descripti
 function renderPublicStatus(statusCode, title, description) {
   return publicPageShell({
     title,
-    eyebrow: 'inscanvas share',
+    eyebrow: '分享状态',
     description,
     statusCode,
     body: `<div class="empty">${escapeHtml(description)}</div>`,
@@ -468,17 +478,28 @@ function renderPublicStatus(statusCode, title, description) {
 }
 
 function formatPublicDate(value) {
-  if (!value) return 'unknown time'
+  if (!value) return '未知时间'
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN')
 }
 
+function formatGalleryStatus(status) {
+  if (status === 'published') return '已发布'
+  if (status === 'pending-review') return '待审核'
+  if (status === 'rejected') return '已退回'
+  return status
+}
+
+function latestPreview(work) {
+  return [...(work.snapshots || [])].reverse().find((snapshot) => snapshot.previewImageUrl)?.previewImageUrl || null
+}
+
 function renderShareFallback(work) {
   return publicPageShell({
-    title: work.title || 'Untitled work',
-    eyebrow: 'Shared work',
-    description: work.description || 'This shared work has metadata but no saved HTML payload yet.',
-    body: '<div class="empty">This share link exists, but the work does not have renderable HTML yet. Save or import HTML in Works Center, then share again.</div>',
+    title: work.title || '未命名作品',
+    eyebrow: '分享作品',
+    description: work.description || '这个分享作品已有元数据，但还没有保存可渲染的 HTML。',
+    body: '<div class="empty">这个分享链接存在，但作品暂时没有可渲染的 HTML。请在作品中心重新保存或导入 HTML 后再分享。</div>',
   })
 }
 
@@ -494,25 +515,28 @@ function renderGalleryPage(data) {
 
   const cards = items.map(({ entry, work, shareLink }) => {
     const href = shareLink && !isShareExpired(shareLink) ? `/share/${encodeURIComponent(shareLink.slug)}` : null
+    const preview = latestPreview(work)
     const content = `
-      <div>
-        <span class="pill">${escapeHtml(entry.status)}</span>
-        <h2>${escapeHtml(work.title || 'Untitled work')}</h2>
-        <p>${escapeHtml(work.description || 'The creator has not added a description yet.')}</p>
+      <div class="cover">
+        ${preview ? `<img src="${escapeHtml(preview)}" alt="${escapeHtml(work.title || 'inscanvas work')}" loading="lazy" />` : '<div class="cover-fallback">inscanvas</div>'}
       </div>
-      <div class="meta"><span>${escapeHtml(work.modeId)}</span><span>${escapeHtml(formatPublicDate(entry.submittedAt))}</span><span>${href ? 'open share' : 'not shared yet'}</span></div>`
+      <div>
+        <span class="pill">${escapeHtml(formatGalleryStatus(entry.status))}</span>
+        <h2>${escapeHtml(work.title || '未命名作品')}</h2>
+        ${work.description ? `<p>${escapeHtml(work.description)}</p>` : ''}
+      </div>
+      <div class="meta"><span>${escapeHtml(formatPublicDate(entry.submittedAt))}</span><span>${href ? '打开作品' : '未分享'}</span></div>`
     return href ? `<a class="card" href="${href}">${content}</a>` : `<article class="card" aria-disabled="true">${content}</article>`
   }).join('')
 
   const disabledNotice = data.siteSettings.publicGalleryEnabled === false
-    ? '<div class="notice">Public gallery is currently disabled by site settings; local/mock entries are still shown here for admin verification.</div>'
+    ? '<div class="notice">公开展示暂未开放。</div>'
     : ''
 
   return publicPageShell({
-    title: 'inscanvas Gallery',
-    eyebrow: 'Gallery front desk',
-    description: 'A read-only public front desk for submitted or published works. It stays outside the canvas chrome, so creation space remains first.',
-    body: `${disabledNotice}${cards ? `<section class="grid">${cards}</section>` : '<div class="empty">No public works yet. Save HTML, create a share link, then submit it to the gallery.</div>'}`,
+    title: '鉴赏厅',
+    eyebrow: 'inscanvas feed',
+    body: `${disabledNotice}${cards ? `<section class="gallery-feed">${cards}</section>` : '<div class="empty">还没有作品。</div>'}`,
   })
 }
 
@@ -522,18 +546,18 @@ function handlePublicPages(req, res, url) {
   const shareMatch = url.pathname.match(/^\/share\/([^/]+)$/)
   if (shareMatch) {
     if (data.siteSettings.sharePolicy?.enabled === false) {
-      sendHtml(res, 403, renderPublicStatus(403, 'Sharing is paused', 'This site has paused public share links.'), head)
+      sendHtml(res, 403, renderPublicStatus(403, '分享已暂停', '站点当前已暂停公开分享入口。'), head)
       return true
     }
     const slug = decodeURIComponent(shareMatch[1])
     const link = data.shareLinks.find((item) => item.slug === slug && item.enabled)
     if (isShareExpired(link)) {
-      sendHtml(res, 410, renderPublicStatus(410, 'Share expired', 'This share link has expired. Ask the creator to generate a new link.'), head)
+      sendHtml(res, 410, renderPublicStatus(410, '分享已过期', '这个分享链接已经过期，请让作者重新生成分享链接。'), head)
       return true
     }
     const work = link ? data.works.find((item) => item.id === link.workId) : null
     if (!work) {
-      sendHtml(res, 404, renderPublicStatus(404, 'Shared work not found', 'This share link does not exist, is disabled, or its work was deleted.'), head)
+      sendHtml(res, 404, renderPublicStatus(404, '没有找到分享作品', '这个分享链接不存在、已关闭，或对应作品已被删除。'), head)
       return true
     }
     sendHtml(res, 200, work.html?.trim() ? work.html : renderShareFallback(work), head)
@@ -556,6 +580,34 @@ function galleryLimit(data, tier) {
   if (tier === 'vip') return 9
   if (tier === 'user') return 6
   return 0
+}
+
+function dispatchSnapshot(data) {
+  const policy = data.siteSettings.dispatchPolicy || { enabled: false, strategy: 'round-robin-weighted', nodes: [] }
+  const nodes = (policy.nodes || [])
+    .filter((node) => node.enabled !== false && node.url)
+    .map((node) => ({ ...node, weight: Math.max(1, Number(node.weight) || 1) }))
+  if (!policy.enabled || nodes.length === 0) {
+    return {
+      strategy: 'round-robin-weighted',
+      selectedNode: null,
+      nodes,
+      message: 'Dispatch is a planned-only balancing contract. Configure dispatchPolicy.nodes to preview multi-server routing.',
+      plannedOnly: true,
+      fallbackReason: policy.enabled ? 'no-enabled-dispatch-nodes' : 'dispatch-disabled',
+    }
+  }
+  const sortedNodes = [...nodes].sort((a, b) => ((a.currentLoad || 0) / a.weight) - ((b.currentLoad || 0) / b.weight))
+  const expanded = sortedNodes.flatMap((node) => Array.from({ length: node.weight }, () => node))
+  const selectedNode = expanded[Math.floor(Date.now() / 1000) % expanded.length] || nodes[0]
+  return {
+    strategy: 'round-robin-weighted',
+    selectedNode,
+    nodes,
+    message: 'Planned-only dispatch preview selected a candidate node. Real queue execution can attach here later.',
+    plannedOnly: true,
+    fallbackReason: null,
+  }
 }
 
 function cleanupData(data) {
@@ -600,6 +652,7 @@ function opsSnapshot(data) {
     },
     storage: { adapter: 'local-json', retentionHours: 24 },
     highLoadMode: data.siteSettings.securityMode === 'limited',
+    dispatch: dispatchSnapshot(data),
   }
 }
 
@@ -693,7 +746,7 @@ async function handleRemixFetch(req, res) {
 
     const upstream = await fetch(targetUrl, {
       headers: {
-        'User-Agent': 'VCanvas Public Server Remix Fetcher',
+        'User-Agent': 'inscanvas Public Server Remix Fetcher',
         Accept: 'text/html,application/xhtml+xml',
       },
     })
@@ -713,7 +766,7 @@ async function handleRemixFetch(req, res) {
     for (const stylesheetUrl of stylesheetUrls) {
       try {
         const stylesheetResponse = await fetch(stylesheetUrl, {
-          headers: { 'User-Agent': 'VCanvas Public Server Remix Fetcher' },
+          headers: { 'User-Agent': 'inscanvas Public Server Remix Fetcher' },
         })
         if (!stylesheetResponse.ok) continue
         stylesheetSnippets.push((await stylesheetResponse.text()).slice(0, 3000))
@@ -1124,7 +1177,7 @@ async function handleApi(req, res, url) {
     const work = {
       id,
       ownerId,
-      title: (body.title || 'Untitled work').slice(0, 50),
+      title: (body.title || '未命名作品').slice(0, 50),
       description: (body.description || '').slice(0, 50),
       modeId: body.modeId || 'custom',
       status: body.status || 'draft',
@@ -1135,7 +1188,7 @@ async function handleApi(req, res, url) {
       disclaimerInjectedAt: html ? now : null,
       createdAt: now,
       updatedAt: now,
-      snapshots: [{ id: createId('snapshot'), workId: id, html, canvasData: body.canvasData, previewImageUrl: null, createdAt: now }],
+      snapshots: [{ id: createId('snapshot'), workId: id, html, canvasData: body.canvasData, previewImageUrl: body.previewImageUrl || null, createdAt: now }],
     }
     data.works.push(work)
     withAudit(data, req, 'work.create', ownerId, actor.tier, { workId: id })
@@ -1164,7 +1217,7 @@ async function handleApi(req, res, url) {
     const work = {
       id,
       ownerId,
-      title: (body.title || 'Imported HTML').slice(0, 50),
+      title: (body.title || '导入 HTML').slice(0, 50),
       description: (body.description || '').slice(0, 50),
       modeId: body.modeId || 'custom',
       status: 'saved',
@@ -1175,7 +1228,7 @@ async function handleApi(req, res, url) {
       disclaimerInjectedAt: now,
       createdAt: now,
       updatedAt: now,
-      snapshots: [{ id: createId('snapshot'), workId: id, html, canvasData: body.canvasData, previewImageUrl: null, createdAt: now }],
+      snapshots: [{ id: createId('snapshot'), workId: id, html, canvasData: body.canvasData, previewImageUrl: body.previewImageUrl || null, createdAt: now }],
     }
     data.works.push(work)
     withAudit(data, req, 'work.importHtml', ownerId, actor.tier, { workId: id })
@@ -1203,7 +1256,7 @@ async function handleApi(req, res, url) {
       const html = body.html ? injectDisclaimer(body.html, req, data, 'save') : data.works[index].html
       const disclaimerComment = body.html ? buildDisclaimerComment(data, req, 'save') : data.works[index].exportMetadata?.disclaimerComment
       const snapshot = body.html || body.canvasData
-        ? [{ id: createId('snapshot'), workId: id, html, canvasData: body.canvasData, previewImageUrl: null, createdAt: now }]
+        ? [{ id: createId('snapshot'), workId: id, html, canvasData: body.canvasData, previewImageUrl: body.previewImageUrl || null, createdAt: now }]
         : []
       data.works[index] = {
         ...data.works[index],
@@ -1383,6 +1436,16 @@ async function handleApi(req, res, url) {
     return true
   }
 
+  if (url.pathname === '/api/dispatch/status' && method === 'GET') {
+    sendJson(res, 200, { ok: true, dispatch: dispatchSnapshot(data) })
+    return true
+  }
+
+  if (url.pathname === '/api/dispatch/route' && method === 'POST') {
+    sendJson(res, 200, { ok: true, dispatch: dispatchSnapshot(data) })
+    return true
+  }
+
   if (url.pathname === '/api/maintenance/cleanup' && method === 'POST') {
     const actor = getActor(data, req)
     const removed = cleanupData(data)
@@ -1466,5 +1529,5 @@ const server = http.createServer(async (req, res) => {
 })
 
 server.listen(port, host, () => {
-  console.log(`VCanvas server listening on http://${host}:${port}`)
+  console.log(`inscanvas server listening on http://${host}:${port}`)
 })

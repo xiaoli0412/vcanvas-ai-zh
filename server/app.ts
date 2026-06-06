@@ -1,6 +1,6 @@
 import Fastify from 'fastify'
-import fastifyStatic from '@fastify/static'
 import path from 'node:path'
+import { createReadStream, existsSync, statSync } from 'node:fs'
 import { loadServerConfig } from './config'
 import { proxyHandler } from './routes/proxy'
 import { registerSessionRoutes } from './routes/session'
@@ -18,18 +18,13 @@ import { enforceTrafficGuard } from './lib/platformPolicy'
 import { registerQuotaRoutes } from './routes/quotas'
 import { registerOpsRoutes } from './routes/ops'
 import { registerPublicPageRoutes } from './routes/publicPages'
+import { registerDispatchRoutes } from './routes/dispatch'
 
 export async function createServer() {
   const config = loadServerConfig()
   const app = Fastify({
     logger: false,
     bodyLimit: 8 * 1024 * 1024,
-  })
-
-  await app.register(fastifyStatic, {
-    root: config.staticDir,
-    prefix: '/',
-    wildcard: false,
   })
 
   app.addHook('onSend', async (_request, reply) => {
@@ -73,6 +68,7 @@ export async function createServer() {
   await registerSecurityRoutes(app)
   await registerQuotaRoutes(app)
   await registerOpsRoutes(app)
+  await registerDispatchRoutes(app)
   await registerPublicPageRoutes(app)
 
   app.setNotFoundHandler(async (request, reply) => {
@@ -81,7 +77,36 @@ export async function createServer() {
       return
     }
 
-    return reply.sendFile('index.html')
+    const sendStaticFile = (filePath: string) => {
+      const ext = path.extname(filePath).toLowerCase()
+      const contentTypes: Record<string, string> = {
+        '.css': 'text/css; charset=utf-8',
+        '.html': 'text/html; charset=utf-8',
+        '.js': 'application/javascript; charset=utf-8',
+        '.json': 'application/json; charset=utf-8',
+        '.map': 'application/json; charset=utf-8',
+        '.png': 'image/png',
+        '.svg': 'image/svg+xml',
+        '.txt': 'text/plain; charset=utf-8',
+        '.webp': 'image/webp',
+        '.woff2': 'font/woff2',
+      }
+      reply.type(contentTypes[ext] || 'application/octet-stream')
+      return reply.send(createReadStream(filePath))
+    }
+
+    try {
+      const pathname = decodeURIComponent(request.url.split('?')[0] || '/')
+      const requestedPath = path.resolve(config.staticDir, `.${pathname}`)
+      const insideStaticDir = requestedPath === config.staticDir || requestedPath.startsWith(config.staticDir + path.sep)
+      if (insideStaticDir && existsSync(requestedPath) && statSync(requestedPath).isFile()) {
+        return sendStaticFile(requestedPath)
+      }
+    } catch {
+      // Fall through to the SPA fallback when the path is malformed.
+    }
+
+    return sendStaticFile(path.join(config.staticDir, 'index.html'))
   })
 
   return { app, config }

@@ -43,150 +43,189 @@ function publicPageShell(input: {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escapeHtml(input.title)} · inscanvas</title>
+  <link rel="stylesheet" href="/fonts/noto-serif-sc.css" />
+  <link rel="stylesheet" href="/fonts/fusion-pixel.css" />
   <style>
     :root {
       color-scheme: dark;
-      --bg: #090b18;
-      --panel: rgba(20, 22, 45, 0.72);
-      --panel-strong: rgba(32, 31, 61, 0.9);
-      --line: rgba(190, 179, 255, 0.18);
-      --text: #f5f1ff;
-      --muted: rgba(245, 241, 255, 0.64);
-      --accent: #9d8cff;
-      --cyan: #79e0ff;
+      --bg: #080d1c;
+      --panel: rgba(11, 16, 36, 0.82);
+      --panel-strong: rgba(17, 24, 49, 0.94);
+      --line: rgba(142, 162, 255, 0.18);
+      --text: #d8deed;
+      --muted: #8d9ab6;
+      --faint: #55627d;
+      --accent: #8ea2ff;
+      --cyan: #6bb7d6;
       --warning: #f6c36a;
+      --font-sans: "HarmonyOS Sans SC", "HarmonyOS Sans", "MiSans", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --font-serif: "Noto Serif SC Variable", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", serif;
+      --font-pixel: "Fusion Pixel 10px Monospaced SC", "Noto Serif SC Variable", "Source Han Serif SC", monospace;
+      --font-mono: "JetBrains Mono", "SF Mono", "Cascadia Code", monospace;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       min-height: 100vh;
       color: var(--text);
-      font-family: "LXGW WenKai Screen", "Noto Serif SC", "Microsoft YaHei", serif;
+      font-family: var(--font-sans);
       background:
-        radial-gradient(circle at 10% 8%, rgba(111, 92, 255, 0.34), transparent 28rem),
-        radial-gradient(circle at 86% 12%, rgba(57, 181, 255, 0.18), transparent 24rem),
-        linear-gradient(135deg, #070812 0%, #10122a 52%, #17122d 100%);
+        radial-gradient(circle at 12% 6%, rgba(89, 103, 180, 0.1), transparent 28rem),
+        linear-gradient(135deg, #080d1c 0%, #0b1024 58%, #10172f 100%);
     }
     a { color: inherit; text-decoration: none; }
     .page {
-      width: min(1120px, calc(100vw - 32px));
+      width: min(1180px, calc(100vw - 32px));
       margin: 0 auto;
-      padding: 42px 0 56px;
+      padding: 24px 0 40px;
     }
     .hero {
-      display: grid;
-      gap: 12px;
-      padding: 28px;
-      border: 1px solid var(--line);
-      border-radius: 28px;
-      background: linear-gradient(145deg, rgba(22, 24, 51, 0.84), rgba(11, 13, 30, 0.58));
-      box-shadow: 0 24px 90px rgba(0, 0, 0, 0.42);
-      overflow: hidden;
-      position: relative;
-    }
-    .hero::after {
-      content: "";
-      position: absolute;
-      inset: auto -12% -42% 52%;
-      height: 220px;
-      background: radial-gradient(circle, rgba(157, 140, 255, 0.24), transparent 68%);
-      pointer-events: none;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 4px 0 14px;
+      border-bottom: 1px solid rgba(142, 162, 255, 0.14);
     }
     .eyebrow {
-      color: var(--cyan);
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
+      color: var(--accent);
+      font-family: var(--font-pixel);
+      font-size: 11px;
+      font-weight: 400;
+      letter-spacing: 0.04em;
+      text-transform: lowercase;
     }
     h1 {
-      max-width: 780px;
       margin: 0;
-      font-size: clamp(34px, 5vw, 66px);
-      line-height: 0.96;
-      letter-spacing: -0.055em;
+      font-family: var(--font-serif);
+      font-size: clamp(30px, 4.2vw, 54px);
+      font-weight: 760;
+      line-height: 1.08;
+      letter-spacing: -0.02em;
     }
     .hero p {
-      max-width: 720px;
+      max-width: 420px;
       margin: 0;
       color: var(--muted);
-      font-size: 16px;
-      line-height: 1.8;
+      font-size: 13px;
+      line-height: 1.7;
+      text-align: right;
     }
     .notice {
-      margin-top: 18px;
-      padding: 14px 16px;
+      margin-top: 16px;
+      padding: 10px 12px;
       border: 1px solid rgba(246, 195, 106, 0.32);
-      border-radius: 18px;
+      border-radius: 14px;
       color: #ffe3ac;
       background: rgba(246, 195, 106, 0.1);
+      font-size: 12px;
     }
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-      gap: 16px;
-      margin-top: 22px;
+    .gallery-feed {
+      column-count: 4;
+      column-gap: 14px;
+      margin-top: 18px;
     }
     .card {
-      min-height: 210px;
+      break-inside: avoid;
+      margin: 0 0 14px;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      gap: 18px;
-      padding: 18px;
+      gap: 12px;
+      padding: 10px;
       border: 1px solid var(--line);
-      border-radius: 24px;
+      border-radius: 18px;
       background:
-        linear-gradient(145deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.025)),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 42%),
         var(--panel);
       transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
     }
+    .card:nth-child(3n + 1) .cover { aspect-ratio: 4 / 5; }
+    .card:nth-child(4n + 2) .cover { aspect-ratio: 1 / 1; }
     a.card:hover {
-      transform: translateY(-3px);
-      border-color: rgba(157, 140, 255, 0.52);
-      background:
-        linear-gradient(145deg, rgba(157, 140, 255, 0.15), rgba(121, 224, 255, 0.045)),
-        var(--panel-strong);
+      transform: translateY(-2px);
+      border-color: rgba(142, 162, 255, 0.42);
+      background: var(--panel-strong);
     }
     .card h2 {
-      margin: 0;
-      font-size: 22px;
-      line-height: 1.15;
-      letter-spacing: -0.025em;
+      margin: 6px 5px 0;
+      font-family: var(--font-serif);
+      font-size: clamp(19px, 1.7vw, 25px);
+      line-height: 1.28;
+      letter-spacing: -0.005em;
     }
     .card p {
-      margin: 10px 0 0;
+      margin: 8px 5px 0;
       color: var(--muted);
-      font-size: 13px;
-      line-height: 1.65;
+      font-size: 11px;
+      line-height: 1.55;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .cover {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      overflow: hidden;
+      border-radius: 14px;
+      background:
+        linear-gradient(135deg, rgba(142, 162, 255, 0.22), transparent 44%),
+        linear-gradient(160deg, rgba(107, 183, 166, 0.13), rgba(8, 13, 28, 0.84));
+    }
+    .cover img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .cover::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border: 1px solid rgba(255, 255, 255, 0.055);
+      border-radius: inherit;
+      pointer-events: none;
+    }
+    .cover-fallback {
+      height: 100%;
+      display: flex;
+      align-items: flex-end;
+      padding: 12px;
+      color: rgba(216, 222, 237, 0.54);
+      font-family: var(--font-pixel);
+      font-size: 11px;
+      letter-spacing: 0.03em;
     }
     .meta {
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
-      color: rgba(245, 241, 255, 0.58);
-      font-size: 11px;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
+      gap: 6px;
+      margin: 0 5px 2px;
+      color: var(--faint);
+      font-family: var(--font-sans);
+      font-size: 10px;
+      letter-spacing: 0.02em;
     }
     .pill {
       width: fit-content;
-      padding: 6px 10px;
-      border: 1px solid rgba(157, 140, 255, 0.32);
+      margin: 5px 5px 0;
+      padding: 4px 8px;
+      border: 1px solid rgba(142, 162, 255, 0.3);
       border-radius: 999px;
-      color: #dcd3ff;
-      background: rgba(157, 140, 255, 0.12);
-      font-size: 11px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
+      color: var(--accent);
+      background: rgba(89, 103, 180, 0.12);
+      font-size: 10px;
     }
     .empty {
       margin-top: 20px;
-      padding: 30px;
-      border: 1px dashed rgba(245, 241, 255, 0.18);
-      border-radius: 24px;
+      padding: 24px;
+      border: 1px dashed rgba(142, 162, 255, 0.2);
+      border-radius: 16px;
       color: var(--muted);
       background: rgba(255, 255, 255, 0.035);
+      font-size: 13px;
     }
     .footer {
       margin-top: 28px;
@@ -195,21 +234,31 @@ function publicPageShell(input: {
     }
     @media (max-width: 560px) {
       .page { width: min(100vw - 20px, 1120px); padding-top: 14px; }
-      .hero { padding: 20px; border-radius: 22px; }
-      .grid { grid-template-columns: 1fr; }
-      .card { min-height: 180px; }
+      .hero { display: grid; gap: 8px; padding-bottom: 14px; }
+      .hero p { text-align: left; font-size: 12px; }
+      .gallery-feed { column-count: 1; }
+      .card:nth-child(3n + 1) .cover,
+      .card:nth-child(4n + 2) .cover { aspect-ratio: 4 / 3; }
+    }
+    @media (min-width: 561px) and (max-width: 900px) {
+      .gallery-feed { column-count: 2; }
+    }
+    @media (min-width: 901px) and (max-width: 1180px) {
+      .gallery-feed { column-count: 3; }
     }
   </style>
 </head>
 <body>
   <main class="page">
     <section class="hero">
-      <div class="eyebrow">${escapeHtml(input.eyebrow || 'inscanvas public server')}</div>
-      <h1>${escapeHtml(input.title)}</h1>
+      <div>
+        <div class="eyebrow">${escapeHtml(input.eyebrow || 'inscanvas')}</div>
+        <h1>${escapeHtml(input.title)}</h1>
+      </div>
       ${input.description ? `<p>${escapeHtml(input.description)}</p>` : ''}
     </section>
     ${input.body}
-    <div class="footer">inscanvas · public-server local/mock route · status ${input.statusCode || 200}</div>
+    <div class="footer">inscanvas · 作品流${input.statusCode && input.statusCode !== 200 ? ` · status ${input.statusCode}` : ''}</div>
   </main>
 </body>
 </html>`
@@ -217,17 +266,17 @@ function publicPageShell(input: {
 
 function renderShareFallback(work: WorkRecord) {
   return publicPageShell({
-    title: work.title || 'Untitled work',
-    eyebrow: 'Shared work',
-    description: work.description || 'This shared work has metadata but no saved HTML payload yet.',
-    body: `<div class="empty">这个分享链接存在，但作品暂时没有可渲染的 HTML。请在 Works Center 中重新保存或导入 HTML 后再分享。</div>`,
+    title: work.title || '未命名作品',
+    eyebrow: '分享作品',
+    description: work.description || '这个分享作品已有元数据，但还没有保存可渲染的 HTML。',
+    body: `<div class="empty">这个分享链接存在，但作品暂时没有可渲染的 HTML。请在作品中心重新保存或导入 HTML 后再分享。</div>`,
   })
 }
 
 function renderStatusPage(statusCode: number, title: string, description: string) {
   return publicPageShell({
     title,
-    eyebrow: 'inscanvas share',
+    eyebrow: '分享状态',
     description,
     statusCode,
     body: `<div class="empty">${escapeHtml(description)}</div>`,
@@ -235,9 +284,20 @@ function renderStatusPage(statusCode: number, title: string, description: string
 }
 
 function formatDate(value: string | null | undefined) {
-  if (!value) return 'unknown time'
+  if (!value) return '未知时间'
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN')
+}
+
+function formatGalleryStatus(status: string) {
+  if (status === 'published') return '已发布'
+  if (status === 'pending-review') return '待审核'
+  if (status === 'rejected') return '已退回'
+  return status
+}
+
+function latestPreview(work: WorkRecord) {
+  return [...(work.snapshots || [])].reverse().find((snapshot) => snapshot.previewImageUrl)?.previewImageUrl || null
 }
 
 function renderGalleryPage(data: PublicServerData) {
@@ -252,16 +312,19 @@ function renderGalleryPage(data: PublicServerData) {
 
   const cards = visibleEntries.map(({ entry, work, shareLink }) => {
     const href = shareHref(shareLink)
+    const preview = latestPreview(work)
     const content = `
+      <div class="cover">
+        ${preview ? `<img src="${escapeHtml(preview)}" alt="${escapeHtml(work.title || 'inscanvas work')}" loading="lazy" />` : '<div class="cover-fallback">inscanvas</div>'}
+      </div>
       <div>
-        <span class="pill">${escapeHtml(entry.status)}</span>
-        <h2>${escapeHtml(work.title || 'Untitled work')}</h2>
-        <p>${escapeHtml(work.description || '作者还没有写简介，但画布已经在这里等你打开。')}</p>
+        <span class="pill">${escapeHtml(formatGalleryStatus(entry.status))}</span>
+        <h2>${escapeHtml(work.title || '未命名作品')}</h2>
+        ${work.description ? `<p>${escapeHtml(work.description)}</p>` : ''}
       </div>
       <div class="meta">
-        <span>${escapeHtml(work.modeId)}</span>
         <span>${escapeHtml(formatDate(entry.submittedAt))}</span>
-        <span>${href ? 'open share' : 'not shared yet'}</span>
+        <span>${href ? '打开作品' : '未分享'}</span>
       </div>`
     return href
       ? `<a class="card" href="${href}">${content}</a>`
@@ -269,14 +332,13 @@ function renderGalleryPage(data: PublicServerData) {
   }).join('')
 
   const disabledNotice = data.siteSettings.publicGalleryEnabled === false
-    ? `<div class="notice">公开鉴赏厅当前处于站点关闭状态；本页仍展示 local/mock 阶段的可见队列，方便管理员验收分享与审核链路。</div>`
+    ? `<div class="notice">公开展示暂未开放。</div>`
     : ''
 
   return publicPageShell({
-    title: 'inscanvas 鉴赏厅',
-    eyebrow: 'Gallery front desk',
-    description: '这里展示已经提交审核或公开发布的作品。它是独立前台，不会挤压创作画布，也不会把设置入口暴露给访问者。',
-    body: `${disabledNotice}${cards ? `<section class="grid">${cards}</section>` : '<div class="empty">还没有可展示的作品。先在 Works Center 保存 HTML、创建分享链接，再提交鉴赏厅。</div>'}`,
+    title: '鉴赏厅',
+    eyebrow: 'inscanvas feed',
+    body: `${disabledNotice}${cards ? `<section class="gallery-feed">${cards}</section>` : '<div class="empty">还没有作品。</div>'}`,
   })
 }
 

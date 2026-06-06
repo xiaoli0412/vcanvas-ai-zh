@@ -121,7 +121,7 @@ export const CANVAS_MODE_DEFINITIONS: CanvasModeDefinition[] = [
     accentToken: 'var(--mode-deepblue)',
     manifesto: 'Recreate the original author’s workflow feel as closely as possible: restrained, dependable, and sketch-led.',
     starterPrompts: [
-      'Follow the original VCanvas spirit and keep the output faithful to the sketch.',
+      'Follow the original inscanvas spirit and keep the output faithful to the sketch.',
       'Use the most grounded interpretation of the reference and avoid over-stylization.',
       'Prioritize clarity, stability, and the original product feel.',
     ],

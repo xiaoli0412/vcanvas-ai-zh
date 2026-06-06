@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import type { ModelCapability, PersonalSettings, ProviderChannel } from '../../shared/contracts/publicServer'
+import type { Translate } from '../lib/i18n'
 import './PersonalSettingsModal.css'
 
 interface Props {
   onClose: () => void
   onOpenConnectionSettings: () => void
+  t: Translate
 }
 
 const EMPTY_MODEL: ModelCapability = {
@@ -32,7 +34,7 @@ function CapabilityBadges({ model }: { model: ModelCapability }) {
   )
 }
 
-export function PersonalSettingsModal({ onClose, onOpenConnectionSettings }: Props) {
+export function PersonalSettingsModal({ onClose, onOpenConnectionSettings, t }: Props) {
   const [channels, setChannels] = useState<ProviderChannel[]>([])
   const [settings, setSettings] = useState<PersonalSettings | null>(null)
   const [selectedChannelId, setSelectedChannelId] = useState('')
@@ -77,7 +79,7 @@ export function PersonalSettingsModal({ onClose, onOpenConnectionSettings }: Pro
         body: JSON.stringify(payload),
       })
       const data = await response.json()
-      if (!response.ok || !data.ok) throw new Error(data.error || 'Provider update failed')
+      if (!response.ok || !data.ok) throw new Error(data.error || t('personalSettings.error.providerUpdate'))
       setChannels(data.channels || (data.channel ? channels.map((item) => item.id === data.channel.id ? data.channel : item) : channels))
       await load()
     } catch (err: any) {
@@ -152,29 +154,29 @@ export function PersonalSettingsModal({ onClose, onOpenConnectionSettings }: Pro
       <div className="psm-modal" onClick={(event) => event.stopPropagation()}>
         <div className="psm-header">
           <div>
-            <div className="psm-eyebrow">Personal Settings</div>
-            <h2>个人设置 · 模型与渠道</h2>
+            <div className="psm-eyebrow">{t('personalSettings.eyebrow')}</div>
+            <h2>{t('personalSettings.title')}</h2>
           </div>
           <button className="psm-close" onClick={onClose} aria-label="Close">&times;</button>
         </div>
 
         <div className="psm-body">
           <aside className="psm-sidebar">
-            <button className="psm-nav active">模型与渠道</button>
-            <button className="psm-nav">实验性</button>
-            <button className="psm-nav muted">作品与分享</button>
-            <button className="psm-nav muted">关于与声明</button>
+            <button className="psm-nav active">{t('personalSettings.nav.models')}</button>
+            <button className="psm-nav">{t('personalSettings.nav.experimental')}</button>
+            <button className="psm-nav muted">{t('personalSettings.nav.works')}</button>
+            <button className="psm-nav muted">{t('personalSettings.nav.about')}</button>
           </aside>
 
           <main className="psm-main">
             <section className="psm-section">
               <div className="psm-section-head">
                 <div>
-                  <h3>渠道治理</h3>
-                  <p>新增模型只以 manual/fetched 存储；未核查官方来源时不会伪装为内置最新模型。</p>
+                  <h3>{t('personalSettings.providerGovernance.title')}</h3>
+                  <p>{t('personalSettings.providerGovernance.note')}</p>
                 </div>
                 <button className="btn btn-secondary" onClick={onOpenConnectionSettings} type="button">
-                  打开连接/API Key
+                  {t('personalSettings.openConnection')}
                 </button>
               </div>
 
@@ -190,7 +192,7 @@ export function PersonalSettingsModal({ onClose, onOpenConnectionSettings }: Pro
                     }}
                   >
                     <span>{channel.label}</span>
-                    <small>{channel.models.length} models</small>
+                    <small>{t('personalSettings.modelsCount', { count: channel.models.length })}</small>
                   </button>
                 ))}
               </div>
@@ -199,14 +201,14 @@ export function PersonalSettingsModal({ onClose, onOpenConnectionSettings }: Pro
             <section className="psm-section">
               <div className="psm-section-head compact">
                 <div>
-                  <h3>{selectedChannel?.label || 'Channel'} 模型能力</h3>
-                  <p>{selectedChannel?.verifiedSourceUrl || '等待官方文档或 live /models 核查。'}</p>
+                  <h3>{t('personalSettings.modelCapabilityTitle', { channel: selectedChannel?.label || t('personalSettings.channelFallback') })}</h3>
+                  <p>{selectedChannel?.verifiedSourceUrl || t('personalSettings.verificationPending')}</p>
                 </div>
                 <input
                   className="psm-search"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="搜索模型..."
+                  placeholder={t('personalSettings.search')}
                   spellCheck={false}
                 />
               </div>
@@ -214,7 +216,7 @@ export function PersonalSettingsModal({ onClose, onOpenConnectionSettings }: Pro
               <div className="psm-model-list">
                 {visibleModels.length === 0 && (
                   <div className="psm-empty">
-                    还没有模型记录。可以手动添加模型 ID，或先在连接面板拉取 `/models` 后再回到这里治理能力。
+                    {t('personalSettings.noModels')}
                   </div>
                 )}
                 {visibleModels.map((model) => (
@@ -232,44 +234,44 @@ export function PersonalSettingsModal({ onClose, onOpenConnectionSettings }: Pro
                     </label>
                     <CapabilityBadges model={model} />
                     <button className="psm-fav" onClick={() => toggleFavorite(model)} type="button">
-                      {model.favorite ? '固定' : '固定此模型'}
+                      {model.favorite ? t('personalSettings.pin') : t('personalSettings.pinThis')}
                     </button>
                   </div>
                 ))}
               </div>
 
               <div className="psm-batch">
-                <strong>批量能力编辑</strong>
-                <label><input type="checkbox" checked={batch.vision} onChange={(event) => setBatch((value) => ({ ...value, vision: event.target.checked }))} /> 图像</label>
-                <label><input type="checkbox" checked={batch.video} onChange={(event) => setBatch((value) => ({ ...value, video: event.target.checked }))} /> 视频</label>
-                <label><input type="checkbox" checked={batch.toolCalling} onChange={(event) => setBatch((value) => ({ ...value, toolCalling: event.target.checked }))} /> 工具调用</label>
+                <strong>{t('personalSettings.batchTitle')}</strong>
+                <label><input type="checkbox" checked={batch.vision} onChange={(event) => setBatch((value) => ({ ...value, vision: event.target.checked }))} /> {t('personalSettings.capability.vision')}</label>
+                <label><input type="checkbox" checked={batch.video} onChange={(event) => setBatch((value) => ({ ...value, video: event.target.checked }))} /> {t('personalSettings.capability.video')}</label>
+                <label><input type="checkbox" checked={batch.toolCalling} onChange={(event) => setBatch((value) => ({ ...value, toolCalling: event.target.checked }))} /> {t('personalSettings.capability.toolCalling')}</label>
                 <input
                   type="number"
                   min={4096}
                   step={1024}
                   value={batch.contextWindow}
                   onChange={(event) => setBatch((value) => ({ ...value, contextWindow: Number(event.target.value) || 0 }))}
-                  aria-label="context window"
+                  aria-label={t('personalSettings.contextWindow')}
                 />
                 <button className="btn btn-primary" onClick={applyBatch} disabled={saving || selectedModelIds.size === 0} type="button">
-                  应用到 {selectedModelIds.size} 个
+                  {t('personalSettings.batchApply', { count: selectedModelIds.size })}
                 </button>
               </div>
 
               <div className="psm-manual">
-                <strong>手动模型 ID</strong>
+                <strong>{t('personalSettings.manualTitle')}</strong>
                 <input value={draftModel.id} onChange={(event) => setDraftModel((value) => ({ ...value, id: event.target.value }))} placeholder="model-id" />
-                <input value={draftModel.label} onChange={(event) => setDraftModel((value) => ({ ...value, label: event.target.value }))} placeholder="显示名称，可选" />
+                <input value={draftModel.label} onChange={(event) => setDraftModel((value) => ({ ...value, label: event.target.value }))} placeholder={t('personalSettings.manualLabel')} />
                 <button className="btn btn-secondary" onClick={addManualModel} disabled={saving || !draftModel.id.trim()} type="button">
-                  添加并固定
+                  {t('personalSettings.manualAddPinned')}
                 </button>
               </div>
             </section>
 
             <section className="psm-section psm-hosting">
               <div>
-                <h3>实验性 · 服务器高资源托管</h3>
-                <p>视频和网页 copy 默认在客户端处理；开启后且额度允许时，才进入 server-managed 后台托管。</p>
+                <h3>{t('personalSettings.hostingTitle')}</h3>
+                <p>{t('personalSettings.hostingNote')}</p>
               </div>
               <button
                 type="button"
@@ -279,7 +281,7 @@ export function PersonalSettingsModal({ onClose, onOpenConnectionSettings }: Pro
                   experimental: { serverHighResourceHosting: !hostingEnabled },
                 })}
               >
-                {hostingEnabled ? '已开启' : '未开启'}
+                {hostingEnabled ? t('personalSettings.hostingOn') : t('personalSettings.hostingOff')}
               </button>
             </section>
 

@@ -7,6 +7,7 @@ import type {
   GalleryEntry,
   HostingPolicy,
   ProviderChannel,
+  DispatchSnapshot,
   UserAccount,
   UserPermission,
   UserTier,
@@ -117,7 +118,7 @@ export function upsertUser(data: PublicServerData, input: {
     profile: {
       displayName: input.displayName || existing?.profile.displayName || 'inscanvas user',
       avatarUrl: existing?.profile.avatarUrl || null,
-      motto: existing?.profile.motto || 'Canvas first.',
+      motto: existing?.profile.motto || '画布优先。',
       qq: existing?.profile.qq || null,
     },
     enabled: existing?.enabled ?? true,
@@ -254,6 +255,34 @@ export function resolveHostingPolicy(data: PublicServerData, input: {
   }
 }
 
+export function makeDispatchSnapshot(data: PublicServerData): DispatchSnapshot {
+  const policy = data.siteSettings.dispatchPolicy
+  const nodes = (policy?.nodes || [])
+    .filter((node) => node.enabled !== false && node.url)
+    .map((node) => ({ ...node, weight: Math.max(1, Number(node.weight) || 1) }))
+  if (!policy?.enabled || nodes.length === 0) {
+    return {
+      strategy: 'round-robin-weighted',
+      selectedNode: null,
+      nodes,
+      message: 'Dispatch is a planned-only balancing contract. Configure dispatchPolicy.nodes to preview multi-server routing.',
+      plannedOnly: true,
+      fallbackReason: policy?.enabled ? 'no-enabled-dispatch-nodes' : 'dispatch-disabled',
+    }
+  }
+  const sortedNodes = [...nodes].sort((a, b) => ((a.currentLoad || 0) / a.weight) - ((b.currentLoad || 0) / b.weight))
+  const expanded = sortedNodes.flatMap((node) => Array.from({ length: node.weight }, () => node))
+  const selectedNode = expanded[Math.floor(Date.now() / 1000) % expanded.length] || nodes[0]
+  return {
+    strategy: 'round-robin-weighted',
+    selectedNode,
+    nodes,
+    message: 'Planned-only dispatch preview selected a candidate node. Real queue execution can attach here later.',
+    plannedOnly: true,
+    fallbackReason: null,
+  }
+}
+
 function isMeteredRoute(method: string, route: string) {
   if (method !== 'POST' && method !== 'PATCH' && method !== 'DELETE') return false
   return /^\/api\/workflows\//.test(route)
@@ -362,6 +391,7 @@ export function makeOpsSnapshot(data: PublicServerData) {
       retentionHours: 24,
     },
     highLoadMode: data.siteSettings.securityMode === 'limited',
+    dispatch: makeDispatchSnapshot(data),
   }
 }
 

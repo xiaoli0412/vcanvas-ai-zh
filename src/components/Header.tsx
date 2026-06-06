@@ -37,11 +37,11 @@ export function Header({
     <>
       <header className="app-header">
         <div className="header-title">
-          <span className="header-title-main">I N S C A N V A S</span>
+          <span className="header-title-main">inscanvas</span>
           <span className="header-sep">/</span>
-          <span className="header-title-sub">PLAYGROUND</span>
+          <span className="header-title-sub">PLAY</span>
           <span className="header-by">
-            by <a href="https://e01.ai" target="_blank" rel="noopener" className="header-by-link">E01.ai</a>
+            {t('header.by')} <a href="https://e01.ai" target="_blank" rel="noopener" className="header-by-link">E01.ai</a>
             <span className="header-by-plus"> + </span>
             <a href="https://github.com/xiaoli0412/vcanvas-ai-zh" target="_blank" rel="noopener" className="header-by-link">xiaoli0412</a>
           </span>
@@ -52,7 +52,7 @@ export function Header({
             <span className="header-mode-value">{modeLabel}</span>
           </button>
           <div className="header-studio-pill" title={studioSummary}>
-            <span className="header-studio-label">Studio</span>
+            <span className="header-studio-label">{t('header.studio')}</span>
             <span className="header-studio-value">{studioSummary}</span>
           </div>
           <a
@@ -99,7 +99,7 @@ export function Header({
             <p className="about-subtitle">
               <a href="https://e01.ai" target="_blank" rel="noopener">{t('header.about.subtitle')}</a>
               <span className="about-subtitle-sep"> · </span>
-              <a href="https://github.com/xiaoli0412/vcanvas-ai-zh" target="_blank" rel="noopener">xiaoli0412 / Inscanvas Public Server</a>
+              <a href="https://github.com/xiaoli0412/vcanvas-ai-zh" target="_blank" rel="noopener">xiaoli0412 / inscanvas public server</a>
             </p>
 
             <div className="about-body">

@@ -46,6 +46,7 @@ export function buildSystemPrompt(basePrompt: string, studio: PromptStudioState,
     '',
     '## Guardrails',
     joinBullets([
+      'Keep all generation instructions, implementation notes, code comments, and prompt-facing reasoning in English. User-facing UI copy may be Chinese when the requested product is Chinese.',
       'Use the selected style presets as inspiration for layout, hierarchy, motion, and polish. Do not reproduce logos, trademarks, or proprietary brand assets.',
       'Blend multiple style presets into a coherent design language instead of creating a collage of mismatched pieces.',
       'Keep the result usable for real work. Distinctive is good; confusing is not.',
