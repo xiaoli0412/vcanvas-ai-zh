@@ -412,6 +412,142 @@ function injectDisclaimer(html, req, data = { disclaimerPolicy: { shortText: 'Ge
   return `${note}\n${html}`
 }
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function sendHtml(res, statusCode, html, head = false) {
+  res.writeHead(statusCode, { 'Content-Type': 'text/html; charset=utf-8' })
+  res.end(head ? undefined : html)
+}
+
+function isShareExpired(link) {
+  return Boolean(link?.expiresAt && Date.parse(link.expiresAt) <= Date.now())
+}
+
+function publicPageShell({ title, eyebrow = 'inscanvas public server', description = '', body, statusCode = 200 }) {
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtml(title)} · inscanvas</title>
+  <style>
+    :root{color-scheme:dark;--bg:#090b18;--panel:rgba(20,22,45,.72);--line:rgba(190,179,255,.18);--text:#f5f1ff;--muted:rgba(245,241,255,.64);--accent:#9d8cff;--cyan:#79e0ff;--warning:#f6c36a}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;color:var(--text);font-family:"LXGW WenKai Screen","Noto Serif SC","Microsoft YaHei",serif;background:radial-gradient(circle at 10% 8%,rgba(111,92,255,.34),transparent 28rem),radial-gradient(circle at 86% 12%,rgba(57,181,255,.18),transparent 24rem),linear-gradient(135deg,#070812 0%,#10122a 52%,#17122d 100%)}
+    a{color:inherit;text-decoration:none}.page{width:min(1120px,calc(100vw - 32px));margin:0 auto;padding:42px 0 56px}.hero{display:grid;gap:12px;padding:28px;border:1px solid var(--line);border-radius:28px;background:linear-gradient(145deg,rgba(22,24,51,.84),rgba(11,13,30,.58));box-shadow:0 24px 90px rgba(0,0,0,.42);overflow:hidden;position:relative}.hero:after{content:"";position:absolute;inset:auto -12% -42% 52%;height:220px;background:radial-gradient(circle,rgba(157,140,255,.24),transparent 68%);pointer-events:none}
+    .eyebrow{color:var(--cyan);font-size:12px;font-weight:700;letter-spacing:.18em;text-transform:uppercase}h1{max-width:780px;margin:0;font-size:clamp(34px,5vw,66px);line-height:.96;letter-spacing:-.055em}.hero p{max-width:720px;margin:0;color:var(--muted);font-size:16px;line-height:1.8}
+    .notice{margin-top:18px;padding:14px 16px;border:1px solid rgba(246,195,106,.32);border-radius:18px;color:#ffe3ac;background:rgba(246,195,106,.1)}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px;margin-top:22px}.card{min-height:210px;display:flex;flex-direction:column;justify-content:space-between;gap:18px;padding:18px;border:1px solid var(--line);border-radius:24px;background:linear-gradient(145deg,rgba(255,255,255,.07),rgba(255,255,255,.025)),var(--panel);transition:transform .18s ease,border-color .18s ease,background .18s ease}a.card:hover{transform:translateY(-3px);border-color:rgba(157,140,255,.52);background:linear-gradient(145deg,rgba(157,140,255,.15),rgba(121,224,255,.045)),rgba(32,31,61,.9)}
+    .card h2{margin:0;font-size:22px;line-height:1.15;letter-spacing:-.025em}.card p{margin:10px 0 0;color:var(--muted);font-size:13px;line-height:1.65}.meta{display:flex;flex-wrap:wrap;gap:8px;color:rgba(245,241,255,.58);font-size:11px;letter-spacing:.04em;text-transform:uppercase}.pill{width:fit-content;padding:6px 10px;border:1px solid rgba(157,140,255,.32);border-radius:999px;color:#dcd3ff;background:rgba(157,140,255,.12);font-size:11px;letter-spacing:.08em;text-transform:uppercase}.empty{margin-top:20px;padding:30px;border:1px dashed rgba(245,241,255,.18);border-radius:24px;color:var(--muted);background:rgba(255,255,255,.035)}.footer{margin-top:28px;color:rgba(245,241,255,.42);font-size:12px}
+    @media(max-width:560px){.page{width:min(100vw - 20px,1120px);padding-top:14px}.hero{padding:20px;border-radius:22px}.grid{grid-template-columns:1fr}.card{min-height:180px}}
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero"><div class="eyebrow">${escapeHtml(eyebrow)}</div><h1>${escapeHtml(title)}</h1>${description ? `<p>${escapeHtml(description)}</p>` : ''}</section>
+    ${body}
+    <div class="footer">inscanvas · public-server local/mock route · status ${statusCode}</div>
+  </main>
+</body>
+</html>`
+}
+
+function renderPublicStatus(statusCode, title, description) {
+  return publicPageShell({
+    title,
+    eyebrow: 'inscanvas share',
+    description,
+    statusCode,
+    body: `<div class="empty">${escapeHtml(description)}</div>`,
+  })
+}
+
+function formatPublicDate(value) {
+  if (!value) return 'unknown time'
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN')
+}
+
+function renderShareFallback(work) {
+  return publicPageShell({
+    title: work.title || 'Untitled work',
+    eyebrow: 'Shared work',
+    description: work.description || 'This shared work has metadata but no saved HTML payload yet.',
+    body: '<div class="empty">This share link exists, but the work does not have renderable HTML yet. Save or import HTML in Works Center, then share again.</div>',
+  })
+}
+
+function renderGalleryPage(data) {
+  const items = data.galleryEntries
+    .filter((entry) => entry.status === 'published' || entry.status === 'pending-review')
+    .map((entry) => ({
+      entry,
+      work: data.works.find((work) => work.id === entry.workId) || null,
+      shareLink: data.shareLinks.find((link) => link.workId === entry.workId && link.enabled),
+    }))
+    .filter((item) => item.work)
+
+  const cards = items.map(({ entry, work, shareLink }) => {
+    const href = shareLink && !isShareExpired(shareLink) ? `/share/${encodeURIComponent(shareLink.slug)}` : null
+    const content = `
+      <div>
+        <span class="pill">${escapeHtml(entry.status)}</span>
+        <h2>${escapeHtml(work.title || 'Untitled work')}</h2>
+        <p>${escapeHtml(work.description || 'The creator has not added a description yet.')}</p>
+      </div>
+      <div class="meta"><span>${escapeHtml(work.modeId)}</span><span>${escapeHtml(formatPublicDate(entry.submittedAt))}</span><span>${href ? 'open share' : 'not shared yet'}</span></div>`
+    return href ? `<a class="card" href="${href}">${content}</a>` : `<article class="card" aria-disabled="true">${content}</article>`
+  }).join('')
+
+  const disabledNotice = data.siteSettings.publicGalleryEnabled === false
+    ? '<div class="notice">Public gallery is currently disabled by site settings; local/mock entries are still shown here for admin verification.</div>'
+    : ''
+
+  return publicPageShell({
+    title: 'inscanvas Gallery',
+    eyebrow: 'Gallery front desk',
+    description: 'A read-only public front desk for submitted or published works. It stays outside the canvas chrome, so creation space remains first.',
+    body: `${disabledNotice}${cards ? `<section class="grid">${cards}</section>` : '<div class="empty">No public works yet. Save HTML, create a share link, then submit it to the gallery.</div>'}`,
+  })
+}
+
+function handlePublicPages(req, res, url) {
+  const data = readData()
+  const head = req.method === 'HEAD'
+  const shareMatch = url.pathname.match(/^\/share\/([^/]+)$/)
+  if (shareMatch) {
+    if (data.siteSettings.sharePolicy?.enabled === false) {
+      sendHtml(res, 403, renderPublicStatus(403, 'Sharing is paused', 'This site has paused public share links.'), head)
+      return true
+    }
+    const slug = decodeURIComponent(shareMatch[1])
+    const link = data.shareLinks.find((item) => item.slug === slug && item.enabled)
+    if (isShareExpired(link)) {
+      sendHtml(res, 410, renderPublicStatus(410, 'Share expired', 'This share link has expired. Ask the creator to generate a new link.'), head)
+      return true
+    }
+    const work = link ? data.works.find((item) => item.id === link.workId) : null
+    if (!work) {
+      sendHtml(res, 404, renderPublicStatus(404, 'Shared work not found', 'This share link does not exist, is disabled, or its work was deleted.'), head)
+      return true
+    }
+    sendHtml(res, 200, work.html?.trim() ? work.html : renderShareFallback(work), head)
+    return true
+  }
+
+  if (url.pathname === '/gallery') {
+    sendHtml(res, 200, renderGalleryPage(data), head)
+    return true
+  }
+
+  return false
+}
+
 function galleryLimit(data, tier) {
   const configured = data.siteSettings.galleryPublishLimits?.[tier]
   if (configured === null) return Infinity
@@ -1306,6 +1442,10 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname.startsWith('/api/')) {
     const handled = await handleApi(req, res, url)
     if (!handled) sendJson(res, 404, { ok: false, error: 'API route not found' })
+    return
+  }
+
+  if ((method === 'GET' || method === 'HEAD') && handlePublicPages(req, res, url)) {
     return
   }
 

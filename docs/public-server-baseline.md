@@ -1,7 +1,8 @@
 # VCanvas Public Server Baseline
 
 ## Branch
-- Current phase-0/1 branch: `codex/canvas-lab-public-server`
+- Current owner-cadence branch: `codex/canvas-lab-public-server-v1.10.9`
+- Main phase-0/1 branch retained on publish: `codex/canvas-lab-public-server`
 - Legacy branch retained remotely for rollback comparison: `publish/codex/creative-lab`
 
 ## Frozen Compatibility Baseline
@@ -37,18 +38,22 @@
 - Mobile/narrow layouts hide the right preview panel and keep the header horizontally scrollable instead of crushing the canvas or stacking the brand vertically.
 - Site settings and notice payloads now preserve nested `sharePolicy`, `noticePolicy`, `updatePolicy`, and `migrationPolicy` defaults when old local JSON data is migrated or partially patched.
 - `scripts/serve-vcanvas.mjs` mirrors the Fastify delete semantics for works, including cleanup of share links and gallery entries, so the deployment server does not accumulate orphaned public metadata.
+- Public share pages now resolve enabled share links at `/share/:slug`; saved HTML is returned directly so imported static landing pages are not wrapped or broken, while missing/expired/paused links return branded fallback pages.
+- Public gallery front-desk pages now resolve at `/gallery` in both Fastify and `scripts/serve-vcanvas.mjs`, rendering pending/published local/mock entries as a read-only standalone page in the dark purple/deep blue visual direction.
 
 ## 2026-06-06 Verification Snapshot
 - `npm run typecheck`
 - `npm run typecheck:server`
 - `node --check scripts/serve-vcanvas.mjs`
 - `npm run build`
-- Fastify smoke test: `/health`, `/_vcanvas_proxy`, `/`, `/api/session/register|login|me`, `/api/users`, `/api/security/blocked-ips`, `/api/providers`, `/api/settings/site`, `/api/notices`, `/api/quotas/sign-in|redeem`, `/api/works` CRUD/share/gallery-submit/delete, `/api/gallery`, `/api/workflows/generate|refine|plan`, `/api/remix/fetch`, `/api/ops/status`, `/api/maintenance/cleanup`.
-- Lightweight `scripts/serve-vcanvas.mjs` smoke test: same endpoint set as Fastify, with post-delete counts confirming no orphaned share/gallery records and parity for `/api/users` plus `/api/security/blocked-ips`.
+- Fastify smoke test: `/health`, `/_vcanvas_proxy`, `/`, `/share/:slug`, `/gallery`, `/api/session/register|login|me`, `/api/users`, `/api/security/blocked-ips`, `/api/providers`, `/api/settings/site`, `/api/notices`, `/api/quotas/sign-in|redeem`, `/api/works` CRUD/share/gallery-submit/delete, `/api/gallery`, `/api/workflows/generate|refine|plan`, `/api/remix/fetch`, `/api/ops/status`, `/api/maintenance/cleanup`.
+- Lightweight `scripts/serve-vcanvas.mjs` smoke test: same endpoint set as Fastify, including public `/share/:slug` and `/gallery`, with post-delete counts confirming no orphaned share/gallery records and parity for `/api/users` plus `/api/security/blocked-ips`.
 - Follow-up smoke test: admin user patch, forced warning notice payload, work-limit 409, delete-for-space, and re-save passed on both Fastify and lightweight services.
 - Security follow-up smoke test: `/api/security/blocked-ips` list/block/self-block rejection/blocked request rejection/unblock passed on both Fastify and lightweight services.
 - Browser/CDP screenshots reviewed at desktop `1440x960` and mobile `390x844`; opening the Control Center leaves `.workspace` dimensions unchanged (`1440x920` desktop, `390x804` mobile).
 - Browser screenshot review for the security slice confirmed user search, blocked-IP state, and ops blocked-IP list render inside the secondary Control Center modal without changing `.workspace` size (`1440x920` before and after).
+- Public-route smoke test passed on both Fastify and lightweight services: mock user login, work save, share creation, `/share/:slug`, gallery submission, `/gallery`, and `/api/gallery`.
+- Public-page browser screenshot review passed for `/gallery` desktop `1440x960`, `/gallery` mobile `390x844`, and direct `/share/:slug` desktop `1440x960`.
 
 ## Deferred Beyond This Commit
 - Real auth on top of latest `newapi`, production key encryption, payment-grade quotas, PostgreSQL/Redis persistence, and external `newapi/subapi/octopus` bridges.

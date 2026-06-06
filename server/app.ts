@@ -17,6 +17,7 @@ import { localDataStore } from './data/localDataStore'
 import { enforceTrafficGuard } from './lib/platformPolicy'
 import { registerQuotaRoutes } from './routes/quotas'
 import { registerOpsRoutes } from './routes/ops'
+import { registerPublicPageRoutes } from './routes/publicPages'
 
 export async function createServer() {
   const config = loadServerConfig()
@@ -72,6 +73,7 @@ export async function createServer() {
   await registerSecurityRoutes(app)
   await registerQuotaRoutes(app)
   await registerOpsRoutes(app)
+  await registerPublicPageRoutes(app)
 
   app.setNotFoundHandler(async (request, reply) => {
     if (request.raw.method !== 'GET' && request.raw.method !== 'HEAD') {

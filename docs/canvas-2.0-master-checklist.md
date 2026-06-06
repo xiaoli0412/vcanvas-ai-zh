@@ -5,7 +5,7 @@
 - [Canvas_2.0_重构计划注意细则.md](C:/Users/李昊桐/Downloads/Canvas_2.0_重构计划注意细则.md)
 
 ## Current Phase Summary
-- Branch renamed and pushed as `codex/canvas-lab-public-server`.
+- Branch renamed and pushed as `codex/canvas-lab-public-server`; current owner-cadence work continues on `codex/canvas-lab-public-server-v1.10.9`.
 - Public-server phase-1 skeleton exists in `server/`, `shared/`, and `docs/public-server-baseline.md`.
 - Canvas-first shell is now the enforced default: classic/custom mode opens with a compact bottom prompt bar, while Studio, context, starters, remix, video keyframes, and Web Embed management stay in secondary panels.
 - Fastify `npm run server` and deployment `scripts/serve-vcanvas.mjs` now share the core public-server API surface with local JSON persistence.
@@ -15,6 +15,7 @@
 - A secondary `inscanvas Control Center` modal is now wired from the header, covering mock login/register/guest session state, personal quota/profile entry, admin site settings, notices/warnings, gallery front desk, and ops cleanup without adding a persistent sidebar.
 - Control Center v2 now adds admin-only user management, app-level forced warning popups, and a Works Center over-limit deletion chooser while keeping all controls in secondary modals.
 - Control Center v3 now adds user search plus admin IP block/unblock controls backed by `/api/security/blocked-ips`; self-blocking the current request IP is refused in local/mock mode.
+- Public share and gallery front-desk pages now exist at `/share/:slug` and `/gallery` in both Fastify and the lightweight deployment server, without adding persistent canvas chrome.
 - Frontend, server typecheck, build, service smoke tests, and desktop/mobile browser screenshots passed on 2026-06-06.
 
 ## Completion Matrix
@@ -87,14 +88,16 @@
 - `done` import HTML through `/api/works/import-html` with the 10-work owner limit
 - `done` Works Center shows an in-modal deletion chooser when the work limit is reached, so users can free space without leaving the canvas
 - `done` share links through `/api/works/:id/share`
+- `done` public share route `/share/:slug` renders enabled share links and returns branded 404/410/paused fallback pages
+- `done` public gallery route `/gallery` renders a read-only standalone front desk for pending/published local/mock entries
 - `in_progress` gallery / 鉴赏厅 with mock review status and tier quotas
-- `done` Control Center v1 includes a read-only gallery front desk preview without adding a route-level public gallery yet
+- `done` Control Center v1 includes a read-only gallery front desk preview; route-level public gallery now exists separately
 - `in_progress` per-tier work and gallery limits
 
 ### 8. Frontend / Branding
 - `in_progress` replace visible "canvas" branding intro surfaces with `inscanvas` where required while preserving storage/runtime compatibility
 - `done` preserve original dark-purple/deep-blue spirit direction as baseline target
-- `todo` full route-level IA for entry/login/personal center/gallery/settings
+- `in_progress` full route-level IA for entry/login/personal center/gallery/settings, with `/share/:slug` and `/gallery` now implemented first
 
 ### 9. Backend Logic
 - `done` public-server skeleton and first API placeholders
@@ -102,6 +105,7 @@
 - `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve `/health`, `/_vcanvas_proxy`, `/api/session/*`, `/api/providers`, `/api/notices`, `/api/settings/*`, `/api/works/*`, `/api/gallery`, `/api/quotas/*`, `/api/ops/status`, `/api/maintenance/cleanup`, `/api/remix/fetch`, and workflow enqueue routes
 - `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve `/api/users` with admin-only local/mock user management and masked provider-key summaries
 - `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve `/api/security/blocked-ips` with admin-only list/block/unblock parity
+- `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve public HTML routes `/share/:slug` and `/gallery`
 - `done` local JSON persistence adapter for site settings, personal settings, notices, providers, works, workflow runs, sessions, users, quotas, shares, gallery entries, rate-limit events, blocked IPs, and audit events
 - `in_progress` 24h workflow run retention with compressed context payloads
 - `todo` bridge `newapi`, `subapi`, `octopus`
@@ -119,6 +123,8 @@
 - Follow-up smoke test passed for `/api/users`, forced warning notice payloads, and work-limit delete/re-save behavior on both Fastify and lightweight deployment services.
 - Security follow-up smoke test passed for `/api/security/blocked-ips` list/block/self-block rejection/blocked request rejection/unblock on both Fastify and lightweight deployment services.
 - Browser screenshot review passed for user search + blocked IP state and ops blocked-IP list; `.workspace` remained `1440x920` before and after opening Control Center.
+- Public route smoke test passed on both Fastify and `scripts/serve-vcanvas.mjs`: mock login, save HTML work, create share link, open `/share/:slug`, submit gallery, open `/gallery`, and confirm `/api/gallery`.
+- Browser screenshot review passed for `/gallery` at `1440x960` and `390x844`, plus `/share/:slug` at `1440x960`; public pages remain standalone and do not add canvas chrome.
 
 ### 10. Sign-in / Quota
 - `in_progress` login-as-signin flow through local/mock records

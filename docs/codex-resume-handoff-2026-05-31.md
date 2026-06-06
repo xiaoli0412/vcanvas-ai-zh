@@ -1,8 +1,9 @@
 # Codex Resume Handoff — 2026-05-31
 
 ## 当前分支
-- 本地分支：`codex/canvas-lab-public-server`
-- 远端跟踪：`publish/codex/canvas-lab-public-server`
+- 本地分支：`codex/canvas-lab-public-server-v1.10.9`
+- 远端跟踪：`publish/codex/canvas-lab-public-server-v1.10.9`
+- 主线基线分支：`publish/codex/canvas-lab-public-server`
 
 ## 当前目标上下文
 - 依据文档：
@@ -174,6 +175,16 @@
       - 用户最近 IP 已封禁时显示状态与解封按钮
       - 当前请求 IP 不允许从 UI 直接封禁
     - 控制中心 `运维` tab 新增生效中封禁 IP 列表
+  - 2026-06-06 继续推进公开作品前台：
+    - 新增 Fastify `/share/:slug`：
+      - 启用中的分享链接直接返回保存的 HTML，不包裹用户静态页面
+      - 分享暂停、过期、缺失时返回 inscanvas 品牌 fallback 页
+    - 新增 Fastify `/gallery`：
+      - 独立只读鉴赏厅前台
+      - 显示 pending-review / published 的 local/mock 条目
+      - 有有效分享链接的作品可直接进入 `/share/:slug`
+    - `scripts/serve-vcanvas.mjs` 同步 `/share/:slug` 与 `/gallery` parity
+    - 页面风格保持暗紫 / 深蓝，不增加任何常驻画布 chrome
 
 ## 已验证
 - `npm run typecheck` 通过
@@ -193,10 +204,17 @@
   - 移动 `390x844`
   - 重点确认控制中心打开前后 `.workspace` 尺寸不变，桌面 `1440x920`，移动 `390x804`
   - 追加安全切片截图：用户搜索 + IP 封禁状态、运维封禁列表；控制中心打开前后 `.workspace` 均为 `1440x920`
+- 当前公开作品切片验证通过：
+  - `npm run typecheck`
+  - `npm run typecheck:server`
+  - `node --check scripts/serve-vcanvas.mjs`
+  - `npm run build`
+  - Fastify 与轻量服务公开路由烟测：保存 HTML、分享、`/share/:slug`、提交鉴赏厅、`/gallery`、`/api/gallery`
+  - Playwright 截图：`/gallery` 桌面与移动、`/share/:slug` 桌面
 
 ## 当前工作树状态
-- 本轮计划提交信息：`feat: harden canvas 2.0 public server foundation`
-- 推送目标：`publish/codex/canvas-lab-public-server`
+- 本轮计划提交信息：`feat: add public share and gallery routes`
+- 推送目标：`publish/codex/canvas-lab-public-server-v1.10.9`
 - 不推送 `origin`
 
 ## 下次启动后建议直接继续的顺序
@@ -207,11 +225,11 @@
 2. 先做控制中心后续项：
    - 用户管理继续项：真实 newapi 用户同步、邮箱/钱包/QQ 头像字段
    - 强警告继续项：站点设置里配置默认强警告策略、长文免责声明弹层、导出/分享前确认
-   - 作品继续项：公开分享路由、鉴赏厅独立前台、作品超限时支持“删除并自动继续保存”
+   - 作品继续项：作品超限时支持“删除并自动继续保存”、公开分享页安全策略细化、分享渲染页后续 SEO/审核提示
 3. 然后继续 Canvas 2.0 补充细则高优先级项：
    - 通过官方文档或 live `/models` 核查后再补 ModelScope / Ollama / DMX / 百炼 / MiMo / Step / Nvidia 的模型能力
    - Web Embed v1 的 CSP / X-Frame-Options 受限页面可见兜底继续打磨
-   - 分享公开路由与鉴赏厅前台独立路由
+   - 鉴赏厅审核模型、独立分享渲染策略、作品流程图导出
 4. 前台稳定后，再推进真实平台化：
    - `newapi / subapi / octopus` bridge 真实接入
    - provider key 加密、权限审计、安全核查模型
