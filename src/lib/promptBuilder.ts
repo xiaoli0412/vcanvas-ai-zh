@@ -10,11 +10,17 @@ import {
   type PromptStudioState,
 } from './promptPresets'
 
+interface PromptBuildOptions {
+  modeManifesto?: string
+  modeStarter?: string
+  workflowContextNotes?: string
+}
+
 function joinBullets(lines: string[]) {
   return lines.map((line) => `- ${line}`).join('\n')
 }
 
-export function buildSystemPrompt(basePrompt: string, studio: PromptStudioState) {
+export function buildSystemPrompt(basePrompt: string, studio: PromptStudioState, options: PromptBuildOptions = {}) {
   const workflow = getWorkflowPreset(studio.workflowId)
   const styles = studio.styleIds.map(getBrandStylePreset)
   const surface = getStudioOption(SURFACE_OPTIONS, studio.surface)
@@ -26,6 +32,7 @@ export function buildSystemPrompt(basePrompt: string, studio: PromptStudioState)
   const sections = [
     basePrompt,
     '',
+    ...(options.modeManifesto ? ['## Mode Manifesto', options.modeManifesto, ''] : []),
     '## Studio Directives',
     `Workflow focus: ${workflow.directive}`,
     `Surface target: ${surface.directive}`,
@@ -48,18 +55,35 @@ export function buildSystemPrompt(basePrompt: string, studio: PromptStudioState)
   return sections.join('\n')
 }
 
-export function buildGeneratePrompt(userPrompt: string, studio: PromptStudioState) {
+export function buildGeneratePrompt(userPrompt: string, studio: PromptStudioState, options: PromptBuildOptions = {}) {
   const workflow = getWorkflowPreset(studio.workflowId)
-  return `${workflow.starterPrompt}\n\nUser request:\n${userPrompt}`
+  return [
+    options.modeStarter || '',
+    workflow.starterPrompt,
+    options.workflowContextNotes || '',
+    'User request:',
+    userPrompt,
+  ].filter(Boolean).join('\n\n')
 }
 
-export function buildRefinePrompt(userPrompt: string, studio: PromptStudioState, fallbackPrompt: string) {
+export function buildRefinePrompt(
+  userPrompt: string,
+  studio: PromptStudioState,
+  fallbackPrompt: string,
+  options: PromptBuildOptions = {},
+) {
   const workflow = getWorkflowPreset(studio.workflowId)
   const actualPrompt = userPrompt.trim() || fallbackPrompt
-  return `${workflow.starterPrompt}\n\nRefinement request:\n${actualPrompt}`
+  return [
+    options.modeStarter || '',
+    workflow.starterPrompt,
+    options.workflowContextNotes || '',
+    'Refinement request:',
+    actualPrompt,
+  ].filter(Boolean).join('\n\n')
 }
 
-export function buildPlanPhaseContext(studio: PromptStudioState) {
+export function buildPlanPhaseContext(studio: PromptStudioState, options: PromptBuildOptions = {}) {
   const workflow = getWorkflowPreset(studio.workflowId)
   const styles = studio.styleIds.map((id) => getBrandStylePreset(id).directive)
   const surface = getStudioOption(SURFACE_OPTIONS, studio.surface)
@@ -69,6 +93,9 @@ export function buildPlanPhaseContext(studio: PromptStudioState) {
   const fidelity = getStudioOption(FIDELITY_OPTIONS, studio.fidelity)
 
   return [
+    ...(options.modeManifesto ? [`Mode manifesto: ${options.modeManifesto}`] : []),
+    ...(options.modeStarter ? [`Mode starter: ${options.modeStarter}`] : []),
+    ...(options.workflowContextNotes ? [options.workflowContextNotes] : []),
     `Workflow focus: ${workflow.directive}`,
     `Surface target: ${surface.directive}`,
     `Tone target: ${tone.directive}`,

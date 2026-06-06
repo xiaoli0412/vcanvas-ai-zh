@@ -178,6 +178,18 @@
 .preview-toolbar-left {
   display: flex;
   gap: 4px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.preview-annotation-toggle.active {
+  border-color: rgba(180, 140, 255, 0.44) !important;
+  background: rgba(180, 140, 255, 0.09) !important;
+  color: #cdbdff !important;
+}
+
+.preview-annotation-clear {
+  color: var(--text-muted) !important;
 }
 
 .preview-meta {

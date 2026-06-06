@@ -6,6 +6,7 @@ const port = Number(process.env.VCANVAS_PORT || 18087)
 const host = process.env.VCANVAS_HOST || '0.0.0.0'
 const staticDir = path.resolve(process.env.VCANVAS_STATIC_DIR || 'dist')
 const proxyPaths = new Set(['/proxy', '/_vcanvas_proxy'])
+const remixPath = '/api/remix/fetch'
 
 const contentTypes = {
   '.css': 'text/css; charset=utf-8',
@@ -66,6 +67,41 @@ function getStaticFilePath(urlPathname) {
   return null
 }
 
+function ensureAbsoluteUrl(baseUrl, maybeRelative) {
+  try {
+    return new URL(maybeRelative, baseUrl).toString()
+  } catch {
+    return maybeRelative
+  }
+}
+
+function extractStylesheetUrls(html, baseUrl) {
+  return [...html.matchAll(/<link[^>]+rel=["'][^"']*stylesheet[^"']*["'][^>]+href=["']([^"']+)["']/gi)]
+    .map((match) => ensureAbsoluteUrl(baseUrl, match[1]))
+    .slice(0, 3)
+}
+
+function rebaseHtml(html, baseUrl) {
+  return html
+    .replace(/(src|href)=["']([^"']+)["']/gi, (_, attr, value) => `${attr}="${ensureAbsoluteUrl(baseUrl, value)}"`)
+    .replace(/url\((['"]?)([^'")]+)\1\)/gi, (_, quote, value) => `url(${quote}${ensureAbsoluteUrl(baseUrl, value)}${quote})`)
+}
+
+function extractStyleHints(html, cssSnippets) {
+  const colors = [...new Set([...html.matchAll(/#[0-9a-fA-F]{3,8}/g)].map((match) => match[0]).slice(0, 8))]
+  const fonts = [...new Set([...cssSnippets.join('\n').matchAll(/font-family\s*:\s*([^;]+);/gi)].map((match) => match[1].trim()).slice(0, 6))]
+  const keywords = [...new Set(
+    ['hero', 'grid', 'sidebar', 'cta', 'card', 'editorial', 'mono']
+      .filter((keyword) => new RegExp(keyword.replace(/\s+/g, '\\s+'), 'i').test(html + '\n' + cssSnippets.join('\n'))),
+  )]
+
+  return [
+    ...colors.map((color) => `color:${color}`),
+    ...fonts.map((font) => `font:${font}`),
+    ...keywords.map((keyword) => `keyword:${keyword}`),
+  ]
+}
+
 async function handleProxy(req, res) {
   try {
     const raw = await readBody(req)
@@ -107,6 +143,63 @@ async function handleProxy(req, res) {
   }
 }
 
+async function handleRemixFetch(req, res) {
+  try {
+    const raw = await readBody(req)
+    const payload = raw ? JSON.parse(raw) : {}
+    const targetUrl = payload?.url
+    if (!isAllowedUrl(targetUrl)) {
+      sendJson(res, 400, { ok: false, error: 'Invalid target URL' })
+      return
+    }
+
+    const upstream = await fetch(targetUrl, {
+      headers: {
+        'User-Agent': 'VCanvas Public Server Remix Fetcher',
+        Accept: 'text/html,application/xhtml+xml',
+      },
+    })
+
+    if (!upstream.ok) {
+      sendJson(res, upstream.status, {
+        ok: false,
+        error: `Homepage fetch failed: ${upstream.status}`,
+      })
+      return
+    }
+
+    const html = (await upstream.text()).slice(0, 20000)
+    const stylesheetUrls = extractStylesheetUrls(html, targetUrl)
+    const stylesheetSnippets = []
+
+    for (const stylesheetUrl of stylesheetUrls) {
+      try {
+        const stylesheetResponse = await fetch(stylesheetUrl, {
+          headers: { 'User-Agent': 'VCanvas Public Server Remix Fetcher' },
+        })
+        if (!stylesheetResponse.ok) continue
+        stylesheetSnippets.push((await stylesheetResponse.text()).slice(0, 3000))
+      } catch {
+        // degrade gracefully
+      }
+    }
+
+    sendJson(res, 200, {
+      ok: true,
+      url: targetUrl,
+      html,
+      rebasedHtml: rebaseHtml(html, targetUrl),
+      stylesheetSnippets,
+      styleHints: extractStyleHints(html, stylesheetSnippets),
+    })
+  } catch (error) {
+    sendJson(res, 502, {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
+}
+
 function serveStatic(req, res, filePath) {
   const ext = path.extname(filePath).toLowerCase()
   const contentType = contentTypes[ext] || 'application/octet-stream'
@@ -143,6 +236,11 @@ const server = http.createServer(async (req, res) => {
 
   if (method === 'POST' && proxyPaths.has(url.pathname)) {
     await handleProxy(req, res)
+    return
+  }
+
+  if (method === 'POST' && url.pathname === remixPath) {
+    await handleRemixFetch(req, res)
     return
   }
 

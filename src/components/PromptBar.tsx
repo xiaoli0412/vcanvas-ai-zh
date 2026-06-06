@@ -1,5 +1,7 @@
 import React, { useRef, useCallback, useMemo } from 'react'
 import type { Translate } from '../lib/i18n'
+import type { CanvasModeDefinition, WorkflowContextPreferences, RemixModeState } from '../lib/canvasModes'
+import type { VideoReference } from '../lib/videoReferences'
 import {
   BRAND_STYLE_PRESETS,
   DENSITY_OPTIONS,
@@ -33,6 +35,20 @@ interface Props {
   generating: boolean
   planMode: boolean
   onPlanModeToggle: () => void
+  modeDefinition: CanvasModeDefinition
+  compact: boolean
+  fineTuneExpanded: boolean
+  onToggleFineTune: () => void
+  onSurprise: () => void
+  contextPreferences: WorkflowContextPreferences
+  onContextPreferencesChange: (next: WorkflowContextPreferences) => void
+  remixState: RemixModeState | null
+  onRemixUrlChange: (url: string) => void
+  onFetchRemixReference: () => void
+  fetchingRemixReference: boolean
+  videoReference: VideoReference | null
+  onVideoKeyframeToggle: (keyframeId: string) => void
+  onClearVideoReference: () => void
   hasKey: boolean
   t: Translate
 }
@@ -50,6 +66,20 @@ export function PromptBar({
   generating,
   planMode,
   onPlanModeToggle,
+  modeDefinition,
+  compact,
+  fineTuneExpanded,
+  onToggleFineTune,
+  onSurprise,
+  contextPreferences,
+  onContextPreferencesChange,
+  remixState,
+  onRemixUrlChange,
+  onFetchRemixReference,
+  fetchingRemixReference,
+  videoReference,
+  onVideoKeyframeToggle,
+  onClearVideoReference,
   hasKey,
   t,
 }: Props) {
@@ -97,11 +127,19 @@ export function PromptBar({
     textareaRef.current?.focus()
   }, [onPromptChange])
 
+  const compactStarterItems = useMemo(
+    () => modeDefinition.starterPrompts.map((promptText, index) => ({
+      labelKey: `mode.starter.${modeDefinition.id}.${index}`,
+      prompt: promptText,
+    })),
+    [modeDefinition],
+  )
+
   return (
     <div className={`prompt-bar ${planMode ? 'plan-active' : ''}`}>
       {!hasOutput && !prompt && (
         <div className="inspiration-strip">
-          {INSPIRATION.map((item) => (
+          {(compact ? compactStarterItems : INSPIRATION).map((item) => (
             <button
               key={item.labelKey}
               className="inspiration-chip"
@@ -111,10 +149,29 @@ export function PromptBar({
               {t(item.labelKey)}
             </button>
           ))}
+          {compact && (
+            <button className="inspiration-chip inspiration-chip-surprise" onClick={onSurprise} disabled={generating}>
+              {t('mode.surprise')}
+            </button>
+          )}
         </div>
       )}
 
-      <div className="studio-panel">
+      {compact && (
+        <div className="compact-mode-banner">
+          <div>
+            <span className="compact-mode-kicker">{t('mode.header')}</span>
+            <div className="compact-mode-title">{t(modeDefinition.labelKey)}</div>
+            <p className="compact-mode-summary">{t(modeDefinition.summaryKey)}</p>
+          </div>
+          <button className="btn btn-secondary compact-mode-toggle" onClick={onToggleFineTune} type="button">
+            {fineTuneExpanded ? t('mode.fineTune.hide') : t('mode.fineTune.show')}
+          </button>
+        </div>
+      )}
+
+      {(!compact || fineTuneExpanded) && (
+        <div className="studio-panel">
         <div className="studio-row studio-row-primary">
           <div className="studio-section">
             <div className="studio-label-row">
@@ -235,7 +292,141 @@ export function PromptBar({
             </select>
           </label>
         </div>
+        </div>
+      )}
+
+      <div className="context-panel">
+        <div className="context-header-row">
+          <span className="studio-label">{t('mode.context.title')}</span>
+          {compact && (
+            <button className="btn btn-ghost context-toggle-btn" onClick={onToggleFineTune} type="button">
+              {fineTuneExpanded ? t('mode.fineTune.hide') : t('mode.fineTune.show')}
+            </button>
+          )}
+        </div>
+        <div className="context-grid">
+          <label className="context-select-block">
+            <span className="context-label">{t('mode.context.carry')}</span>
+            <select
+              className="studio-select"
+              value={contextPreferences.carryPolicy}
+              onChange={(e) => onContextPreferencesChange({
+                ...contextPreferences,
+                carryPolicy: e.target.value as WorkflowContextPreferences['carryPolicy'],
+              })}
+              disabled={generating}
+            >
+              <option value="disabled">{t('mode.context.disabled')}</option>
+              <option value="last-turn">{t('mode.context.lastTurn')}</option>
+              <option value="full">{t('mode.context.full')}</option>
+            </select>
+          </label>
+          <label className="context-check">
+            <input
+              type="checkbox"
+              checked={contextPreferences.includePreviousPrompt}
+              onChange={(e) => onContextPreferencesChange({
+                ...contextPreferences,
+                includePreviousPrompt: e.target.checked,
+              })}
+              disabled={generating}
+            />
+            <span>{t('mode.context.prevPrompt')}</span>
+          </label>
+          <label className="context-check">
+            <input
+              type="checkbox"
+              checked={contextPreferences.includePreviousOutput}
+              onChange={(e) => onContextPreferencesChange({
+                ...contextPreferences,
+                includePreviousOutput: e.target.checked,
+              })}
+              disabled={generating}
+            />
+            <span>{t('mode.context.prevOutput')}</span>
+          </label>
+          <label className="context-check">
+            <input
+              type="checkbox"
+              checked={contextPreferences.includePreviousScreenshot}
+              onChange={(e) => onContextPreferencesChange({
+                ...contextPreferences,
+                includePreviousScreenshot: e.target.checked,
+              })}
+              disabled={generating}
+            />
+            <span>{t('mode.context.prevScreenshot')}</span>
+          </label>
+        </div>
       </div>
+
+      {modeDefinition.requiresWebsiteReference && (
+        <div className="context-panel remix-panel">
+          <div className="context-header-row">
+            <span className="studio-label">{t('mode.remix.reference')}</span>
+            <span className="context-mini-copy">{t('mode.remix.referenceNote')}</span>
+          </div>
+          <div className="remix-reference-row">
+            <input
+              className="prompt-input remix-reference-input"
+              value={remixState?.url || ''}
+              onChange={(e) => onRemixUrlChange(e.target.value)}
+              placeholder={t('mode.remix.placeholder')}
+              disabled={generating}
+            />
+            <button className="btn btn-secondary" onClick={onFetchRemixReference} disabled={generating || fetchingRemixReference}>
+              {fetchingRemixReference ? t('mode.remix.loading') : t('mode.remix.fetch')}
+            </button>
+          </div>
+          {!!remixState?.styleHints.length && (
+            <div className="remix-reference-hints">
+              {remixState.styleHints.slice(0, 8).map((hint) => (
+                <span key={hint} className="remix-reference-chip">{hint}</span>
+              ))}
+            </div>
+          )}
+          {remixState?.error && (
+            <div className="remix-reference-error">{remixState.error}</div>
+          )}
+        </div>
+      )}
+
+      {modeDefinition.id === 'video' && videoReference && (
+        <div className="context-panel video-reference-panel">
+          <div className="context-header-row">
+            <span className="studio-label">{t('mode.video.reference')}</span>
+            <span className="context-mini-copy">{videoReference.fileName}</span>
+          </div>
+          <div className="video-keyframe-strip">
+            {videoReference.keyframes.map((keyframe, index) => {
+              const selected = videoReference.selectedKeyframeIds.includes(keyframe.id)
+              return (
+                <button
+                  key={keyframe.id}
+                  className={`video-keyframe-chip ${selected ? 'selected' : ''}`}
+                  onClick={() => onVideoKeyframeToggle(keyframe.id)}
+                  disabled={generating}
+                  type="button"
+                  title={t('mode.video.keyframeTitle', { index: index + 1, time: keyframe.label })}
+                >
+                  <img src={keyframe.dataUrl} alt={t('mode.video.keyframeTitle', { index: index + 1, time: keyframe.label })} />
+                  <span>{keyframe.label}</span>
+                </button>
+              )
+            })}
+            <button className="btn btn-ghost video-reference-clear" onClick={onClearVideoReference} disabled={generating} type="button">
+              {t('mode.video.clear')}
+            </button>
+          </div>
+          {videoReference.error && (
+            <div className="remix-reference-error">{videoReference.error}</div>
+          )}
+          {!videoReference.error && videoReference.keyframes.length === 0 && (
+            <div className="context-mini-copy">{t('mode.video.noKeyframes')}</div>
+          )}
+          <div className="context-mini-copy">{t('mode.video.referenceNote')}</div>
+        </div>
+      )}
 
       <textarea
         ref={textareaRef}
@@ -245,7 +436,7 @@ export function PromptBar({
         onKeyDown={handleKeyDown}
         placeholder={hasOutput
           ? t('prompt.placeholder.refine')
-          : t('prompt.placeholder.generate')
+          : (compact ? t(modeDefinition.placeholderKey) : t('prompt.placeholder.generate'))
         }
         rows={4}
         disabled={generating}

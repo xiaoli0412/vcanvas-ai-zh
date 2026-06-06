@@ -6,26 +6,49 @@ interface Props {
   providerName: string
   modelLabel: string
   studioSummary: string
+  modeLabel: string
+  modeSummary: string
   hasKey: boolean
   onOpenSettings: () => void
+  onOpenModePanel: () => void
   locale: Locale
   onToggleLocale: () => void
   t: Translate
 }
 
-export function Header({ providerName, modelLabel, studioSummary, hasKey, onOpenSettings, locale, onToggleLocale, t }: Props) {
+export function Header({
+  providerName,
+  modelLabel,
+  studioSummary,
+  modeLabel,
+  modeSummary,
+  hasKey,
+  onOpenSettings,
+  onOpenModePanel,
+  locale,
+  onToggleLocale,
+  t,
+}: Props) {
   const [showAbout, setShowAbout] = useState(false)
 
   return (
     <>
       <header className="app-header">
         <div className="header-title">
-          <span className="header-title-main">V C A N V A S</span>
+          <span className="header-title-main">I N S C A N V A S</span>
           <span className="header-sep">/</span>
           <span className="header-title-sub">PLAYGROUND</span>
-          <span className="header-by">by <a href="https://e01.ai" target="_blank" rel="noopener" className="header-by-link">E01.ai</a></span>
+          <span className="header-by">
+            by <a href="https://e01.ai" target="_blank" rel="noopener" className="header-by-link">E01.ai</a>
+            <span className="header-by-plus"> + </span>
+            <a href="https://github.com/xiaoli0412/vcanvas-ai-zh" target="_blank" rel="noopener" className="header-by-link">xiaoli0412</a>
+          </span>
         </div>
         <div className="header-right">
+          <button className="header-mode-pill" onClick={onOpenModePanel} title={modeSummary}>
+            <span className="header-mode-label">{t('mode.header')}</span>
+            <span className="header-mode-value">{modeLabel}</span>
+          </button>
           <div className="header-studio-pill" title={studioSummary}>
             <span className="header-studio-label">Studio</span>
             <span className="header-studio-value">{studioSummary}</span>
@@ -68,7 +91,11 @@ export function Header({ providerName, modelLabel, studioSummary, hasKey, onOpen
           <div className="about-card" onClick={(e) => e.stopPropagation()}>
             <button className="about-close" onClick={() => setShowAbout(false)}>&times;</button>
             <h2 className="about-title">{t('header.about.title')}</h2>
-            <p className="about-subtitle"><a href="https://e01.ai" target="_blank" rel="noopener">{t('header.about.subtitle')}</a></p>
+            <p className="about-subtitle">
+              <a href="https://e01.ai" target="_blank" rel="noopener">{t('header.about.subtitle')}</a>
+              <span className="about-subtitle-sep"> · </span>
+              <a href="https://github.com/xiaoli0412/vcanvas-ai-zh" target="_blank" rel="noopener">xiaoli0412 / Inscanvas Public Server</a>
+            </p>
 
             <div className="about-body">
               <p>{t('header.about.intro')}</p>

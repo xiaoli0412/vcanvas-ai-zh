@@ -14,6 +14,7 @@ interface Props {
   selectedIds: Set<string>
   onSelectionChange: (ids: Set<string>) => void
   onAddFrame: () => void
+  onAddWebEmbed: () => void
   canvasVersion: number
   onSave: () => void
   onLoad: () => void
@@ -21,7 +22,7 @@ interface Props {
   t: Translate
 }
 
-export function FramePicker({ editor, selectedIds, onSelectionChange, onAddFrame, canvasVersion, onSave, onLoad, previewScreenshot, t }: Props) {
+export function FramePicker({ editor, selectedIds, onSelectionChange, onAddFrame, onAddWebEmbed, canvasVersion, onSave, onLoad, previewScreenshot, t }: Props) {
   const [sources, setSources] = useState<SourceThumb[]>([])
   const [hasDrawing, setHasDrawing] = useState(false)
   const prevCountRef = useRef(0)
@@ -82,6 +83,7 @@ export function FramePicker({ editor, selectedIds, onSelectionChange, onAddFrame
         )}
         <div className="fpb-actions">
           <button className="btn btn-ghost" onClick={onAddFrame}>{t('canvas.frame')}</button>
+          <button className="btn btn-ghost" onClick={onAddWebEmbed}>{t('webEmbed.add')}</button>
           <button className="btn btn-ghost" onClick={onSave}>{t('canvas.save')}</button>
           <button className="btn btn-ghost" onClick={onLoad}>{t('canvas.load')}</button>
         </div>
@@ -99,6 +101,7 @@ export function FramePicker({ editor, selectedIds, onSelectionChange, onAddFrame
         </span>
         <div className="frame-picker-actions">
           <button className="btn btn-ghost" onClick={onAddFrame}>{t('canvas.frame')}</button>
+          <button className="btn btn-ghost" onClick={onAddWebEmbed}>{t('webEmbed.add')}</button>
           <button className="btn btn-ghost" onClick={selectAll}>{t('canvas.all')}</button>
           <button className="btn btn-ghost" onClick={selectNone}>{t('canvas.none')}</button>
           <span className="fpb-sep" />
