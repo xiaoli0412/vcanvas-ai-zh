@@ -2,6 +2,15 @@ export type UserTier = 'host-admin' | 'admin' | 'vip' | 'user' | 'guest'
 
 export type ExecutionMode = 'browser-local' | 'server-managed'
 
+export type UserPermission =
+  | 'manage-site'
+  | 'manage-users'
+  | 'manage-models'
+  | 'manage-gallery'
+  | 'use-server-execution'
+  | 'publish-gallery'
+  | 'manage-own-works'
+
 export type CanvasModeId =
   | 'custom'
   | 'pure'
@@ -31,6 +40,8 @@ export interface ModelCapability extends ProviderCapability {
   label: string
   source: 'builtin' | 'fetched' | 'manual'
   favorite?: boolean
+  verifiedAt?: string | null
+  verifiedSourceUrl?: string | null
 }
 
 export interface ProviderChannel {
@@ -39,10 +50,61 @@ export interface ProviderChannel {
   endpoint?: string
   apiType: 'openai-compatible' | 'openai' | 'azure-openai' | 'gemini' | 'ollama'
   models: ModelCapability[]
+  ownerId?: string | null
+  apiKeyMasked?: string | null
   verifiedAt?: string | null
   verifiedSourceUrl?: string | null
+  verificationMethod?: 'official-doc' | 'live-models' | 'manual' | null
+  favoriteModelIds?: string[]
   favorite?: boolean
   enabled?: boolean
+}
+
+export interface UserProfile {
+  displayName: string
+  avatarUrl?: string | null
+  motto?: string
+  qq?: string | null
+}
+
+export interface UserAccount {
+  id: string
+  email?: string | null
+  username: string
+  tier: UserTier
+  profile: UserProfile
+  enabled: boolean
+  createdAt: string
+  updatedAt: string
+  lastLoginAt?: string | null
+  lastLoginIp?: string | null
+}
+
+export interface SignInRecord {
+  id: string
+  userId: string
+  tier: UserTier
+  ip?: string | null
+  userAgent?: string | null
+  createdAt: string
+}
+
+export interface BlockedIp {
+  ip: string
+  reason: string
+  blockedAt: string
+  expiresAt?: string | null
+  createdBy?: string | null
+}
+
+export interface RateLimitEvent {
+  id: string
+  subject: string
+  subjectType: 'ip' | 'user' | 'tier' | 'global'
+  route: string
+  tier: UserTier
+  ip?: string | null
+  createdAt: string
 }
 
 export interface WebsiteReferenceContext {
@@ -141,10 +203,37 @@ export interface WorkRecord {
   html?: string
   shareSlug?: string | null
   galleryStatus?: 'private' | 'pending-review' | 'published' | 'rejected'
+  exportMetadata?: {
+    exportedAt?: string | null
+    includesFlowMap?: boolean
+    disclaimerComment?: string
+  }
   disclaimerInjectedAt?: string | null
   createdAt: string
   updatedAt: string
   snapshots: WorkSnapshot[]
+}
+
+export interface ShareLink {
+  id: string
+  workId: string
+  ownerId: string
+  slug: string
+  enabled: boolean
+  createdAt: string
+  expiresAt?: string | null
+  disclaimerComment?: string
+}
+
+export interface GalleryEntry {
+  id: string
+  workId: string
+  ownerId: string
+  status: 'pending-review' | 'published' | 'rejected'
+  submittedAt: string
+  reviewedAt?: string | null
+  reviewerId?: string | null
+  rejectionReason?: string | null
 }
 
 export interface QuotaLedger {
@@ -152,7 +241,9 @@ export interface QuotaLedger {
   tier: UserTier
   premiumCredits: number
   baseCallsRemaining: number
+  hostedRunsRemaining?: number
   resetAt: string
+  hostedResetAt?: string
 }
 
 export interface RedeemCode {
@@ -163,22 +254,35 @@ export interface RedeemCode {
   expiresAt: string
   maxRedemptions: number
   redeemedCount: number
+  redeemedBy?: string[]
+  enabled?: boolean
 }
 
 export interface SiteSettings {
   siteName: string
   defaultModeId: CanvasModeId
   guestEnabled: boolean
+  registrationEnabled?: boolean
   serverExecutionDefault: boolean
   publicGalleryEnabled: boolean
   experimentalFeaturesEnabled: boolean
+  securityMode?: 'normal' | 'limited' | 'host-admin-only'
+  workLimitPerOwner?: number
+  galleryPublishLimits?: Partial<Record<UserTier, number | null>>
+  highLoadDegradeThreshold?: number
+  longDisclaimer?: string
 }
 
 export interface PersonalSettings {
+  userId?: string
   displayName: string
   avatarUrl?: string | null
   motto?: string
   preferredModeId?: CanvasModeId
+  favoriteModelKeys?: string[]
+  experimental?: {
+    serverHighResourceHosting: boolean
+  }
 }
 
 export interface AuthSession {
@@ -218,6 +322,41 @@ export interface DisclaimerPolicy {
   longText: string
   injectOnExport: boolean
   injectOnShare: boolean
+}
+
+export interface HostingPolicy {
+  defaultExecutionMode: ExecutionMode
+  resourceHeavyModeDefault: ExecutionMode
+  serverHighResourceHostingEnabled: boolean
+  dailyHostedLimit: number
+  fallbackReason?: string | null
+}
+
+export interface OpsSnapshot {
+  takenAt: string
+  counts: {
+    users: number
+    sessions: number
+    workflows: number
+    works: number
+    shareLinks: number
+    galleryEntries: number
+    rateLimitEvents: number
+    blockedIps: number
+  }
+  hostingPolicy: HostingPolicy
+  storage: {
+    adapter: 'local-json'
+    retentionHours: number
+  }
+  highLoadMode: boolean
+}
+
+export interface DataExportManifest {
+  exportedAt: string
+  adapter: 'local-json'
+  includes: string[]
+  counts: Record<string, number>
 }
 
 export interface AuditEvent {

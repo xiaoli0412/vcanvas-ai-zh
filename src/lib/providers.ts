@@ -9,6 +9,10 @@ export interface ModelDef {
   id: string
   label: string
   vision?: boolean
+  video?: boolean
+  toolCalling?: boolean
+  contextWindow?: number
+  favorite?: boolean
 }
 
 export interface ProviderDef {
@@ -261,6 +265,14 @@ export function isModelVisionEnabled(
   const model = provider.models.find(m => m.id === modelId)
   if (typeof model?.vision === 'boolean') return model.vision
   return provider.type === 'gemini'
+}
+
+export function isModelVideoEnabled(
+  provider: ProviderDef,
+  modelId: string,
+): boolean {
+  const model = provider.models.find(m => m.id === modelId)
+  return model?.video === true
 }
 
 export function getProvider(id: string): ProviderDef {

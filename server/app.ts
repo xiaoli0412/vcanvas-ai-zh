@@ -11,6 +11,10 @@ import { registerRemixRoutes } from './routes/remix'
 import { registerSettingsRoutes } from './routes/settings'
 import { registerProviderRoutes } from './routes/providers'
 import { registerNoticeRoutes } from './routes/notices'
+import { localDataStore } from './data/localDataStore'
+import { enforceTrafficGuard } from './lib/platformPolicy'
+import { registerQuotaRoutes } from './routes/quotas'
+import { registerOpsRoutes } from './routes/ops'
 
 export async function createServer() {
   const config = loadServerConfig()
@@ -35,6 +39,14 @@ export async function createServer() {
   app.options('/_vcanvas_proxy', async (_request, reply) => reply.code(204).send())
   app.options('/api/*', async (_request, reply) => reply.code(204).send())
 
+  app.addHook('preHandler', async (request, reply) => {
+    if (!request.url.startsWith('/api/')) return
+    const guard = await localDataStore.update((data) => enforceTrafficGuard(data, request))
+    if (!guard.ok) {
+      return reply.code(guard.statusCode || 429).send({ ok: false, error: guard.error })
+    }
+  })
+
   app.get('/health', async () => ({
     ok: true,
     host: config.host,
@@ -54,6 +66,8 @@ export async function createServer() {
   await registerSettingsRoutes(app)
   await registerProviderRoutes(app)
   await registerNoticeRoutes(app)
+  await registerQuotaRoutes(app)
+  await registerOpsRoutes(app)
 
   app.setNotFoundHandler(async (request, reply) => {
     if (request.raw.method !== 'GET' && request.raw.method !== 'HEAD') {

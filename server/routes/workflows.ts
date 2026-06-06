@@ -1,8 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { createId, getClientIp, localDataStore } from '../data/localDataStore'
 import type { CanvasModeId, ExecutionMode, WorkflowContext, WorkflowRun } from '../../shared/contracts/publicServer'
-
-const WORKFLOW_TTL_MS = 24 * 60 * 60 * 1000
+import { getActor, resolveHostingPolicy, WORKFLOW_TTL_MS } from '../lib/platformPolicy'
 
 function compressText(value: unknown, maxLength: number) {
   if (typeof value !== 'string') return value
@@ -41,12 +40,25 @@ async function handleWorkflow(route: 'generate' | 'refine' | 'plan', request: an
     context?: WorkflowContext
   }
   const now = new Date()
-  const ownerId = body.ownerId || 'guest-local'
+  const data = await localDataStore.read()
+  const actor = getActor(data, request)
+  const ownerId = body.ownerId || actor.id
+  const modeId = body.modeId || body.context?.modeId || 'custom'
+  const hostingPolicy = resolveHostingPolicy(data, {
+    modeId,
+    actorId: ownerId,
+    tier: actor.tier,
+  })
+  const requestedExecutionMode = body.executionMode
+  const executionMode = requestedExecutionMode
+    || (modeId === 'video' || modeId === 'web-copy'
+      ? hostingPolicy.resourceHeavyModeDefault
+      : hostingPolicy.defaultExecutionMode)
   const run: WorkflowRun = {
     id: createId(`workflow-${route}`),
     ownerId,
-    modeId: body.modeId || body.context?.modeId || 'custom',
-    executionMode: body.executionMode || (ownerId === 'guest-local' ? 'browser-local' : 'server-managed'),
+    modeId,
+    executionMode,
     prompt: body.prompt || body.context?.prompt || '',
     context: compressWorkflowContext(body.context) || {
       modeId: body.modeId || 'custom',
@@ -65,36 +77,40 @@ async function handleWorkflow(route: 'generate' | 'refine' | 'plan', request: an
   await localDataStore.update((data) => {
     const cutoff = Date.now()
     data.workflows = data.workflows.filter((item) => !item.expiresAt || Date.parse(item.expiresAt) > cutoff)
+    const ledger = data.quotaLedgers.find((item) => item.userId === ownerId)
+    if ((modeId === 'video' || modeId === 'web-copy') && run.executionMode === 'server-managed' && ledger && typeof ledger.hostedRunsRemaining === 'number') {
+      ledger.hostedRunsRemaining = Math.max(0, ledger.hostedRunsRemaining - 1)
+    }
     data.workflows.push(run)
     data.auditEvents.push({
       id: createId('audit'),
       actorId: ownerId,
-      actorTier: ownerId === 'guest-local' ? 'guest' : 'user',
+      actorTier: actor.tier,
       action: `workflow.${route}`,
       ip: getClientIp(request),
       createdAt: now.toISOString(),
-      metadata: { workflowRunId: run.id, executionMode: run.executionMode },
+      metadata: { workflowRunId: run.id, executionMode: run.executionMode, hostingPolicy },
     })
   })
-  return run
+  return { run, hostingPolicy }
 }
 
 export async function registerWorkflowRoutes(app: FastifyInstance) {
   app.post('/api/workflows/generate', async (request) => ({
     ok: true,
     route: 'generate',
-    run: await handleWorkflow('generate', request),
+    ...(await handleWorkflow('generate', request)),
   }))
 
   app.post('/api/workflows/refine', async (request) => ({
     ok: true,
     route: 'refine',
-    run: await handleWorkflow('refine', request),
+    ...(await handleWorkflow('refine', request)),
   }))
 
   app.post('/api/workflows/plan', async (request) => ({
     ok: true,
     route: 'plan',
-    run: await handleWorkflow('plan', request),
+    ...(await handleWorkflow('plan', request)),
   }))
 }

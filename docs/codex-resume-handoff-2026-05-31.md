@@ -110,6 +110,19 @@
       - `/api/remix/fetch`
     - works、workflow runs、settings、notices、provider channels、sessions、audit events 进入本地持久化骨架
     - workflow runs 默认 24h 留存，并对 HTML / 网页参考 / 上轮产物做压缩 v1
+  - 2026-06-06 主线续推进：
+    - 顶部模型入口拆为紧凑 `ModelQuickSwitch`，不再从 Header 直接展开完整 Provider 配置
+    - 新增 `PersonalSettingsModal`，承载“个人设置 - 模型与渠道”
+    - 模型治理支持搜索、手动模型 ID、收藏固定、图像/视频/工具调用/上下文窗口徽标、批量能力编辑
+    - ProviderModal 中旧的单字母 `V` 替换为明确能力徽标
+    - `shared/contracts/publicServer.ts` 扩展用户、权限、签到、限流、分享、鉴赏厅、托管、运维与导出清单类型
+    - `.vcanvas-data` 扩展 users、quotaLedgers、redeemCodes、blockedIps、rateLimitEvents、signInRecords、shareLinks、galleryEntries
+    - `/api/session/*` 升级为本地持久用户骨架，保留 8h 不活跃过期、访客临时身份和 IP/UA 审计
+    - `/api/providers` 支持 batch capability update，并对非管理视图预留密钥遮罩策略
+    - `/api/works/import-html`、`/api/works/:id/share`、`/api/works/:id/gallery-submit`、`/api/gallery` 落地 local/mock v1
+    - `/api/quotas/sign-in|redeem`、`/api/ops/status`、`/api/maintenance/cleanup` 落地 local/mock v1
+    - Fastify 与 `scripts/serve-vcanvas.mjs` 同步上述核心 API parity
+    - 视频模式在当前模型未标记 `video=true` 时明确走关键帧 / 视觉转译，不假设直接视频理解
 
 ## 已验证
 - `npm run typecheck` 通过
@@ -140,9 +153,8 @@
    - 检查“展开细调”后的 starter chips / Studio / 上下文是否符合预期
    - 实机确认 `Plan / Refine / Plan Refine` 的模式人格差异
 3. 然后继续 Canvas 2.0 文档中的下一批高优先级前台项：
-   - Provider / 模型管理迁到“个人设置 - 模型与渠道”的 IA
+   - 检查“个人设置 - 模型与渠道”的模型搜索、收藏、批量能力编辑和手动模型 ID
    - Web Embed v1 的浏览器实机回归，包括 CSP / X-Frame-Options 受限页面的可见兜底
-   - Provider 模型能力徽标从 `V` 升级为图像 / 视频 / 工具调用 / 上下文窗口的能力标识
    - 通过官方文档或 live `/models` 核查后再补各渠道预设模型
 4. 前台稳定后，再推进：
    - `newapi / subapi / octopus` bridge 空壳细化

@@ -115,15 +115,24 @@ function defaultData() {
       siteName: 'inscanvas Public Server',
       defaultModeId: 'custom',
       guestEnabled: true,
+      registrationEnabled: true,
       serverExecutionDefault: false,
       publicGalleryEnabled: false,
       experimentalFeaturesEnabled: true,
+      securityMode: 'normal',
+      workLimitPerOwner: 10,
+      galleryPublishLimits: { 'host-admin': null, admin: null, vip: 9, user: 6, guest: 0 },
+      highLoadDegradeThreshold: 0.9,
+      longDisclaimer: 'inscanvas is a creative canvas platform. Public works and shared exports are user-directed content and must be reviewed by the creator before publication.',
     },
     personalSettings: {
+      userId: 'guest-local',
       displayName: 'Guest',
       avatarUrl: null,
       motto: 'Canvas first.',
       preferredModeId: 'custom',
+      favoriteModelKeys: [],
+      experimental: { serverHighResourceHosting: false },
     },
     disclaimerPolicy: {
       shortText: 'Generated with inscanvas. Creator, IP/time metadata, and site disclaimer may be embedded for traceability.',
@@ -157,21 +166,61 @@ function defaultData() {
     works: [],
     workflows: [],
     sessions: [],
+    users: [
+      { id: 'local-admin', email: null, username: 'local-admin', tier: 'host-admin', profile: { displayName: 'inscanvas owner', avatarUrl: null, motto: 'Canvas first.', qq: null }, enabled: true, createdAt: now0, updatedAt: now0, lastLoginAt: null, lastLoginIp: null },
+    ],
+    quotaLedgers: [
+      { userId: 'guest-local', tier: 'guest', premiumCredits: 0, baseCallsRemaining: 8, hostedRunsRemaining: 0, resetAt: now0, hostedResetAt: now0 },
+      { userId: 'local-admin', tier: 'host-admin', premiumCredits: 999999, baseCallsRemaining: 999999, hostedRunsRemaining: 999999, resetAt: now0, hostedResetAt: now0 },
+    ],
+    redeemCodes: [],
+    blockedIps: [],
+    rateLimitEvents: [],
+    signInRecords: [],
+    shareLinks: [],
+    galleryEntries: [],
     auditEvents: [],
   }
 }
 
 function mergeData(data) {
   const defaults = defaultData()
+  const mergeById = (a, b) => {
+    const map = new Map()
+    for (const item of a || []) map.set(item.id, item)
+    for (const item of b || []) map.set(item.id, { ...(map.get(item.id) || {}), ...item })
+    return [...map.values()]
+  }
+  const mergeByKey = (a, b, getKey) => {
+    const map = new Map()
+    for (const item of a || []) map.set(getKey(item), item)
+    for (const item of b || []) {
+      const key = getKey(item)
+      map.set(key, { ...(map.get(key) || {}), ...item })
+    }
+    return [...map.values()]
+  }
   return {
     ...defaults,
     ...(data || {}),
     siteSettings: { ...defaults.siteSettings, ...(data?.siteSettings || {}) },
-    personalSettings: { ...defaults.personalSettings, ...(data?.personalSettings || {}) },
+    personalSettings: {
+      ...defaults.personalSettings,
+      ...(data?.personalSettings || {}),
+      experimental: { ...defaults.personalSettings.experimental, ...(data?.personalSettings?.experimental || {}) },
+    },
     disclaimerPolicy: { ...defaults.disclaimerPolicy, ...(data?.disclaimerPolicy || {}) },
-    providerChannels: data?.providerChannels?.length ? data.providerChannels : defaults.providerChannels,
+    providerChannels: mergeById(defaults.providerChannels, data?.providerChannels),
     notices: data?.notices?.length ? data.notices : defaults.notices,
     rateLimitPolicies: data?.rateLimitPolicies?.length ? data.rateLimitPolicies : defaults.rateLimitPolicies,
+    users: mergeById(defaults.users, data?.users),
+    quotaLedgers: mergeByKey(defaults.quotaLedgers, data?.quotaLedgers, (item) => item.userId),
+    redeemCodes: data?.redeemCodes || [],
+    blockedIps: data?.blockedIps || [],
+    rateLimitEvents: data?.rateLimitEvents || [],
+    signInRecords: data?.signInRecords || [],
+    shareLinks: data?.shareLinks || [],
+    galleryEntries: data?.galleryEntries || [],
   }
 }
 
@@ -213,11 +262,193 @@ function withAudit(data, req, action, actorId = 'local-user', actorTier = 'user'
   })
 }
 
-function injectDisclaimer(html, req) {
+function normalizeTier(value) {
+  return ['host-admin', 'admin', 'vip', 'user', 'guest'].includes(value) ? value : 'user'
+}
+
+function permissionsForTier(tier) {
+  if (tier === 'host-admin') return ['manage-site', 'manage-users', 'manage-models', 'manage-gallery', 'use-server-execution', 'publish-gallery', 'manage-own-works']
+  if (tier === 'admin') return ['manage-users', 'manage-models', 'manage-gallery', 'use-server-execution', 'publish-gallery', 'manage-own-works']
+  if (tier === 'vip' || tier === 'user') return ['use-server-execution', 'publish-gallery', 'manage-own-works']
+  return ['manage-own-works']
+}
+
+function getActor(data, req) {
+  const now = Date.now()
+  const sessionId = typeof req.headers['x-vcanvas-session-id'] === 'string' ? req.headers['x-vcanvas-session-id'] : ''
+  const userId = typeof req.headers['x-vcanvas-user-id'] === 'string' ? req.headers['x-vcanvas-user-id'] : ''
+  const sessions = (data.sessions || [])
+    .filter((item) => Date.parse(item.expiresAt) > now)
+    .sort((a, b) => Date.parse(b.lastActiveAt) - Date.parse(a.lastActiveAt))
+  const session = sessions.find((item) => item.id === sessionId)
+    || sessions.find((item) => userId && item.userId === userId)
+    || sessions[0]
+    || null
+  if (!session) return { id: 'guest-local', tier: 'guest', displayName: 'Guest', session: null }
+  const user = (data.users || []).find((item) => item.id === session.userId)
+  return { id: session.userId, tier: session.tier, displayName: user?.profile?.displayName || 'inscanvas user', session }
+}
+
+function ensureQuotaLedger(data, userId, tier) {
+  let ledger = data.quotaLedgers.find((item) => item.userId === userId)
+  if (ledger) {
+    ledger.tier = tier
+    return ledger
+  }
+  const now = Date.now()
+  ledger = {
+    userId,
+    tier,
+    premiumCredits: tier === 'guest' ? 0 : 100,
+    baseCallsRemaining: tier === 'guest' ? 8 : 20,
+    hostedRunsRemaining: tier === 'vip' || tier === 'user' ? 2 : tier === 'guest' ? 0 : 999999,
+    resetAt: new Date(now + 86400000).toISOString(),
+    hostedResetAt: new Date(now + 86400000).toISOString(),
+  }
+  data.quotaLedgers.push(ledger)
+  return ledger
+}
+
+function upsertUser(data, input) {
+  const now = new Date().toISOString()
+  const existing = data.users.find((item) => item.id === input.id)
+  const user = {
+    id: input.id,
+    email: input.email ?? existing?.email ?? null,
+    username: input.username || existing?.username || input.id,
+    tier: input.tier,
+    profile: {
+      displayName: input.displayName || existing?.profile?.displayName || 'inscanvas user',
+      avatarUrl: existing?.profile?.avatarUrl || null,
+      motto: existing?.profile?.motto || 'Canvas first.',
+      qq: existing?.profile?.qq || null,
+    },
+    enabled: existing?.enabled ?? true,
+    createdAt: existing?.createdAt || now,
+    updatedAt: now,
+    lastLoginAt: now,
+    lastLoginIp: input.ip || null,
+  }
+  data.users = [...data.users.filter((item) => item.id !== input.id), user]
+  ensureQuotaLedger(data, input.id, input.tier)
+  return user
+}
+
+function makeSession(input) {
+  const now = new Date()
+  return {
+    id: createId('session'),
+    userId: input.userId,
+    tier: input.tier,
+    executionMode: input.executionMode || (input.tier === 'guest' ? 'browser-local' : 'server-managed'),
+    lastActiveAt: now.toISOString(),
+    expiresAt: new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString(),
+    ip: input.ip || null,
+    userAgent: input.userAgent || null,
+  }
+}
+
+function buildDisclaimerComment(data, req, action) {
+  return `Generated with inscanvas | action=${action} | ip=${clientIp(req) || 'unknown'} | time=${new Date().toISOString()} | ${data.disclaimerPolicy.shortText}`
+}
+
+function injectDisclaimer(html, req, data = { disclaimerPolicy: { shortText: 'Generated with inscanvas.' } }, action = 'save') {
   if (!html || html.includes('Generated with inscanvas')) return html
-  const note = `<!-- Generated with inscanvas | ip=${clientIp(req) || 'unknown'} | time=${new Date().toISOString()} | review before publishing. -->`
+  const note = `<!-- ${buildDisclaimerComment(data, req, action).replace(/--/g, '- -')} -->`
   if (/<\/body>/i.test(html)) return html.replace(/<\/body>/i, `${note}\n</body>`)
   return `${note}\n${html}`
+}
+
+function galleryLimit(data, tier) {
+  const configured = data.siteSettings.galleryPublishLimits?.[tier]
+  if (configured === null) return Infinity
+  if (typeof configured === 'number') return configured
+  if (tier === 'host-admin' || tier === 'admin') return Infinity
+  if (tier === 'vip') return 9
+  if (tier === 'user') return 6
+  return 0
+}
+
+function cleanupData(data) {
+  const now = Date.now()
+  const before = {
+    workflows: data.workflows.length,
+    rateLimitEvents: data.rateLimitEvents.length,
+    blockedIps: data.blockedIps.length,
+    sessions: data.sessions.length,
+  }
+  data.workflows = data.workflows.filter((item) => !item.expiresAt || Date.parse(item.expiresAt) > now)
+  data.rateLimitEvents = data.rateLimitEvents.filter((item) => Date.parse(item.createdAt) > now - 48 * 60 * 60 * 1000)
+  data.blockedIps = data.blockedIps.filter((item) => !item.expiresAt || Date.parse(item.expiresAt) > now)
+  data.sessions = data.sessions.filter((item) => Date.parse(item.expiresAt) > now)
+  return {
+    workflows: before.workflows - data.workflows.length,
+    rateLimitEvents: before.rateLimitEvents - data.rateLimitEvents.length,
+    blockedIps: before.blockedIps - data.blockedIps.length,
+    sessions: before.sessions - data.sessions.length,
+  }
+}
+
+function opsSnapshot(data) {
+  return {
+    takenAt: new Date().toISOString(),
+    counts: {
+      users: data.users.length,
+      sessions: data.sessions.length,
+      workflows: data.workflows.length,
+      works: data.works.length,
+      shareLinks: data.shareLinks.length,
+      galleryEntries: data.galleryEntries.length,
+      rateLimitEvents: data.rateLimitEvents.length,
+      blockedIps: data.blockedIps.length,
+    },
+    hostingPolicy: {
+      defaultExecutionMode: data.siteSettings.securityMode === 'limited' ? 'browser-local' : 'server-managed',
+      resourceHeavyModeDefault: 'browser-local',
+      serverHighResourceHostingEnabled: data.personalSettings.experimental?.serverHighResourceHosting === true,
+      dailyHostedLimit: 2,
+      fallbackReason: data.siteSettings.securityMode === 'limited' ? 'server-high-load-degrade-after-current-task' : null,
+    },
+    storage: { adapter: 'local-json', retentionHours: 24 },
+    highLoadMode: data.siteSettings.securityMode === 'limited',
+  }
+}
+
+function isMeteredRoute(method, route) {
+  if (!['POST', 'PATCH', 'DELETE'].includes(method)) return false
+  return /^\/api\/workflows\//.test(route)
+    || route === '/api/remix/fetch'
+    || route === '/api/assets/import'
+    || route === '/api/works'
+    || /^\/api\/works\/[^/]+\/(share|gallery-submit)$/.test(route)
+}
+
+function enforceTrafficGuard(data, req, url) {
+  const ip = clientIp(req)
+  const now = Date.now()
+  const blocked = ip ? data.blockedIps.find((item) => item.ip === ip && (!item.expiresAt || Date.parse(item.expiresAt) > now)) : null
+  if (blocked) return { ok: false, statusCode: 403, error: `IP blocked: ${blocked.reason}` }
+  if (!isMeteredRoute(req.method || 'GET', url.pathname)) return { ok: true }
+
+  const actor = getActor(data, req)
+  if (actor.tier === 'host-admin' || actor.tier === 'admin') return { ok: true }
+  const policy = actor.tier === 'guest'
+    ? data.rateLimitPolicies.find((item) => item.id === 'guest-ip-daily')
+    : data.rateLimitPolicies.find((item) => item.id === 'user-hourly-basic')
+  if (!policy?.enabled) return { ok: true }
+  const subjectType = actor.tier === 'guest' ? 'ip' : 'user'
+  const subject = actor.tier === 'guest' ? (ip || 'unknown-ip') : actor.id
+  const cutoff = now - policy.windowSeconds * 1000
+  data.rateLimitEvents = data.rateLimitEvents.filter((event) => Date.parse(event.createdAt) > now - 48 * 60 * 60 * 1000)
+  const count = data.rateLimitEvents.filter((event) => event.subject === subject && event.subjectType === subjectType && Date.parse(event.createdAt) >= cutoff).length
+  if (count >= policy.maxRequests) {
+    if (policy.lockoutSeconds && ip) {
+      data.blockedIps.push({ ip, reason: `rate limit ${policy.id}`, blockedAt: new Date().toISOString(), expiresAt: new Date(now + policy.lockoutSeconds * 1000).toISOString(), createdBy: 'system' })
+    }
+    return { ok: false, statusCode: 429, error: `Rate limit exceeded (${policy.maxRequests}/${policy.windowSeconds}s).` }
+  }
+  data.rateLimitEvents.push({ id: createId('rate'), subject, subjectType, route: url.pathname, tier: actor.tier, ip, createdAt: new Date().toISOString() })
+  return { ok: true }
 }
 
 async function handleProxy(req, res) {
@@ -321,21 +552,35 @@ async function handleRemixFetch(req, res) {
 async function handleApi(req, res, url) {
   const method = req.method || 'GET'
   const data = readData()
+  const guard = enforceTrafficGuard(data, req, url)
+  if (!guard.ok) {
+    writeData(data)
+    sendJson(res, guard.statusCode || 429, { ok: false, error: guard.error })
+    return true
+  }
 
   if (url.pathname === '/api/session/me' && method === 'GET') {
     const now = Date.now()
     const session = data.sessions
       .filter((item) => Date.parse(item.expiresAt) > now)
       .sort((a, b) => Date.parse(b.lastActiveAt) - Date.parse(a.lastActiveAt))[0] || null
+    if (session) {
+      session.lastActiveAt = new Date().toISOString()
+      session.expiresAt = new Date(now + 8 * 60 * 60 * 1000).toISOString()
+      writeData(data)
+    }
+    const user = session ? data.users.find((item) => item.id === session.userId) : null
     sendJson(res, 200, {
       ok: true,
       executionMode: session?.executionMode || 'browser-local',
       user: {
         id: session?.userId || 'guest-local',
         tier: session?.tier || 'guest',
-        displayName: session?.displayName || 'Guest',
+        displayName: user?.profile?.displayName || 'Guest',
+        permissions: permissionsForTier(session?.tier || 'guest'),
       },
       session,
+      quota: data.quotaLedgers.find((ledger) => ledger.userId === (session?.userId || 'guest-local')) || null,
       loginNotice: {
         ip: clientIp(req),
         time: new Date().toISOString(),
@@ -348,22 +593,27 @@ async function handleApi(req, res, url) {
   if ((url.pathname === '/api/session/login' || url.pathname === '/api/session/guest') && method === 'POST') {
     const body = await readJsonBody(req)
     const isGuest = url.pathname.endsWith('/guest')
-    const now = new Date()
-    const session = {
-      id: createId('session'),
-      userId: isGuest ? 'guest-local' : (body.userId || 'mock-user'),
-      tier: isGuest ? 'guest' : (body.tier || 'user'),
-      displayName: isGuest ? 'Guest' : (body.displayName || 'inscanvas user'),
+    const tier = isGuest ? 'guest' : normalizeTier(body.tier)
+    const userId = isGuest ? 'guest-local' : (body.userId || body.username || 'mock-user')
+    const session = makeSession({
+      userId,
+      tier,
       executionMode: isGuest ? 'browser-local' : 'server-managed',
-      lastActiveAt: now.toISOString(),
-      expiresAt: new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString(),
       ip: clientIp(req),
       userAgent: req.headers['user-agent'] || null,
-    }
+    })
+    const user = isGuest ? null : upsertUser(data, { id: userId, username: body.username || userId, email: body.email || null, tier, displayName: body.displayName || 'inscanvas user', ip: clientIp(req) })
     data.sessions = [...data.sessions.filter((item) => item.userId !== session.userId), session]
+    data.signInRecords.push({ id: createId('signin'), userId, tier, ip: clientIp(req), userAgent: req.headers['user-agent'] || null, createdAt: new Date().toISOString() })
     withAudit(data, req, isGuest ? 'session.guest' : 'session.login', session.userId, session.tier)
     writeData(data)
-    sendJson(res, 200, { ok: true, executionMode: session.executionMode, user: { id: session.userId, tier: session.tier, displayName: session.displayName }, session })
+    sendJson(res, 200, {
+      ok: true,
+      executionMode: session.executionMode,
+      user: { id: session.userId, tier: session.tier, displayName: user?.profile?.displayName || 'Guest', permissions: permissionsForTier(session.tier) },
+      session,
+      quota: data.quotaLedgers.find((ledger) => ledger.userId === session.userId) || null,
+    })
     return true
   }
 
@@ -383,6 +633,34 @@ async function handleApi(req, res, url) {
 
   if (url.pathname === '/api/providers' && method === 'POST') {
     const body = await readJsonBody(req)
+    if (Array.isArray(body.batchCapabilities)) {
+      for (const patch of body.batchCapabilities) {
+        const channel = data.providerChannels.find((item) => item.id === patch.providerId)
+        if (!channel) continue
+        const existing = channel.models.find((model) => model.id === patch.modelId)
+        const next = {
+          id: patch.modelId,
+          label: patch.capability?.label || existing?.label || patch.modelId,
+          source: patch.capability?.source || existing?.source || 'manual',
+          vision: patch.capability?.vision ?? existing?.vision ?? false,
+          video: patch.capability?.video ?? existing?.video ?? false,
+          toolCalling: patch.capability?.toolCalling ?? existing?.toolCalling ?? false,
+          contextWindow: patch.capability?.contextWindow ?? existing?.contextWindow,
+          favorite: patch.capability?.favorite ?? existing?.favorite ?? false,
+          verifiedAt: patch.capability?.verifiedAt ?? existing?.verifiedAt ?? null,
+          verifiedSourceUrl: patch.capability?.verifiedSourceUrl ?? existing?.verifiedSourceUrl ?? null,
+          serverSide: patch.capability?.serverSide ?? existing?.serverSide ?? true,
+        }
+        channel.models = [...channel.models.filter((model) => model.id !== patch.modelId), next]
+        channel.favoriteModelIds = next.favorite
+          ? [...new Set([...(channel.favoriteModelIds || []), next.id])]
+          : (channel.favoriteModelIds || []).filter((id) => id !== next.id)
+      }
+      withAudit(data, req, 'provider.batchCapabilities.update', 'local-user', 'user', { count: body.batchCapabilities.length })
+      writeData(data)
+      sendJson(res, 200, { ok: true, channels: data.providerChannels })
+      return true
+    }
     const id = body.id || createId('provider')
     const existing = data.providerChannels.find((item) => item.id === id)
     const channel = {
@@ -391,8 +669,12 @@ async function handleApi(req, res, url) {
       endpoint: body.endpoint || existing?.endpoint,
       apiType: body.apiType || existing?.apiType || 'openai-compatible',
       models: body.models || existing?.models || [],
+      ownerId: body.ownerId ?? existing?.ownerId ?? getActor(data, req).id,
+      apiKeyMasked: body.apiKeyMasked ?? existing?.apiKeyMasked ?? null,
       verifiedAt: body.verifiedAt ?? existing?.verifiedAt ?? null,
       verifiedSourceUrl: body.verifiedSourceUrl ?? existing?.verifiedSourceUrl ?? null,
+      verificationMethod: body.verificationMethod ?? existing?.verificationMethod ?? null,
+      favoriteModelIds: body.favoriteModelIds ?? existing?.favoriteModelIds ?? [],
       favorite: body.favorite ?? existing?.favorite ?? false,
       enabled: body.enabled ?? existing?.enabled ?? true,
     }
@@ -438,7 +720,7 @@ async function handleApi(req, res, url) {
     return true
   }
 
-  if (url.pathname === '/api/settings/site' && method === 'POST') {
+  if (url.pathname === '/api/settings/site' && (method === 'POST' || method === 'PATCH')) {
     const body = await readJsonBody(req)
     data.siteSettings = { ...data.siteSettings, ...body }
     if (body.disclaimerPolicy) data.disclaimerPolicy = { ...data.disclaimerPolicy, ...body.disclaimerPolicy }
@@ -454,9 +736,13 @@ async function handleApi(req, res, url) {
     return true
   }
 
-  if (url.pathname === '/api/settings/personal' && method === 'POST') {
+  if (url.pathname === '/api/settings/personal' && (method === 'POST' || method === 'PATCH')) {
     const body = await readJsonBody(req)
-    data.personalSettings = { ...data.personalSettings, ...body }
+    data.personalSettings = {
+      ...data.personalSettings,
+      ...body,
+      experimental: { ...data.personalSettings.experimental, ...(body.experimental || {}) },
+    }
     withAudit(data, req, 'settings.personal.update')
     writeData(data)
     sendJson(res, 200, { ok: true, settings: data.personalSettings })
@@ -471,14 +757,17 @@ async function handleApi(req, res, url) {
 
   if (url.pathname === '/api/works' && method === 'POST') {
     const body = await readJsonBody(req)
-    const ownerId = body.ownerId || 'guest-local'
-    if (data.works.filter((work) => work.ownerId === ownerId).length >= 10) {
-      sendJson(res, 409, { ok: false, error: 'Work limit reached (10).' })
+    const actor = getActor(data, req)
+    const ownerId = body.ownerId || actor.id
+    const limit = data.siteSettings.workLimitPerOwner || 10
+    if (data.works.filter((work) => work.ownerId === ownerId).length >= limit) {
+      sendJson(res, 409, { ok: false, error: `Work limit reached (${limit}).` })
       return true
     }
     const now = new Date().toISOString()
     const id = body.id || createId('work')
-    const html = injectDisclaimer(body.html, req)
+    const html = injectDisclaimer(body.html, req, data, 'save')
+    const disclaimerComment = buildDisclaimerComment(data, req, 'save')
     const work = {
       id,
       ownerId,
@@ -489,13 +778,54 @@ async function handleApi(req, res, url) {
       html,
       shareSlug: body.shareSlug || null,
       galleryStatus: body.galleryStatus || 'private',
+      exportMetadata: { exportedAt: null, includesFlowMap: false, disclaimerComment },
       disclaimerInjectedAt: html ? now : null,
       createdAt: now,
       updatedAt: now,
       snapshots: [{ id: createId('snapshot'), workId: id, html, canvasData: body.canvasData, previewImageUrl: null, createdAt: now }],
     }
     data.works.push(work)
-    withAudit(data, req, 'work.create', ownerId, ownerId === 'guest-local' ? 'guest' : 'user', { workId: id })
+    withAudit(data, req, 'work.create', ownerId, actor.tier, { workId: id })
+    writeData(data)
+    sendJson(res, 200, { ok: true, work })
+    return true
+  }
+
+  if (url.pathname === '/api/works/import-html' && method === 'POST') {
+    const body = await readJsonBody(req)
+    if (!body.html?.trim()) {
+      sendJson(res, 400, { ok: false, error: 'Missing HTML content.' })
+      return true
+    }
+    const actor = getActor(data, req)
+    const ownerId = body.ownerId || actor.id
+    const limit = data.siteSettings.workLimitPerOwner || 10
+    if (data.works.filter((work) => work.ownerId === ownerId).length >= limit) {
+      sendJson(res, 409, { ok: false, error: `Work limit reached (${limit}).` })
+      return true
+    }
+    const now = new Date().toISOString()
+    const id = body.id || createId('work')
+    const html = injectDisclaimer(body.html, req, data, 'save')
+    const disclaimerComment = buildDisclaimerComment(data, req, 'save')
+    const work = {
+      id,
+      ownerId,
+      title: (body.title || 'Imported HTML').slice(0, 50),
+      description: (body.description || '').slice(0, 50),
+      modeId: body.modeId || 'custom',
+      status: 'saved',
+      html,
+      shareSlug: null,
+      galleryStatus: 'private',
+      exportMetadata: { exportedAt: null, includesFlowMap: false, disclaimerComment },
+      disclaimerInjectedAt: now,
+      createdAt: now,
+      updatedAt: now,
+      snapshots: [{ id: createId('snapshot'), workId: id, html, canvasData: body.canvasData, previewImageUrl: null, createdAt: now }],
+    }
+    data.works.push(work)
+    withAudit(data, req, 'work.importHtml', ownerId, actor.tier, { workId: id })
     writeData(data)
     sendJson(res, 200, { ok: true, work })
     return true
@@ -517,7 +847,8 @@ async function handleApi(req, res, url) {
       }
       const body = await readJsonBody(req)
       const now = new Date().toISOString()
-      const html = body.html ? injectDisclaimer(body.html, req) : data.works[index].html
+      const html = body.html ? injectDisclaimer(body.html, req, data, 'save') : data.works[index].html
+      const disclaimerComment = body.html ? buildDisclaimerComment(data, req, 'save') : data.works[index].exportMetadata?.disclaimerComment
       const snapshot = body.html || body.canvasData
         ? [{ id: createId('snapshot'), workId: id, html, canvasData: body.canvasData, previewImageUrl: null, createdAt: now }]
         : []
@@ -527,6 +858,7 @@ async function handleApi(req, res, url) {
         title: body.title ? body.title.slice(0, 50) : data.works[index].title,
         description: body.description ? body.description.slice(0, 50) : data.works[index].description,
         html,
+        exportMetadata: { ...data.works[index].exportMetadata, ...body.exportMetadata, disclaimerComment },
         disclaimerInjectedAt: body.html ? now : data.works[index].disclaimerInjectedAt,
         updatedAt: now,
         snapshots: [...data.works[index].snapshots, ...snapshot],
@@ -546,17 +878,83 @@ async function handleApi(req, res, url) {
     }
   }
 
+  const shareMatch = url.pathname.match(/^\/api\/works\/([^/]+)\/share$/)
+  if (shareMatch && method === 'POST') {
+    const id = decodeURIComponent(shareMatch[1])
+    const work = data.works.find((item) => item.id === id)
+    if (!work) {
+      sendJson(res, 404, { ok: false, error: 'Work not found' })
+      return true
+    }
+    const actor = getActor(data, req)
+    const now = new Date().toISOString()
+    const slug = work.shareSlug || `${id}-${Math.random().toString(36).slice(2, 7)}`
+    const disclaimerComment = buildDisclaimerComment(data, req, 'share')
+    work.shareSlug = slug
+    work.html = injectDisclaimer(work.html, req, data, 'share')
+    work.exportMetadata = { ...work.exportMetadata, exportedAt: now, disclaimerComment }
+    work.updatedAt = now
+    const link = { id: createId('share'), workId: id, ownerId: work.ownerId, slug, enabled: true, createdAt: now, expiresAt: null, disclaimerComment }
+    data.shareLinks = [...data.shareLinks.filter((item) => item.workId !== id), link]
+    withAudit(data, req, 'work.share', actor.id, actor.tier, { workId: id, slug })
+    writeData(data)
+    sendJson(res, 200, { ok: true, work, link })
+    return true
+  }
+
+  const gallerySubmitMatch = url.pathname.match(/^\/api\/works\/([^/]+)\/gallery-submit$/)
+  if (gallerySubmitMatch && method === 'POST') {
+    const id = decodeURIComponent(gallerySubmitMatch[1])
+    const work = data.works.find((item) => item.id === id)
+    if (!work) {
+      sendJson(res, 404, { ok: false, error: 'Work not found' })
+      return true
+    }
+    const actor = getActor(data, req)
+    const limit = galleryLimit(data, actor.tier)
+    const count = data.galleryEntries.filter((entry) => entry.ownerId === actor.id && entry.status !== 'rejected').length
+    if (limit <= 0 || count >= limit) {
+      sendJson(res, 403, { ok: false, error: limit <= 0 ? 'This tier cannot publish to gallery.' : `Gallery publish limit reached (${limit}).`, limit })
+      return true
+    }
+    const now = new Date().toISOString()
+    const entry = { id: createId('gallery'), workId: id, ownerId: work.ownerId, status: 'pending-review', submittedAt: now, reviewedAt: null, reviewerId: null, rejectionReason: null }
+    work.galleryStatus = 'pending-review'
+    data.galleryEntries = [...data.galleryEntries.filter((item) => item.workId !== id), entry]
+    withAudit(data, req, 'work.gallerySubmit', actor.id, actor.tier, { workId: id, galleryEntryId: entry.id })
+    writeData(data)
+    sendJson(res, 200, { ok: true, entry, work, limit })
+    return true
+  }
+
+  if (url.pathname === '/api/gallery' && method === 'GET') {
+    const entries = data.galleryEntries
+      .filter((entry) => entry.status === 'published' || entry.status === 'pending-review')
+      .map((entry) => ({ ...entry, work: data.works.find((work) => work.id === entry.workId) || null }))
+    sendJson(res, 200, { ok: true, enabled: data.siteSettings.publicGalleryEnabled, entries, items: entries })
+    return true
+  }
+
   const workflowMatch = url.pathname.match(/^\/api\/workflows\/(generate|refine|plan)$/)
   if (workflowMatch && method === 'POST') {
     const route = workflowMatch[1]
     const body = await readJsonBody(req)
     const now = new Date()
-    const ownerId = body.ownerId || 'guest-local'
+    const actor = getActor(data, req)
+    const ownerId = body.ownerId || actor.id
+    const modeId = body.modeId || body.context?.modeId || 'custom'
+    const heavy = modeId === 'video' || modeId === 'web-copy'
+    const ledger = ensureQuotaLedger(data, ownerId, actor.tier)
+    const heavyHosted = data.personalSettings.experimental?.serverHighResourceHosting === true && (ledger.hostedRunsRemaining || 0) > 0
+    const executionMode = body.executionMode || (actor.tier === 'guest' ? 'browser-local' : (heavy && !heavyHosted ? 'browser-local' : (data.siteSettings.securityMode === 'limited' ? 'browser-local' : 'server-managed')))
+    if (heavy && executionMode === 'server-managed' && typeof ledger.hostedRunsRemaining === 'number') {
+      ledger.hostedRunsRemaining = Math.max(0, ledger.hostedRunsRemaining - 1)
+    }
     const run = {
       id: createId(`workflow-${route}`),
       ownerId,
-      modeId: body.modeId || body.context?.modeId || 'custom',
-      executionMode: body.executionMode || (ownerId === 'guest-local' ? 'browser-local' : 'server-managed'),
+      modeId,
+      executionMode,
       prompt: body.prompt || body.context?.prompt || '',
       context: body.context || { modeId: body.modeId || 'custom', prompt: body.prompt || '', carryPolicy: 'last-turn', currentCanvasLabels: [], includePreviousPrompt: true, includePreviousOutput: true, includePreviousScreenshot: false },
       status: 'queued',
@@ -566,9 +964,76 @@ async function handleApi(req, res, url) {
     }
     data.workflows = data.workflows.filter((item) => !item.expiresAt || Date.parse(item.expiresAt) > Date.now())
     data.workflows.push(run)
-    withAudit(data, req, `workflow.${route}`, ownerId, ownerId === 'guest-local' ? 'guest' : 'user', { workflowRunId: run.id })
+    const hostingPolicy = { defaultExecutionMode: executionMode, resourceHeavyModeDefault: heavy ? executionMode : 'server-managed', serverHighResourceHostingEnabled: data.personalSettings.experimental?.serverHighResourceHosting === true, dailyHostedLimit: ledger.hostedRunsRemaining || 0, fallbackReason: executionMode === 'browser-local' && heavy ? 'high-resource-hosting-disabled-or-quota-exhausted' : null }
+    withAudit(data, req, `workflow.${route}`, ownerId, actor.tier, { workflowRunId: run.id, hostingPolicy })
     writeData(data)
-    sendJson(res, 200, { ok: true, route, run })
+    sendJson(res, 200, { ok: true, route, run, hostingPolicy })
+    return true
+  }
+
+  if (url.pathname === '/api/quotas/sign-in' && method === 'GET') {
+    const actor = getActor(data, req)
+    sendJson(res, 200, { ok: true, ledger: data.quotaLedgers.find((ledger) => ledger.userId === actor.id) || null, records: data.signInRecords.filter((record) => record.userId === actor.id).slice(-7) })
+    return true
+  }
+
+  if (url.pathname === '/api/quotas/sign-in' && method === 'POST') {
+    const actor = getActor(data, req)
+    const ledger = ensureQuotaLedger(data, actor.id, actor.tier)
+    ledger.baseCallsRemaining += actor.tier === 'guest' ? 1 : 3
+    if (actor.tier === 'vip' || actor.tier === 'user') ledger.hostedRunsRemaining = Math.min(2, (ledger.hostedRunsRemaining || 0) + 1)
+    const record = { id: createId('signin'), userId: actor.id, tier: actor.tier, ip: clientIp(req), userAgent: req.headers['user-agent'] || null, createdAt: new Date().toISOString() }
+    data.signInRecords.push(record)
+    withAudit(data, req, 'quota.signIn', actor.id, actor.tier)
+    writeData(data)
+    sendJson(res, 200, { ok: true, ledger, record })
+    return true
+  }
+
+  if (url.pathname === '/api/quotas/redeem' && method === 'GET') {
+    const actor = getActor(data, req)
+    sendJson(res, 200, {
+      ok: true,
+      ledger: data.quotaLedgers.find((ledger) => ledger.userId === actor.id) || null,
+      redeemCodes: data.redeemCodes.map((code) => ({ ...code, code: code.code.replace(/.(?=.{4})/g, '*') })),
+    })
+    return true
+  }
+
+  if (url.pathname === '/api/quotas/redeem' && method === 'POST') {
+    const body = await readJsonBody(req)
+    const actor = getActor(data, req)
+    const code = data.redeemCodes.find((item) => item.code === body.code && (item.enabled ?? true))
+    if (!code || Date.parse(code.expiresAt) < Date.now() || code.redeemedCount >= code.maxRedemptions || code.redeemedBy?.includes(actor.id)) {
+      sendJson(res, 400, { ok: false, error: 'Redeem code unavailable.' })
+      return true
+    }
+    const ledger = ensureQuotaLedger(data, actor.id, actor.tier)
+    ledger.premiumCredits += code.premiumCredits || 0
+    if (code.tierUpgrade) {
+      ledger.tier = code.tierUpgrade
+      const user = data.users.find((item) => item.id === actor.id)
+      if (user) user.tier = code.tierUpgrade
+    }
+    code.redeemedCount += 1
+    code.redeemedBy = [...(code.redeemedBy || []), actor.id]
+    withAudit(data, req, 'quota.redeem', actor.id, actor.tier, { redeemCodeId: code.id })
+    writeData(data)
+    sendJson(res, 200, { ok: true, ledger })
+    return true
+  }
+
+  if (url.pathname === '/api/ops/status' && method === 'GET') {
+    sendJson(res, 200, { ok: true, snapshot: opsSnapshot(data) })
+    return true
+  }
+
+  if (url.pathname === '/api/maintenance/cleanup' && method === 'POST') {
+    const actor = getActor(data, req)
+    const removed = cleanupData(data)
+    withAudit(data, req, 'maintenance.cleanup', actor.id, actor.tier, removed)
+    writeData(data)
+    sendJson(res, 200, { ok: true, removed, snapshot: opsSnapshot(data) })
     return true
   }
 

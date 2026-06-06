@@ -368,7 +368,7 @@ export function ProviderModal({
                   onClick={() => handleVisionModelSelect(model.id)}
                 >
                   {model.label}
-                  {model.vision && <span className="pm-vision-tag">V</span>}
+                  {renderCapabilityBadges(model)}
                 </button>
               ))}
             </div>
@@ -446,6 +446,14 @@ export function ProviderModal({
     return model.id.toLowerCase().includes(query) || model.label.toLowerCase().includes(query)
   })
   const visibleCustomModels = filteredCustomModels.slice(0, customVisibleCount)
+  const renderCapabilityBadges = (model: ModelDef) => (
+    <span className="pm-capability-badges" aria-label="model capabilities">
+      {model.vision && <span className="pm-capability-badge vision" title="Vision">IMG</span>}
+      {model.video && <span className="pm-capability-badge video" title="Video">VID</span>}
+      {model.toolCalling && <span className="pm-capability-badge tools" title="Tool calling">TOOL</span>}
+      {typeof model.contextWindow === 'number' && <span className="pm-capability-badge context" title={`${model.contextWindow} context`}>{Math.max(1, Math.round(model.contextWindow / 1000))}K</span>}
+    </span>
+  )
 
   return (
     <div className="pm-overlay" onClick={onClose}>
@@ -530,7 +538,7 @@ export function ProviderModal({
                           title={model.id}
                         >
                           {model.label}
-                          {model.vision && <span className="pm-vision-tag">V</span>}
+                          {renderCapabilityBadges(model)}
                         </button>
                       ))}
 
@@ -706,7 +714,7 @@ export function ProviderModal({
                               title={model.id}
                             >
                               {model.label}
-                              {model.vision && <span className="pm-vision-tag">V</span>}
+                              {renderCapabilityBadges(model)}
                             </button>
                           ))}
                         </div>

@@ -1,6 +1,7 @@
-import type { FastifyInstance } from 'fastify'
+import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { createId, getClientIp, localDataStore } from '../data/localDataStore'
 import type { PersonalSettings, SiteSettings } from '../../shared/contracts/publicServer'
+import { getActor } from '../lib/platformPolicy'
 
 export async function registerSettingsRoutes(app: FastifyInstance) {
   app.get('/api/settings/site', async () => {
@@ -17,9 +18,10 @@ export async function registerSettingsRoutes(app: FastifyInstance) {
     }
   })
 
-  app.post('/api/settings/site', async (request) => {
+  const updateSiteSettings = async (request: FastifyRequest) => {
     const body = (request.body || {}) as Partial<SiteSettings> & Record<string, unknown>
     const settings = await localDataStore.update((data) => {
+      const actor = getActor(data, request)
       data.siteSettings = {
         ...data.siteSettings,
         ...body,
@@ -35,8 +37,8 @@ export async function registerSettingsRoutes(app: FastifyInstance) {
       }
       data.auditEvents.push({
         id: createId('audit'),
-        actorId: 'local-admin',
-        actorTier: 'host-admin',
+        actorId: actor.id,
+        actorTier: actor.tier,
         action: 'settings.site.update',
         ip: getClientIp(request),
         createdAt: new Date().toISOString(),
@@ -44,7 +46,10 @@ export async function registerSettingsRoutes(app: FastifyInstance) {
       return data.siteSettings
     })
     return { ok: true, settings }
-  })
+  }
+
+  app.post('/api/settings/site', updateSiteSettings)
+  app.patch('/api/settings/site', updateSiteSettings)
 
   app.get('/api/settings/personal', async () => {
     const data = await localDataStore.read()
@@ -56,17 +61,25 @@ export async function registerSettingsRoutes(app: FastifyInstance) {
     }
   })
 
-  app.post('/api/settings/personal', async (request) => {
+  const updatePersonalSettings = async (request: FastifyRequest) => {
     const body = (request.body || {}) as Partial<PersonalSettings>
     const settings = await localDataStore.update((data) => {
+      const actor = getActor(data, request)
       data.personalSettings = {
         ...data.personalSettings,
         ...body,
+        experimental: {
+          ...data.personalSettings.experimental,
+          ...body.experimental,
+          serverHighResourceHosting: body.experimental?.serverHighResourceHosting
+            ?? data.personalSettings.experimental?.serverHighResourceHosting
+            ?? false,
+        },
       }
       data.auditEvents.push({
         id: createId('audit'),
-        actorId: 'local-user',
-        actorTier: 'user',
+        actorId: actor.id,
+        actorTier: actor.tier,
         action: 'settings.personal.update',
         ip: getClientIp(request),
         createdAt: new Date().toISOString(),
@@ -74,5 +87,8 @@ export async function registerSettingsRoutes(app: FastifyInstance) {
       return data.personalSettings
     })
     return { ok: true, settings }
-  })
+  }
+
+  app.post('/api/settings/personal', updatePersonalSettings)
+  app.patch('/api/settings/personal', updatePersonalSettings)
 }

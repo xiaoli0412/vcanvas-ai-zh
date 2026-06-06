@@ -4,6 +4,8 @@ import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import type { BinaryFileData } from '@excalidraw/excalidraw/types'
 import { Header } from './components/Header'
 import { ModePanel } from './components/ModePanel'
+import { ModelQuickSwitch } from './components/ModelQuickSwitch'
+import { PersonalSettingsModal } from './components/PersonalSettingsModal'
 import { ProviderModal } from './components/ProviderModal'
 import { PresetLibraryModal } from './components/PresetLibraryModal'
 import { Canvas } from './components/Canvas'
@@ -48,6 +50,7 @@ import {
   getActiveModelId,
   getProvider,
   isProviderConfigured,
+  isModelVideoEnabled,
   loadProviderState,
   loadVisionSupportMap,
   saveProviderState,
@@ -201,7 +204,9 @@ export function App() {
   const [promptStudio, setPromptStudio] = useState<PromptStudioState>(() => getModeStudioState(INITIAL_MODE_STATE, INITIAL_MODE_STATE.activeModeId))
   const [promptDraft, setPromptDraft] = useState(() => getModePromptDraft(INITIAL_MODE_STATE, INITIAL_MODE_STATE.activeModeId))
   const [savedPresets, setSavedPresets] = useState<PromptPresetRecord[]>(loadUserPromptPresets)
-  const [showSettings, setShowSettings] = useState(false)
+  const [showModelQuickSwitch, setShowModelQuickSwitch] = useState(false)
+  const [showProviderSettings, setShowProviderSettings] = useState(false)
+  const [showPersonalSettings, setShowPersonalSettings] = useState(false)
   const [showPresetLibrary, setShowPresetLibrary] = useState(false)
   const [showModePanel, setShowModePanel] = useState(false)
   const [showWebEmbedPanel, setShowWebEmbedPanel] = useState(false)
@@ -256,6 +261,15 @@ export function App() {
     () => formatPromptStudioSummary(promptStudio, t),
     [promptStudio, t],
   )
+  const videoRoutingNote = useMemo(() => {
+    if (activeModeId !== 'video') return ''
+    if (isModelVideoEnabled(provider, modelId)) return ''
+    return [
+      '## Video Capability Routing',
+      'The active model is not marked as video-capable. Do not assume direct video understanding.',
+      'Use selected keyframes, canvas screenshots, and visual translation notes as the authoritative video reference path.',
+    ].join('\n')
+  }, [activeModeId, provider, modelId])
 
   const previewRef = useRef<HTMLIFrameElement>(null)
   const panelLeftRef = useRef<HTMLDivElement>(null)
@@ -916,6 +930,7 @@ export function App() {
       buildWorkflowContextNotes(workflowContext),
       buildWebEmbedContextNotes(webEmbeds),
       activeModeId === 'video' ? buildVideoReferenceNotes(videoReference) : '',
+      videoRoutingNote,
     ].filter(Boolean).join('\n\n')
     const compiledPrompt = buildGeneratePrompt(prompt, promptStudio, {
       modeStarter: modeDefinition.starterPrompts[0],
@@ -1003,7 +1018,7 @@ export function App() {
       setGenerating(false)
       addChip({ role: 'assistant', text: 'ERR:' + (t(err.message) === err.message ? err.message : t(err.message)) })
     }
-  }, [provider, providerState, apiKey, modelId, generating, getSelectedFrameImages, addChip, prepareMessagesForCodeModel, t, promptStudio, activeModeId, getModeWorkflowContext, modeDefinition, contextPreferences, lastTurnReference, promptStudioSummary, videoReference, appendVideoKeyframeImages, webEmbeds])
+  }, [provider, providerState, apiKey, modelId, generating, getSelectedFrameImages, addChip, prepareMessagesForCodeModel, t, promptStudio, activeModeId, getModeWorkflowContext, modeDefinition, contextPreferences, lastTurnReference, promptStudioSummary, videoReference, appendVideoKeyframeImages, webEmbeds, videoRoutingNote])
 
   const handleRefine = useCallback(async (prompt: string) => {
     if (!isProviderConfigured(providerState) || generating) return
@@ -1026,6 +1041,7 @@ export function App() {
       buildWebEmbedContextNotes(webEmbeds),
       buildPreviewAnnotationNotes(previewAnnotations),
       activeModeId === 'video' ? buildVideoReferenceNotes(videoReference) : '',
+      videoRoutingNote,
     ].filter(Boolean).join('\n\n')
     const refinementPrompt = buildRefinePrompt(prompt, promptStudio, t('system.prompt.refineDefault'), {
       modeStarter: modeDefinition.starterPrompts[0],
@@ -1120,7 +1136,7 @@ export function App() {
       setGenerating(false)
       addChip({ role: 'assistant', text: 'ERR:' + (t(err.message) === err.message ? err.message : t(err.message)) })
     }
-  }, [provider, providerState, apiKey, modelId, generating, lastHTML, capturePreview, getSelectedFrameImages, addChip, prepareMessagesForCodeModel, t, promptStudio, promptStudioSummary, getModeWorkflowContext, modeDefinition, appendWorkflowReferenceImages, activeModeId, previewAnnotations, videoReference, appendVideoKeyframeImages, webEmbeds])
+  }, [provider, providerState, apiKey, modelId, generating, lastHTML, capturePreview, getSelectedFrameImages, addChip, prepareMessagesForCodeModel, t, promptStudio, promptStudioSummary, getModeWorkflowContext, modeDefinition, appendWorkflowReferenceImages, activeModeId, previewAnnotations, videoReference, appendVideoKeyframeImages, webEmbeds, videoRoutingNote])
 
   // ── Plan Mode: multi-step Gaze → Dream → Create ──
 
@@ -1227,6 +1243,7 @@ ${compiledSystemPrompt}`,
       buildWorkflowContextNotes(workflowContext),
       buildWebEmbedContextNotes(webEmbeds),
       activeModeId === 'video' ? buildVideoReferenceNotes(videoReference) : '',
+      videoRoutingNote,
     ].filter(Boolean).join('\n\n')
 
     for (const img of frameImages) {
@@ -1311,7 +1328,7 @@ ${compiledSystemPrompt}`,
       setPlanDone(true)
       addChip({ role: 'assistant', text: 'ERR: ' + (t(err.message) === err.message ? err.message : t(err.message)) })
     }
-  }, [providerState, generating, getSelectedFrameImages, addChip, runPlanPhase, t, promptStudioSummary, makeGazePrompt, makeDreamPrompt, makePlanCreatePrompt, getModeWorkflowContext, appendWorkflowReferenceImages, activeModeId, videoReference, appendVideoKeyframeImages, webEmbeds])
+  }, [providerState, generating, getSelectedFrameImages, addChip, runPlanPhase, t, promptStudioSummary, makeGazePrompt, makeDreamPrompt, makePlanCreatePrompt, getModeWorkflowContext, appendWorkflowReferenceImages, activeModeId, videoReference, appendVideoKeyframeImages, webEmbeds, videoRoutingNote])
 
   const handlePlanRefine = useCallback(async (prompt: string) => {
     if (!isProviderConfigured(providerState) || generating) return
@@ -1341,6 +1358,7 @@ ${compiledSystemPrompt}`,
       buildWebEmbedContextNotes(webEmbeds),
       buildPreviewAnnotationNotes(previewAnnotations),
       activeModeId === 'video' ? buildVideoReferenceNotes(videoReference) : '',
+      videoRoutingNote,
     ].filter(Boolean).join('\n\n')
 
     if (screenshotB64) {
@@ -1428,7 +1446,7 @@ ${compiledSystemPrompt}`,
       setPlanDone(true)
       addChip({ role: 'assistant', text: 'ERR: ' + (t(err.message) === err.message ? err.message : t(err.message)) })
     }
-  }, [providerState, generating, lastHTML, capturePreview, getSelectedFrameImages, addChip, runPlanPhase, t, promptStudio, promptStudioSummary, makeGazePrompt, makeDreamPrompt, makePlanCreatePrompt, getModeWorkflowContext, appendWorkflowReferenceImages, activeModeId, previewAnnotations, modeDefinition, videoReference, appendVideoKeyframeImages, webEmbeds])
+  }, [providerState, generating, lastHTML, capturePreview, getSelectedFrameImages, addChip, runPlanPhase, t, promptStudio, promptStudioSummary, makeGazePrompt, makeDreamPrompt, makePlanCreatePrompt, getModeWorkflowContext, appendWorkflowReferenceImages, activeModeId, previewAnnotations, modeDefinition, videoReference, appendVideoKeyframeImages, webEmbeds, videoRoutingNote])
 
   const canGenerate = isProviderConfigured(providerState)
   const needsKey = !canGenerate
@@ -1442,7 +1460,7 @@ ${compiledSystemPrompt}`,
         modeLabel={t(modeDefinition.labelKey)}
         modeSummary={t(modeDefinition.summaryKey)}
         hasKey={canGenerate}
-        onOpenSettings={() => setShowSettings(true)}
+        onOpenSettings={() => setShowModelQuickSwitch(true)}
         onOpenModePanel={() => setShowModePanel(true)}
         locale={locale}
         onToggleLocale={() => setLocale(prev => prev === 'zh-CN' ? 'en' : 'zh-CN')}
@@ -1462,7 +1480,32 @@ ${compiledSystemPrompt}`,
         fetchingRemixReference={fetchingRemixReference}
         t={t}
       />
-      {showSettings && (
+      {showModelQuickSwitch && (
+        <ModelQuickSwitch
+          state={providerState}
+          hasKey={canGenerate}
+          onUpdate={handleProviderUpdate}
+          onOpenConnectionSettings={() => {
+            setShowModelQuickSwitch(false)
+            setShowProviderSettings(true)
+          }}
+          onOpenPersonalSettings={() => {
+            setShowModelQuickSwitch(false)
+            setShowPersonalSettings(true)
+          }}
+          onClose={() => setShowModelQuickSwitch(false)}
+        />
+      )}
+      {showPersonalSettings && (
+        <PersonalSettingsModal
+          onClose={() => setShowPersonalSettings(false)}
+          onOpenConnectionSettings={() => {
+            setShowPersonalSettings(false)
+            setShowProviderSettings(true)
+          }}
+        />
+      )}
+      {showProviderSettings && (
         <ProviderModal
           state={providerState}
           visionState={visionProviderState}
@@ -1470,7 +1513,7 @@ ${compiledSystemPrompt}`,
           onUpdate={handleProviderUpdate}
           onUpdateVisionState={handleVisionProviderUpdate}
           onUpdateVisionSupportMap={handleVisionSupportUpdate}
-          onClose={() => setShowSettings(false)}
+          onClose={() => setShowProviderSettings(false)}
           t={t}
         />
       )}
@@ -1577,7 +1620,7 @@ ${compiledSystemPrompt}`,
                     </>
                   )}
                 </div>
-                <button className="btn btn-primary" style={{ marginTop: '16px', width: '100%' }} onClick={() => setShowSettings(true)}>
+                <button className="btn btn-primary" style={{ marginTop: '16px', width: '100%' }} onClick={() => setShowModelQuickSwitch(true)}>
                   {t('overlay.openSettings')}
                 </button>
               </div>

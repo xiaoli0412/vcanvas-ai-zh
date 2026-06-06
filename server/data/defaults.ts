@@ -3,24 +3,45 @@ import type {
   NoticeMessage,
   PersonalSettings,
   ProviderChannel,
+  QuotaLedger,
   RateLimitPolicy,
   SiteSettings,
+  UserAccount,
 } from '../../shared/contracts/publicServer'
+
+const ZERO_TIME = new Date(0).toISOString()
 
 export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   siteName: 'inscanvas Public Server',
   defaultModeId: 'custom',
   guestEnabled: true,
+  registrationEnabled: true,
   serverExecutionDefault: false,
   publicGalleryEnabled: false,
   experimentalFeaturesEnabled: true,
+  securityMode: 'normal',
+  workLimitPerOwner: 10,
+  galleryPublishLimits: {
+    'host-admin': null,
+    admin: null,
+    vip: 9,
+    user: 6,
+    guest: 0,
+  },
+  highLoadDegradeThreshold: 0.9,
+  longDisclaimer: 'inscanvas is a creative canvas platform. Public works and shared exports are user-directed content and must be reviewed by the creator before publication.',
 }
 
 export const DEFAULT_PERSONAL_SETTINGS: PersonalSettings = {
+  userId: 'guest-local',
   displayName: 'Guest',
   avatarUrl: null,
   motto: 'Canvas first.',
   preferredModeId: 'custom',
+  favoriteModelKeys: [],
+  experimental: {
+    serverHighResourceHosting: false,
+  },
 }
 
 export const DEFAULT_DISCLAIMER_POLICY: DisclaimerPolicy = {
@@ -48,6 +69,47 @@ export const DEFAULT_RATE_LIMIT_POLICIES: RateLimitPolicy[] = [
   },
 ]
 
+export const DEFAULT_USERS: UserAccount[] = [
+  {
+    id: 'local-admin',
+    email: null,
+    username: 'local-admin',
+    tier: 'host-admin',
+    profile: {
+      displayName: 'inscanvas owner',
+      avatarUrl: null,
+      motto: 'Canvas first.',
+      qq: null,
+    },
+    enabled: true,
+    createdAt: ZERO_TIME,
+    updatedAt: ZERO_TIME,
+    lastLoginAt: null,
+    lastLoginIp: null,
+  },
+]
+
+export const DEFAULT_QUOTA_LEDGERS: QuotaLedger[] = [
+  {
+    userId: 'guest-local',
+    tier: 'guest',
+    premiumCredits: 0,
+    baseCallsRemaining: 8,
+    hostedRunsRemaining: 0,
+    resetAt: ZERO_TIME,
+    hostedResetAt: ZERO_TIME,
+  },
+  {
+    userId: 'local-admin',
+    tier: 'host-admin',
+    premiumCredits: 999999,
+    baseCallsRemaining: 999999,
+    hostedRunsRemaining: 999999,
+    resetAt: ZERO_TIME,
+    hostedResetAt: ZERO_TIME,
+  },
+]
+
 export const DEFAULT_NOTICES: NoticeMessage[] = [
   {
     id: 'phase-2-public-server',
@@ -57,8 +119,8 @@ export const DEFAULT_NOTICES: NoticeMessage[] = [
     format: 'plain',
     audience: 'all',
     enabled: true,
-    createdAt: new Date(0).toISOString(),
-    updatedAt: new Date(0).toISOString(),
+    createdAt: ZERO_TIME,
+    updatedAt: ZERO_TIME,
   },
 ]
 
