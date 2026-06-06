@@ -8,10 +8,11 @@ interface Props {
   onReplace: (id: string, url: string) => void
   onRemove: (id: string) => void
   onStatusChange: (id: string, status: WebEmbedReference['status'], error?: string | null) => void
+  onClose: () => void
   t: Translate
 }
 
-export function WebEmbedPanel({ embeds, onReplace, onRemove, onStatusChange, t }: Props) {
+export function WebEmbedPanel({ embeds, onReplace, onRemove, onStatusChange, onClose, t }: Props) {
   const [activeId, setActiveId] = useState<string | null>(embeds[0]?.id || null)
   const [draftUrl, setDraftUrl] = useState('')
 
@@ -22,8 +23,13 @@ export function WebEmbedPanel({ embeds, onReplace, onRemove, onStatusChange, t }
   return (
     <div className="web-embed-panel">
       <div className="web-embed-header">
-        <span className="web-embed-title">{t('webEmbed.title')}</span>
-        <span className="web-embed-note">{t('webEmbed.note')}</span>
+        <div>
+          <span className="web-embed-title">{t('webEmbed.title')}</span>
+          <span className="web-embed-note">{t('webEmbed.note')}</span>
+        </div>
+        <button className="btn btn-ghost web-embed-close" onClick={onClose} type="button">
+          {t('common.close')}
+        </button>
       </div>
       <div className="web-embed-row">
         <div className="web-embed-list">

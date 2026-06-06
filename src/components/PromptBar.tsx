@@ -84,6 +84,8 @@ export function PromptBar({
   t,
 }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const showSecondaryControls = !compact || fineTuneExpanded
+  const showStarterControls = !compact || fineTuneExpanded
 
   const selectedWorkflow = useMemo(
     () => WORKFLOW_PRESETS.find((preset) => preset.id === studio.workflowId) || WORKFLOW_PRESETS[0],
@@ -136,8 +138,8 @@ export function PromptBar({
   )
 
   return (
-    <div className={`prompt-bar ${planMode ? 'plan-active' : ''}`}>
-      {!hasOutput && !prompt && (
+    <div className={`prompt-bar ${planMode ? 'plan-active' : ''} ${compact ? 'compact' : ''}`}>
+      {!hasOutput && !prompt && showStarterControls && (
         <div className="inspiration-strip">
           {(compact ? compactStarterItems : INSPIRATION).map((item) => (
             <button
@@ -157,7 +159,7 @@ export function PromptBar({
         </div>
       )}
 
-      {compact && (
+      {compact && fineTuneExpanded && (
         <div className="compact-mode-banner">
           <div>
             <span className="compact-mode-kicker">{t('mode.header')}</span>
@@ -170,7 +172,7 @@ export function PromptBar({
         </div>
       )}
 
-      {(!compact || fineTuneExpanded) && (
+      {showSecondaryControls && (
         <div className="studio-panel">
         <div className="studio-row studio-row-primary">
           <div className="studio-section">
@@ -295,14 +297,12 @@ export function PromptBar({
         </div>
       )}
 
-      <div className="context-panel">
+      {showSecondaryControls && <div className="context-panel">
         <div className="context-header-row">
           <span className="studio-label">{t('mode.context.title')}</span>
-          {compact && (
-            <button className="btn btn-ghost context-toggle-btn" onClick={onToggleFineTune} type="button">
-              {fineTuneExpanded ? t('mode.fineTune.hide') : t('mode.fineTune.show')}
-            </button>
-          )}
+          <button className="btn btn-ghost context-toggle-btn" onClick={onToggleFineTune} type="button">
+            {t('mode.fineTune.hide')}
+          </button>
         </div>
         <div className="context-grid">
           <label className="context-select-block">
@@ -358,9 +358,9 @@ export function PromptBar({
             <span>{t('mode.context.prevScreenshot')}</span>
           </label>
         </div>
-      </div>
+      </div>}
 
-      {modeDefinition.requiresWebsiteReference && (
+      {showSecondaryControls && modeDefinition.requiresWebsiteReference && (
         <div className="context-panel remix-panel">
           <div className="context-header-row">
             <span className="studio-label">{t('mode.remix.reference')}</span>
@@ -391,7 +391,7 @@ export function PromptBar({
         </div>
       )}
 
-      {modeDefinition.id === 'video' && videoReference && (
+      {showSecondaryControls && modeDefinition.id === 'video' && videoReference && (
         <div className="context-panel video-reference-panel">
           <div className="context-header-row">
             <span className="studio-label">{t('mode.video.reference')}</span>
@@ -438,7 +438,7 @@ export function PromptBar({
           ? t('prompt.placeholder.refine')
           : (compact ? t(modeDefinition.placeholderKey) : t('prompt.placeholder.generate'))
         }
-        rows={4}
+        rows={compact ? 2 : 4}
         disabled={generating}
       />
 
@@ -453,6 +453,11 @@ export function PromptBar({
           <span className="plan-toggle-label">{t('prompt.plan.label')}</span>
           {planMode && <span className="plan-toggle-hint">{t('prompt.plan.hint')}</span>}
         </button>
+        {compact && (
+          <button className="btn btn-secondary compact-fine-tune-btn" onClick={onToggleFineTune} type="button">
+            {fineTuneExpanded ? t('mode.fineTune.hide') : t('mode.fineTune.show')}
+          </button>
+        )}
 
         <div className="prompt-footer-right">
           {hasOutput && (

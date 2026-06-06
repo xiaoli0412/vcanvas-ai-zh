@@ -10,9 +10,16 @@
 
 .web-embed-header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
+}
+
+.web-embed-header > div {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
 }
 
 .web-embed-title {
@@ -27,6 +34,11 @@
 .web-embed-note {
   color: var(--text-muted);
   font-size: 10px;
+}
+
+.web-embed-close {
+  flex: 0 0 auto;
+  font-size: 10px !important;
 }
 
 .web-embed-row {

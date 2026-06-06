@@ -197,3 +197,24 @@
   color: var(--text-muted);
   letter-spacing: 0.04em;
 }
+
+@media (max-width: 760px) {
+  .workspace {
+    display: block;
+  }
+
+  .panel-left {
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    border-right: 0;
+  }
+
+  .panel-right {
+    display: none;
+  }
+
+  .api-key-overlay {
+    display: none;
+  }
+}

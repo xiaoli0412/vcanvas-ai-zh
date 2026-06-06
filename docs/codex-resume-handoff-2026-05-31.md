@@ -89,36 +89,46 @@
     - `/api/providers`
     - `/api/notices`
     - `/api/works` CRUD 占位
+  - 2026-06-06 续推进：
+    - 经典 / 自定义模式默认底栏彻底收口：只保留 prompt、Plan、细调入口、生成 / 润色和少量状态
+    - starter chips、模式说明、Studio、上下文携带、remix、视频关键帧全部改为展开细调后显示
+    - 移动端隐藏右侧 preview 分栏，避免 API key 覆盖层和 preview 把画布挤坏
+    - Header 在窄屏改为横向滚动，不再把 `INSC ANVAS` 压成竖排
+    - 默认 Provider 恢复为 `Compatible OpenAI`，内部仍沿用 `custom` 存储 ID
+    - 新增独立前端 Provider 卡：`ChatGPT`、`Kimi`
+    - 未经官方文档或 live `/models` 核查的模型不再作为新增 Provider 的预设硬编码目标
+    - 新增 `.vcanvas-data` 本地 JSON 持久化 adapter
+    - Fastify 与 `scripts/serve-vcanvas.mjs` 的核心 API 能力对齐：
+      - `/health`
+      - `/_vcanvas_proxy`
+      - `/api/session/*`
+      - `/api/providers`
+      - `/api/notices`
+      - `/api/settings/*`
+      - `/api/works/*`
+      - `/api/workflows/generate|refine|plan`
+      - `/api/remix/fetch`
+    - works、workflow runs、settings、notices、provider channels、sessions、audit events 进入本地持久化骨架
+    - workflow runs 默认 24h 留存，并对 HTML / 网页参考 / 上轮产物做压缩 v1
 
 ## 已验证
 - `npm run typecheck` 通过
 - `npm run typecheck:server` 通过
 - `npm run build` 通过
 - 当前仍有大 chunk 警告，但没有构建失败
+- Fastify 服务验证通过：
+  - health、proxy、index、providers、session、settings、notices、works CRUD、workflow generate、remix fetch
+- 轻量部署服务 `node scripts/serve-vcanvas.mjs` 验证通过：
+  - 同上核心接口
+- 浏览器截图审查通过：
+  - 桌面 `1440x960`
+  - 移动 `390x844`
+  - 重点确认画布不再被底栏和右侧覆盖层挤压
 
 ## 当前工作树状态
-- 尚未提交
-- 当前有大量未提交修改，包含：
-  - `src/App.tsx`
-  - `src/components/Header.tsx`
-  - `src/components/Header.css`
-  - `src/components/PromptBar.tsx`
-  - `src/components/PromptBar.css`
-  - `src/components/ModePanel.tsx`
-  - `src/components/ModePanel.css`
-  - `src/components/PreviewAnnotations.tsx`
-  - `src/components/PreviewAnnotations.css`
-  - `src/lib/canvasModes.ts`
-  - `src/lib/previewAnnotations.ts`
-  - `src/lib/videoReferences.ts`
-  - `src/lib/workflowContext.ts`
-  - `src/lib/websiteReference.ts`
-  - `src/lib/promptBuilder.ts`
-  - `src/lib/i18n.ts`
-  - `server/*`
-  - `shared/*`
-  - `docs/*`
-  - `tsconfig.server.json`
+- 本轮计划提交信息：`feat: harden canvas 2.0 public server foundation`
+- 推送目标：`publish/codex/canvas-lab-public-server`
+- 不推送 `origin`
 
 ## 下次启动后建议直接继续的顺序
 1. 先运行：
@@ -127,11 +137,13 @@
    - `npm run build`
 2. 先做前台稳定性继续项：
    - 检查 12 模式面板在中文下的实际显示
-   - 检查 compact starter chips 是否符合预期
+   - 检查“展开细调”后的 starter chips / Studio / 上下文是否符合预期
    - 实机确认 `Plan / Refine / Plan Refine` 的模式人格差异
 3. 然后继续 Canvas 2.0 文档中的下一批高优先级前台项：
    - Provider / 模型管理迁到“个人设置 - 模型与渠道”的 IA
    - Web Embed v1 的浏览器实机回归，包括 CSP / X-Frame-Options 受限页面的可见兜底
+   - Provider 模型能力徽标从 `V` 升级为图像 / 视频 / 工具调用 / 上下文窗口的能力标识
+   - 通过官方文档或 live `/models` 核查后再补各渠道预设模型
 4. 前台稳定后，再推进：
    - `newapi / subapi / octopus` bridge 空壳细化
    - session / auth / tier / quota 基础服务接口

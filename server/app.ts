@@ -33,6 +33,7 @@ export async function createServer() {
 
   app.options('/proxy', async (_request, reply) => reply.code(204).send())
   app.options('/_vcanvas_proxy', async (_request, reply) => reply.code(204).send())
+  app.options('/api/*', async (_request, reply) => reply.code(204).send())
 
   app.get('/health', async () => ({
     ok: true,

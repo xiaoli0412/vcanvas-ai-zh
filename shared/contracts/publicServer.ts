@@ -40,6 +40,9 @@ export interface ProviderChannel {
   apiType: 'openai-compatible' | 'openai' | 'azure-openai' | 'gemini' | 'ollama'
   models: ModelCapability[]
   verifiedAt?: string | null
+  verifiedSourceUrl?: string | null
+  favorite?: boolean
+  enabled?: boolean
 }
 
 export interface WebsiteReferenceContext {
@@ -135,6 +138,10 @@ export interface WorkRecord {
   description?: string
   modeId: CanvasModeId
   status: 'draft' | 'saved' | 'published' | 'archived'
+  html?: string
+  shareSlug?: string | null
+  galleryStatus?: 'private' | 'pending-review' | 'published' | 'rejected'
+  disclaimerInjectedAt?: string | null
   createdAt: string
   updatedAt: string
   snapshots: WorkSnapshot[]
@@ -203,6 +210,7 @@ export interface NoticeMessage {
   audience: UserTier[] | 'all'
   enabled: boolean
   createdAt: string
+  updatedAt?: string
 }
 
 export interface DisclaimerPolicy {

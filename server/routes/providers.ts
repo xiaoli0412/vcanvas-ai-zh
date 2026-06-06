@@ -1,55 +1,49 @@
 import type { FastifyInstance } from 'fastify'
 import type { ProviderChannel } from '../../shared/contracts/publicServer'
-
-const providerChannels: ProviderChannel[] = [
-  {
-    id: 'compatible-openai',
-    label: 'Compatible OpenAI',
-    apiType: 'openai-compatible',
-    models: [],
-    verifiedAt: null,
-  },
-  {
-    id: 'chatgpt',
-    label: 'ChatGPT',
-    endpoint: 'https://api.openai.com/v1/chat/completions',
-    apiType: 'openai',
-    models: [],
-    verifiedAt: null,
-  },
-  {
-    id: 'kimi',
-    label: 'Kimi',
-    endpoint: 'https://api.moonshot.ai/v1/chat/completions',
-    apiType: 'openai-compatible',
-    models: [],
-    verifiedAt: null,
-  },
-  { id: 'zai', label: 'z.ai', apiType: 'openai-compatible', models: [], verifiedAt: null },
-  { id: 'google', label: 'Google', apiType: 'gemini', models: [], verifiedAt: null },
-  { id: 'fireworks', label: 'Fireworks', apiType: 'openai-compatible', models: [], verifiedAt: null },
-  { id: 'openrouter', label: 'OpenRouter', apiType: 'openai-compatible', models: [], verifiedAt: null },
-  { id: 'modelscope', label: 'ModelScope', apiType: 'openai-compatible', models: [], verifiedAt: null },
-  { id: 'ollama', label: 'Ollama', apiType: 'ollama', models: [], verifiedAt: null },
-  { id: 'dmx', label: 'DMX', apiType: 'openai-compatible', models: [], verifiedAt: null },
-  { id: 'bailian', label: 'Alibaba Cloud Bailian', apiType: 'openai-compatible', models: [], verifiedAt: null },
-  { id: 'mimo', label: 'Xiaomi MiMo', apiType: 'openai-compatible', models: [], verifiedAt: null },
-  { id: 'stepfun', label: 'StepFun', apiType: 'openai-compatible', models: [], verifiedAt: null },
-  { id: 'nvidia', label: 'Nvidia', apiType: 'openai-compatible', models: [], verifiedAt: null },
-]
+import { createId, getClientIp, localDataStore } from '../data/localDataStore'
 
 export async function registerProviderRoutes(app: FastifyInstance) {
-  app.get('/api/providers', async () => ({
-    ok: true,
-    phase: 'phase-1-provider-governance-placeholder',
-    channels: providerChannels,
-    note: 'Model capability data is intentionally empty until verified against provider documentation or live APIs.',
-  }))
+  app.get('/api/providers', async () => {
+    const data = await localDataStore.read()
+    return {
+      ok: true,
+      channels: data.providerChannels,
+      note: 'Model capability data is persisted locally; built-in model rows should only be added after official-doc or live /models verification.',
+    }
+  })
 
-  app.post('/api/providers', async (request) => ({
-    ok: true,
-    phase: 'phase-1-provider-governance-placeholder',
-    received: request.body || null,
-    note: 'Provider creation is mocked in phase 1; persistence and encryption land in the account/security phase.',
-  }))
+  app.post('/api/providers', async (request) => {
+    const body = (request.body || {}) as Partial<ProviderChannel>
+    const now = new Date().toISOString()
+    const channel = await localDataStore.update((data) => {
+      const id = body.id?.trim() || createId('provider')
+      const existing = data.providerChannels.find((item) => item.id === id)
+      const next: ProviderChannel = {
+        id,
+        label: body.label?.trim() || existing?.label || id,
+        endpoint: body.endpoint?.trim() || existing?.endpoint,
+        apiType: body.apiType || existing?.apiType || 'openai-compatible',
+        models: body.models || existing?.models || [],
+        verifiedAt: body.verifiedAt ?? existing?.verifiedAt ?? null,
+        verifiedSourceUrl: body.verifiedSourceUrl ?? existing?.verifiedSourceUrl ?? null,
+        favorite: body.favorite ?? existing?.favorite ?? false,
+        enabled: body.enabled ?? existing?.enabled ?? true,
+      }
+      data.providerChannels = [
+        ...data.providerChannels.filter((item) => item.id !== id),
+        next,
+      ]
+      data.auditEvents.push({
+        id: createId('audit'),
+        actorId: 'local-admin',
+        actorTier: 'host-admin',
+        action: existing ? 'provider.update' : 'provider.create',
+        ip: getClientIp(request),
+        createdAt: now,
+        metadata: { providerId: id },
+      })
+      return next
+    })
+    return { ok: true, channel }
+  })
 }

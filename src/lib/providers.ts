@@ -110,13 +110,44 @@ const DEFAULT_CUSTOM: CustomProviderConfig = {
 
 export const PROVIDERS: ProviderDef[] = [
   {
+    id: 'custom',
+    name: 'Compatible OpenAI',
+    type: 'openai',
+    models: [],
+    keyHintKey: 'provider.keyHint.custom',
+    keyUrl: '',
+    keyUrlLabel: '',
+    storageKey: 'custom_key',
+    customConfig: true,
+  },
+  {
+    id: 'chatgpt',
+    name: 'ChatGPT',
+    type: 'openai',
+    endpoint: 'https://api.openai.com/v1/chat/completions',
+    models: [],
+    keyHintKey: 'provider.keyHint.chatgpt',
+    keyUrl: 'https://platform.openai.com/api-keys',
+    keyUrlLabel: 'OpenAI Platform',
+    storageKey: 'openai_key',
+  },
+  {
+    id: 'kimi',
+    name: 'Kimi',
+    type: 'openai',
+    endpoint: 'https://api.moonshot.ai/v1/chat/completions',
+    models: [],
+    keyHintKey: 'provider.keyHint.kimi',
+    keyUrl: 'https://platform.kimi.ai/',
+    keyUrlLabel: 'Kimi API',
+    storageKey: 'kimi_key',
+  },
+  {
     id: 'zai',
     name: 'z.ai',
     type: 'openai',
     endpoint: 'https://api.z.ai/api/paas/v4/chat/completions',
-    models: [
-      { id: 'glm-5v-turbo', label: 'GLM-5V Turbo', vision: true },
-    ],
+    models: [],
     keyHintKey: 'provider.keyHint.zai',
     keyUrl: 'https://z.ai',
     keyUrlLabel: 'z.ai',
@@ -127,11 +158,7 @@ export const PROVIDERS: ProviderDef[] = [
     name: 'Google',
     type: 'gemini',
     endpoint: 'https://generativelanguage.googleapis.com/v1beta',
-    models: [
-      { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro', vision: true },
-      { id: 'gemini-3-flash-preview', label: 'Gemini 3.1 Flash', vision: true },
-      { id: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Flash Lite', vision: true },
-    ],
+    models: [],
     keyHintKey: 'provider.keyHint.google',
     keyUrl: 'https://aistudio.google.com/apikey',
     keyUrlLabel: 'AI Studio',
@@ -142,9 +169,7 @@ export const PROVIDERS: ProviderDef[] = [
     name: 'Fireworks',
     type: 'openai',
     endpoint: 'https://api.fireworks.ai/inference/v1/chat/completions',
-    models: [
-      { id: 'accounts/fireworks/routers/kimi-k2p5-turbo', label: 'Kimi K2.5 Turbo', vision: true },
-    ],
+    models: [],
     keyHintKey: 'provider.keyHint.fireworks',
     keyUrl: 'https://app.fireworks.ai/fire-pass',
     keyUrlLabel: 'Fire Pass',
@@ -156,30 +181,11 @@ export const PROVIDERS: ProviderDef[] = [
     type: 'openai',
     endpoint: 'https://openrouter.ai/api/v1/chat/completions',
     fetchModels: true,
-    models: [
-      { id: 'anthropic/claude-4.6-sonnet-20260217', label: 'Claude 4.6 Sonnet', vision: true },
-      { id: 'anthropic/claude-opus-4.6', label: 'Claude 4.6 Opus', vision: true },
-      { id: 'google/gemini-3-flash-preview-20251217', label: 'Gemini 3 Flash', vision: true },
-      { id: 'x-ai/grok-4.1-fast', label: 'Grok 4.1 Fast', vision: true },
-      { id: 'qwen/qwen3.5-plus-02-15', label: 'Qwen 3.5 Plus', vision: true },
-      { id: 'xiaomi/mimo-v2-omni', label: 'MiMo V2 Omni', vision: true },
-      { id: 'moonshotai/kimi-k2.5-0127', label: 'Kimi K2.5', vision: true },
-    ],
+    models: [],
     keyHintKey: 'provider.keyHint.openrouter',
     keyUrl: 'https://openrouter.ai/keys',
     keyUrlLabel: 'OpenRouter',
     storageKey: 'openrouter_key',
-  },
-  {
-    id: 'custom',
-    name: 'Custom OpenAI',
-    type: 'openai',
-    models: [],
-    keyHintKey: 'provider.keyHint.custom',
-    keyUrl: '',
-    keyUrlLabel: '',
-    storageKey: 'custom_key',
-    customConfig: true,
   },
 ]
 
@@ -311,9 +317,9 @@ export function makeDefaultProviderState(): ProviderState {
   }
 
   const oldProvider = localStorage.getItem('vcanvas_provider')
-  let activeProviderId = PROVIDERS[0].id
-  if (oldProvider === 'glm5v') activeProviderId = 'zai'
-  else if (oldProvider === 'gemini') activeProviderId = 'google'
+  let activeProviderId = 'custom'
+  if (oldProvider === 'glm5v' && keys.zai) activeProviderId = 'zai'
+  else if (oldProvider === 'gemini' && keys.google) activeProviderId = 'google'
 
   const provider = getProvider(activeProviderId)
   return {
@@ -347,6 +353,9 @@ export function loadProviderState(storageKey = PROVIDER_STATE_STORAGE_KEY): Prov
       }
       if (!PROVIDERS.find(p => p.id === parsed.activeProviderId)) {
         parsed.activeProviderId = PROVIDERS[0].id
+      }
+      if (storageKey === PROVIDER_STATE_STORAGE_KEY && parsed.activeProviderId === 'zai' && !parsed.keys.zai) {
+        parsed.activeProviderId = 'custom'
       }
       const provider = getProvider(parsed.activeProviderId)
       const activeModelId = parsed.activeProviderId === 'custom'
@@ -413,9 +422,13 @@ export function getCustomConfigErrorForPurpose(
 
 export function getProviderConfigError(state: ProviderState): string | null {
   if (state.activeProviderId !== 'custom') {
-    return (state.keys[state.activeProviderId] || '').trim().length > 4
-      ? null
-      : 'provider.validation.apiKeyRequired'
+    if ((state.keys[state.activeProviderId] || '').trim().length <= 4) {
+      return 'provider.validation.apiKeyRequired'
+    }
+    if (!state.activeModelId?.trim()) {
+      return 'provider.validation.modelRequired'
+    }
+    return null
   }
 
   return getCustomConfigError(state.custom, state.keys.custom || '')

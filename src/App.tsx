@@ -204,15 +204,15 @@ export function App() {
   const [showSettings, setShowSettings] = useState(false)
   const [showPresetLibrary, setShowPresetLibrary] = useState(false)
   const [showModePanel, setShowModePanel] = useState(false)
-  const [fineTuneExpanded, setFineTuneExpanded] = useState(INITIAL_MODE_STATE.activeModeId === 'custom')
+  const [showWebEmbedPanel, setShowWebEmbedPanel] = useState(false)
+  const [fineTuneExpanded, setFineTuneExpanded] = useState(false)
   const [fetchingRemixReference, setFetchingRemixReference] = useState(false)
   const [lastTurnReference, setLastTurnReference] = useState<WorkflowTurnReference | null>(null)
 
   const t = useMemo(() => createTranslator(locale), [locale])
   const activeModeId = modeState.activeModeId
   const modeDefinition = useMemo(() => getCanvasModeDefinition(activeModeId), [activeModeId])
-  const isClassicMode = activeModeId === 'custom'
-  const compactPromptBar = !isClassicMode
+  const compactPromptBar = true
   const contextPreferences = useMemo(() => getModeContextPreferences(modeState, activeModeId), [modeState, activeModeId])
   const remixState = useMemo<RemixModeState | null>(() => getModeRemixState(modeState, activeModeId), [modeState, activeModeId])
   const provider = getProvider(providerState.activeProviderId)
@@ -272,9 +272,6 @@ export function App() {
   useEffect(() => {
     setPromptStudio(getModeStudioState(modeState, activeModeId))
     setPromptDraft(getModePromptDraft(modeState, activeModeId))
-    if (activeModeId === 'custom') {
-      setFineTuneExpanded(true)
-    }
   }, [modeState, activeModeId])
 
   useEffect(() => {
@@ -338,7 +335,7 @@ export function App() {
       },
     }))
     setShowModePanel(false)
-    setFineTuneExpanded(modeId === 'custom')
+    setFineTuneExpanded(false)
   }, [])
 
   const handlePromptChange = useCallback((value: string) => {
@@ -593,6 +590,7 @@ export function App() {
       })
       const frameId = newElements[0]?.id || null
       setWebEmbeds((prev) => [...prev, { ...draft, frameId }])
+      setShowWebEmbedPanel(true)
       setCanvasVersion((version) => version + 1)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -617,7 +615,11 @@ export function App() {
   }, [t])
 
   const handleRemoveWebEmbed = useCallback((id: string) => {
-    setWebEmbeds((prev) => prev.filter((embed) => embed.id !== id))
+    setWebEmbeds((prev) => {
+      const next = prev.filter((embed) => embed.id !== id)
+      if (next.length === 0) setShowWebEmbedPanel(false)
+      return next
+    })
   }, [])
 
   const handleWebEmbedStatusChange = useCallback((id: string, status: WebEmbedReference['status'], error?: string | null) => {
@@ -1493,19 +1495,24 @@ ${compiledSystemPrompt}`,
             onSelectionChange={setSelectedFrameIds}
             onAddFrame={handleAddFrame}
             onAddWebEmbed={handleAddWebEmbed}
+            onManageWebEmbeds={() => setShowWebEmbedPanel((visible) => !visible)}
+            webEmbedCount={webEmbeds.length}
             canvasVersion={canvasVersion}
             onSave={handleSave}
             onLoad={handleLoad}
             previewScreenshot={previewScreenshot}
             t={t}
           />
-          <WebEmbedPanel
-            embeds={webEmbeds}
-            onReplace={handleReplaceWebEmbed}
-            onRemove={handleRemoveWebEmbed}
-            onStatusChange={handleWebEmbedStatusChange}
-            t={t}
-          />
+          {showWebEmbedPanel && (
+            <WebEmbedPanel
+              embeds={webEmbeds}
+              onReplace={handleReplaceWebEmbed}
+              onRemove={handleRemoveWebEmbed}
+              onStatusChange={handleWebEmbedStatusChange}
+              onClose={() => setShowWebEmbedPanel(false)}
+              t={t}
+            />
+          )}
           <MessageStrip chips={chips} t={t} />
           <PromptBar
             onGenerate={planMode ? handlePlanGenerate : handleGenerate}

@@ -7,25 +7,26 @@
 ## Current Phase Summary
 - Branch renamed and pushed as `codex/canvas-lab-public-server`.
 - Public-server phase-1 skeleton exists in `server/`, `shared/`, and `docs/public-server-baseline.md`.
-- Canvas-first shell has begun: custom mode default, secondary mode panel, compact prompt controls, workflow context toggles, remix URL reference path, HTML export, image/video import, and Web Embed v1.
-- Frontend and new server skeleton both pass typecheck; app build passes.
+- Canvas-first shell is now the enforced default: classic/custom mode opens with a compact bottom prompt bar, while Studio, context, starters, remix, video keyframes, and Web Embed management stay in secondary panels.
+- Fastify `npm run server` and deployment `scripts/serve-vcanvas.mjs` now share the core public-server API surface with local JSON persistence.
+- Frontend, server typecheck, build, service smoke tests, and desktop/mobile browser screenshots passed on 2026-06-06.
 
 ## Completion Matrix
 
 ### 1. User System
 - `todo` Real auth/session system on top of latest `newapi`
-- `todo` 5-tier role model with host-admin/admin/vip/user/guest
-- `todo` 8h inactivity relogin
-- `todo` guest temporary login + right-top login notice payload
+- `in_progress` 5-tier role model with host-admin/admin/vip/user/guest in shared contracts and local/mock session payloads
+- `in_progress` 8h inactivity relogin skeleton in local session routes
+- `in_progress` guest temporary login + right-top login notice payload
 - `todo` QQ avatar sync
 - `todo` wallet/payment area split with stronger protection
 
 ### 2. Security
 - `todo` Encrypted provider keys for non-guest users
-- `todo` IP audit, throttling, and escalating lockouts
+- `in_progress` IP audit, throttling, and escalating lockouts
 - `todo` injection/leak prevention across UI and service routes
-- `todo` long/short disclaimer system
-- `todo` export/share comment injection with IP/time metadata
+- `in_progress` long/short disclaimer system
+- `in_progress` export/share comment injection with IP/time metadata
 
 ### 3. Performance
 - `todo` multi-user concurrency path and async work distribution
@@ -35,6 +36,7 @@
 
 ### 4. Canvas Tools / Modes
 - `done` secondary mode panel and canvas-first prompt shell
+- `done` classic/custom default prompt bar is compact and does not keep Studio/context/starters open
 - `done` explicit workflow context toggles
 - `done` remix/homepage reference fetch path
 - `done` image and video import at the same entry level
@@ -44,25 +46,27 @@
 - `done` precise right-side annotation editing mode for preview-based refine context
 - `done` Web Embed URL placeholder, edit/replace/remove controls, iframe preview, failure fallback, and prompt metadata
 - `todo` tool-calling / MCP / skill gated execution model
-- `todo` auto context compression
+- `in_progress` auto context compression v1 for workflow payloads
 
 ### 5. Models / Providers
 - `done` provider framework still intact after refactor
-- `todo` add more providers: ModelScope, Ollama, DMX, 百炼, Mimo, Step, Nvidia, etc.
+- `done` Compatible OpenAI restored as first/default provider for unconfigured users
+- `done` ChatGPT and Kimi added as distinct frontend provider cards without unverified model claims
+- `in_progress` add more providers: ModelScope, Ollama, DMX, 百炼, Mimo, Step, Nvidia, etc. as server-side channel entries
 - `todo` latest factual model lists with verified multimodal capabilities
 - `todo` model capability auto-detection similar to Asterbot
 - `todo` saved/favorited models and richer per-model capability badges
 - `todo` move provider management to personal settings and leave quick switch in header
 
 ### 6. Settings
-- `todo` site settings IA
-- `todo` personal settings IA
-- `todo` notice / warning / announcement systems
+- `in_progress` site settings IA
+- `in_progress` personal settings IA
+- `in_progress` notice / warning / announcement systems
 - `todo` ops dashboard
 
 ### 7. Works / Gallery / Share
 - `done` HTML export from preview
-- `todo` persistent work save/load on server
+- `in_progress` persistent work save/load on server through local JSON store and `/api/works`
 - `todo` import HTML with limits
 - `todo` share links
 - `todo` gallery / 鉴赏厅 with moderation and quotas
@@ -76,8 +80,19 @@
 ### 9. Backend Logic
 - `done` public-server skeleton and first API placeholders
 - `done` phase-1 session, providers, notices, settings, works, assets, remix, and workflow route contracts
+- `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve `/health`, `/_vcanvas_proxy`, `/api/session/*`, `/api/providers`, `/api/notices`, `/api/settings/*`, `/api/works/*`, `/api/remix/fetch`, and workflow enqueue routes
+- `done` local JSON persistence adapter for site settings, personal settings, notices, providers, works, workflow runs, sessions, and audit events
+- `in_progress` 24h workflow run retention with compressed context payloads
 - `todo` bridge `newapi`, `subapi`, `octopus`
 - `todo` persistence, queues, quotas, task recovery, migration
+
+## 2026-06-06 Validation
+- `npm run typecheck` passed.
+- `npm run typecheck:server` passed.
+- `npm run build` passed with existing large chunk warnings only.
+- Fastify smoke test passed for health, proxy, index, providers, session, settings, notices, works CRUD, workflow generate, and remix fetch.
+- Lightweight deployment server smoke test passed for the same core endpoints.
+- Browser screenshots reviewed at `1440x960` and `390x844`; default canvas view is compact and mobile no longer shows the right preview panel crushing the canvas.
 
 ### 10. Sign-in / Quota
 - `todo` login-as-signin flow
