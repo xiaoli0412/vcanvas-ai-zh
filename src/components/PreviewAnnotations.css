@@ -1,0 +1,135 @@
+.preview-annotation-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 18;
+  pointer-events: none;
+}
+
+.preview-annotation-layer.active {
+  cursor: crosshair;
+  pointer-events: auto;
+  background:
+    linear-gradient(rgba(12, 14, 22, 0.06), rgba(12, 14, 22, 0.06)),
+    radial-gradient(circle at center, transparent 0, transparent 60%, rgba(12, 14, 22, 0.16));
+}
+
+.preview-annotation-empty {
+  position: absolute;
+  left: 50%;
+  top: 18px;
+  transform: translateX(-50%);
+  padding: 6px 10px;
+  border: 1px solid rgba(119, 132, 204, 0.3);
+  border-radius: 999px;
+  background: rgba(16, 19, 30, 0.86);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-family: var(--font-sans);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.24);
+  pointer-events: none;
+}
+
+.preview-annotation-pin {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(180, 140, 255, 0.6);
+  border-radius: 50%;
+  background: rgba(20, 22, 34, 0.92);
+  color: #d8caff;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  pointer-events: auto;
+  box-shadow: 0 0 0 3px rgba(180, 140, 255, 0.12), 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+.preview-annotation-pin.selected {
+  border-color: rgba(180, 140, 255, 0.95);
+  background: rgba(51, 42, 82, 0.98);
+  color: #fff;
+}
+
+.preview-annotation-editor {
+  position: absolute;
+  width: min(280px, calc(100% - 24px));
+  transform: translate(-12px, 18px);
+  border: 1px solid rgba(119, 132, 204, 0.38);
+  border-radius: 8px;
+  background: rgba(15, 17, 27, 0.96);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.38);
+  padding: 10px;
+  cursor: default;
+}
+
+.preview-annotation-editor.flip-x {
+  transform: translate(calc(-100% + 12px), 18px);
+}
+
+.preview-annotation-editor.flip-y {
+  transform: translate(-12px, calc(-100% - 18px));
+}
+
+.preview-annotation-editor.flip-x.flip-y {
+  transform: translate(calc(-100% + 12px), calc(-100% - 18px));
+}
+
+.preview-annotation-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.preview-annotation-icon-btn {
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.preview-annotation-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.preview-annotation-editor textarea {
+  width: 100%;
+  min-height: 74px;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  padding: 9px 10px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.5;
+  outline: none;
+}
+
+.preview-annotation-editor textarea:focus {
+  border-color: rgba(180, 140, 255, 0.55);
+}
+
+.preview-annotation-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 8px;
+}

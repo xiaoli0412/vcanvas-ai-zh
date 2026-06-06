@@ -214,6 +214,48 @@
   font-weight: 600;
 }
 
+.pm-capability-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 2px;
+}
+
+.pm-capability-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 14px;
+  padding: 0 4px;
+  border-radius: 999px;
+  border: 1px solid rgba(130, 143, 210, 0.28);
+  background: rgba(68, 75, 134, 0.18);
+  color: #b8c1ff;
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  line-height: 1;
+}
+
+.pm-capability-badge.video {
+  border-color: rgba(255, 126, 111, 0.3);
+  background: rgba(255, 126, 111, 0.1);
+  color: #ffb3a9;
+}
+
+.pm-capability-badge.tools {
+  border-color: rgba(178, 227, 122, 0.28);
+  background: rgba(178, 227, 122, 0.1);
+  color: #d2f0a0;
+}
+
+.pm-capability-badge.context {
+  border-color: rgba(74, 158, 142, 0.32);
+  background: rgba(74, 158, 142, 0.1);
+  color: var(--accent);
+}
+
 .pm-custom-panel {
   display: flex;
   flex-direction: column;

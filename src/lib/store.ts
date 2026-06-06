@@ -1,5 +1,8 @@
 // Shared types
 
+import type { WorkflowTurnReference } from '../../shared/contracts/publicServer'
+import type { WebEmbedReference } from './webEmbeds'
+
 export interface ChatChip {
   role: 'user' | 'assistant'
   text: string
@@ -7,25 +10,14 @@ export interface ChatChip {
   images?: { src: string; label: string }[]
 }
 
-export function createModeChip(
-  role: ChatChip['role'],
-  text: string,
-  modeBadge: string,
-  partial: Omit<Partial<ChatChip>, 'role' | 'text'> = {},
-): ChatChip {
-  return {
-    role,
-    text,
-    badge: partial.badge || modeBadge,
-    images: partial.images,
-  }
+export function trimChipText(text: string, maxLength = 72) {
+  const normalized = text.replace(/\s+/g, ' ').trim()
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1)}…` : normalized
 }
 
-export function trimChipText(text: string, maxLength = 40) {
-  if (text.length <= maxLength) return text
-  return `${text.slice(0, maxLength)}…`
-}
-
-export function formatOutcomeText(actionLabel: string) {
-  return `OK · ${actionLabel}`
+export interface ExportedCanvasData {
+  elements: unknown
+  files?: unknown
+  workflowState?: WorkflowTurnReference | null
+  webEmbeds?: WebEmbedReference[]
 }

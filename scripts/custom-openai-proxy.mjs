@@ -8,7 +8,7 @@ const host = process.env.VCANVAS_PROXY_HOST || DEFAULT_PROXY_HOST
 
 startProxyServer({ port, host })
   .then(({ proxyUrl }) => {
-    console.log(`VCanvas custom OpenAI proxy listening on ${proxyUrl}`)
+    console.log(`inscanvas custom OpenAI proxy listening on ${proxyUrl}`)
   })
   .catch((error) => {
     console.error(error)

@@ -1,6 +1,7 @@
-import React, { useRef, useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useRef, useCallback, useMemo } from 'react'
 import type { Translate } from '../lib/i18n'
-import type { CanvasModeDefinition } from '../lib/canvasModes'
+import type { CanvasModeDefinition, WorkflowContextPreferences, RemixModeState } from '../lib/canvasModes'
+import type { VideoReference } from '../lib/videoReferences'
 import {
   BRAND_STYLE_PRESETS,
   DENSITY_OPTIONS,
@@ -22,81 +23,74 @@ const INSPIRATION = [
 ]
 
 interface Props {
-  modeDefinition: CanvasModeDefinition
   onGenerate: (prompt: string) => void
   onRefine: (prompt: string) => void
   onClear: () => void
-  onSurprise: (currentPrompt: string) => void
   prompt: string
   onPromptChange: (value: string) => void
   studio: PromptStudioState
   onStudioChange: (state: PromptStudioState) => void
   onOpenLibrary: () => void
-  fineTuneExpanded: boolean
-  onFineTuneToggle: () => void
-  remixUrl: string
-  onRemixUrlChange: (value: string) => void
-  onFetchRemixReference: () => void
-  remixFetchLoading: boolean
-  remixFetchError: string | null
-  hasWebsiteReference: boolean
-  websiteReferenceSummary: string
-  onClearWebsiteReference: () => void
   hasOutput: boolean
-  previousRoundAvailable: boolean
-  includePreviousRoundContext: boolean
-  onIncludePreviousRoundContextChange: (value: boolean) => void
   generating: boolean
   planMode: boolean
   onPlanModeToggle: () => void
+  modeDefinition: CanvasModeDefinition
+  compact: boolean
+  fineTuneExpanded: boolean
+  onToggleFineTune: () => void
+  onSurprise: () => void
+  contextPreferences: WorkflowContextPreferences
+  onContextPreferencesChange: (next: WorkflowContextPreferences) => void
+  remixState: RemixModeState | null
+  onRemixUrlChange: (url: string) => void
+  onFetchRemixReference: () => void
+  fetchingRemixReference: boolean
+  videoReference: VideoReference | null
+  onVideoKeyframeToggle: (keyframeId: string) => void
+  onClearVideoReference: () => void
   hasKey: boolean
   t: Translate
 }
 
 export function PromptBar({
-  modeDefinition,
   onGenerate,
   onRefine,
   onClear,
-  onSurprise,
   prompt,
   onPromptChange,
   studio,
   onStudioChange,
   onOpenLibrary,
-  fineTuneExpanded,
-  onFineTuneToggle,
-  remixUrl,
-  onRemixUrlChange,
-  onFetchRemixReference,
-  remixFetchLoading,
-  remixFetchError,
-  hasWebsiteReference,
-  websiteReferenceSummary,
-  onClearWebsiteReference,
   hasOutput,
-  previousRoundAvailable,
-  includePreviousRoundContext,
-  onIncludePreviousRoundContextChange,
   generating,
   planMode,
   onPlanModeToggle,
+  modeDefinition,
+  compact,
+  fineTuneExpanded,
+  onToggleFineTune,
+  onSurprise,
+  contextPreferences,
+  onContextPreferencesChange,
+  remixState,
+  onRemixUrlChange,
+  onFetchRemixReference,
+  fetchingRemixReference,
+  videoReference,
+  onVideoKeyframeToggle,
+  onClearVideoReference,
   hasKey,
   t,
 }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const isClassicMode = modeDefinition.id === 'classic-studio'
-  const isRemixMode = modeDefinition.id === 'remix'
-  const [modeToolsOpen, setModeToolsOpen] = useState(false)
+  const showSecondaryControls = !compact || fineTuneExpanded
+  const showStarterControls = !compact || fineTuneExpanded
 
   const selectedWorkflow = useMemo(
     () => WORKFLOW_PRESETS.find((preset) => preset.id === studio.workflowId) || WORKFLOW_PRESETS[0],
     [studio.workflowId],
   )
-
-  useEffect(() => {
-    setModeToolsOpen(false)
-  }, [modeDefinition.id])
 
   const applyStudioPatch = useCallback((patch: Partial<PromptStudioState>) => {
     onStudioChange({ ...studio, ...patch })
@@ -117,12 +111,11 @@ export function PromptBar({
     if (hasOutput) {
       onRefine(text)
     } else {
-      if (isRemixMode && !hasWebsiteReference) return
-      if (!text && !(isRemixMode && hasWebsiteReference)) return
+      if (!text) return
       onGenerate(text)
     }
     onPromptChange('')
-  }, [prompt, generating, hasOutput, onGenerate, onRefine, onPromptChange, isRemixMode, hasWebsiteReference])
+  }, [prompt, generating, hasOutput, onGenerate, onRefine, onPromptChange])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
@@ -136,290 +129,303 @@ export function PromptBar({
     textareaRef.current?.focus()
   }, [onPromptChange])
 
-  const handleSurprise = useCallback(() => {
-    onSurprise(prompt)
-    textareaRef.current?.focus()
-  }, [onSurprise, prompt])
-
-  const studioPanel = (
-    <div className="studio-panel">
-      <div className="studio-row studio-row-primary">
-        <div className="studio-section">
-          <div className="studio-label-row">
-            <span className="studio-label">{t('studio.workflow.label')}</span>
-            <div className="studio-meta-row">
-              <span className="studio-meta">{t(selectedWorkflow.descriptionKey)}</span>
-              <button className="btn btn-secondary studio-library-btn" type="button" onClick={onOpenLibrary}>
-                {t('preset.library.open')}
-              </button>
-            </div>
-          </div>
-          <div className="studio-chip-strip">
-            {WORKFLOW_PRESETS.map((preset) => (
-              <button
-                key={preset.id}
-                type="button"
-                className={`studio-chip ${studio.workflowId === preset.id ? 'selected' : ''}`}
-                onClick={() => applyStudioPatch({ workflowId: preset.id })}
-                disabled={generating}
-              >
-                {t(preset.labelKey)}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="studio-row">
-        <div className="studio-section">
-          <div className="studio-label-row">
-            <span className="studio-label">{t('studio.style.label')}</span>
-            <span className="studio-meta">{t('studio.style.meta')}</span>
-          </div>
-          <div className="studio-chip-strip">
-            {BRAND_STYLE_PRESETS.map((preset) => (
-              <button
-                key={preset.id}
-                type="button"
-                className={`studio-chip ${studio.styleIds.includes(preset.id) ? 'selected' : ''}`}
-                onClick={() => toggleStyle(preset.id)}
-                disabled={generating}
-              >
-                {t(preset.labelKey)}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="studio-grid">
-        <label className="studio-select-block">
-          <span className="studio-label">{t('studio.surface.label')}</span>
-          <select
-            className="studio-select"
-            value={studio.surface}
-            onChange={(e) => applyStudioPatch({ surface: e.target.value as PromptStudioState['surface'] })}
-            disabled={generating}
-          >
-            {SURFACE_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id}>{t(option.labelKey)}</option>
-            ))}
-          </select>
-        </label>
-
-        <label className="studio-select-block">
-          <span className="studio-label">{t('studio.tone.label')}</span>
-          <select
-            className="studio-select"
-            value={studio.tone}
-            onChange={(e) => applyStudioPatch({ tone: e.target.value as PromptStudioState['tone'] })}
-            disabled={generating}
-          >
-            {TONE_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id}>{t(option.labelKey)}</option>
-            ))}
-          </select>
-        </label>
-
-        <label className="studio-select-block">
-          <span className="studio-label">{t('studio.density.label')}</span>
-          <select
-            className="studio-select"
-            value={studio.density}
-            onChange={(e) => applyStudioPatch({ density: e.target.value as PromptStudioState['density'] })}
-            disabled={generating}
-          >
-            {DENSITY_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id}>{t(option.labelKey)}</option>
-            ))}
-          </select>
-        </label>
-
-        <label className="studio-select-block">
-          <span className="studio-label">{t('studio.motion.label')}</span>
-          <select
-            className="studio-select"
-            value={studio.motion}
-            onChange={(e) => applyStudioPatch({ motion: e.target.value as PromptStudioState['motion'] })}
-            disabled={generating}
-          >
-            {MOTION_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id}>{t(option.labelKey)}</option>
-            ))}
-          </select>
-        </label>
-
-        <label className="studio-select-block">
-          <span className="studio-label">{t('studio.fidelity.label')}</span>
-          <select
-            className="studio-select"
-            value={studio.fidelity}
-            onChange={(e) => applyStudioPatch({ fidelity: e.target.value as PromptStudioState['fidelity'] })}
-            disabled={generating}
-          >
-            {FIDELITY_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id}>{t(option.labelKey)}</option>
-            ))}
-          </select>
-        </label>
-      </div>
-    </div>
-  )
-
-  const classicDrawer = (
-    <>
-      <div className="mode-compact-bar classic-compact-bar">
-        <div className="mode-compact-copy">
-          <span className="mode-compact-pill">{t(modeDefinition.labelKey)}</span>
-        </div>
-        <button
-          type="button"
-          className={`btn btn-secondary mode-tools-toggle ${modeToolsOpen ? 'active' : ''}`}
-          onClick={() => setModeToolsOpen((prev) => !prev)}
-          disabled={generating}
-        >
-          {modeToolsOpen ? t('mode.tools.close') : t('mode.tools.open')}
-        </button>
-      </div>
-
-      {modeToolsOpen && (
-        <div className="mode-drawer classic-mode-drawer">
-          {!hasOutput && !prompt && (
-            <div className="inspiration-strip">
-              {INSPIRATION.map((item) => (
-                <button
-                  key={item.labelKey}
-                  className="inspiration-chip"
-                  onClick={() => handleInspiration(item.prompt)}
-                  disabled={generating}
-                >
-                  {t(item.labelKey)}
-                </button>
-              ))}
-            </div>
-          )}
-          {studioPanel}
-        </div>
-      )}
-    </>
+  const compactStarterItems = useMemo(
+    () => modeDefinition.starterPrompts.map((promptText, index) => ({
+      labelKey: `mode.starter.${modeDefinition.id}.${index}`,
+      prompt: promptText,
+    })),
+    [modeDefinition],
   )
 
   return (
-    <div className={`prompt-bar ${planMode ? 'plan-active' : ''} ${isClassicMode ? 'mode-classic' : 'mode-guided'}`}>
-      {isClassicMode ? (
-        classicDrawer
-      ) : (
-        <>
-          {isRemixMode && (
-            <div className="remix-url-panel">
-              <div className="remix-url-row">
-                <input
-                  type="text"
-                  className="remix-url-input"
-                  value={remixUrl}
-                  onChange={(e) => onRemixUrlChange(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      onFetchRemixReference()
-                    }
-                  }}
-                  placeholder={t('mode.remix.urlPlaceholder')}
-                  spellCheck={false}
-                />
-                <button
-                  type="button"
-                  className="btn btn-primary remix-fetch-btn"
-                  onClick={onFetchRemixReference}
-                  disabled={remixFetchLoading}
-                >
-                  {remixFetchLoading ? t('mode.remix.fetching') : t('mode.remix.fetch')}
-                </button>
-              </div>
-              <div className="remix-reference-row">
-                <span className={`remix-reference-status ${hasWebsiteReference ? 'ready' : 'idle'}`}>
-                  {hasWebsiteReference ? websiteReferenceSummary : t('mode.remix.referenceMissing')}
-                </span>
-                {hasWebsiteReference && (
-                  <button
-                    type="button"
-                    className="btn btn-ghost remix-clear-btn"
-                    onClick={onClearWebsiteReference}
-                    disabled={generating}
-                  >
-                    {t('mode.remix.clear')}
-                  </button>
-                )}
-              </div>
-              {remixFetchError && <div className="remix-error">{remixFetchError}</div>}
-            </div>
-          )}
-
-          <div className="mode-compact-bar">
-            <div className="mode-compact-copy">
-              <span className="mode-compact-pill">{t(modeDefinition.labelKey)}</span>
-            </div>
+    <div className={`prompt-bar ${planMode ? 'plan-active' : ''} ${compact ? 'compact' : ''}`}>
+      {!hasOutput && !prompt && showStarterControls && (
+        <div className="inspiration-strip">
+          {(compact ? compactStarterItems : INSPIRATION).map((item) => (
             <button
-              type="button"
-              className={`btn btn-secondary mode-tools-toggle ${modeToolsOpen ? 'active' : ''}`}
-              onClick={() => setModeToolsOpen((prev) => !prev)}
+              key={item.labelKey}
+              className="inspiration-chip"
+              onClick={() => handleInspiration(item.prompt)}
               disabled={generating}
             >
-              {modeToolsOpen ? t('mode.tools.close') : t('mode.tools.open')}
+              {t(item.labelKey)}
+            </button>
+          ))}
+          {compact && (
+            <button className="inspiration-chip inspiration-chip-surprise" onClick={onSurprise} disabled={generating}>
+              {t('mode.surprise')}
+            </button>
+          )}
+        </div>
+      )}
+
+      {compact && fineTuneExpanded && (
+        <div className="compact-mode-banner">
+          <div>
+            <span className="compact-mode-kicker">{t('mode.header')}</span>
+            <div className="compact-mode-title">{t(modeDefinition.labelKey)}</div>
+            <p className="compact-mode-summary">{t(modeDefinition.summaryKey)}</p>
+          </div>
+          <button className="btn btn-secondary compact-mode-toggle" onClick={onToggleFineTune} type="button">
+            {fineTuneExpanded ? t('mode.fineTune.hide') : t('mode.fineTune.show')}
+          </button>
+        </div>
+      )}
+
+      {showSecondaryControls && (
+        <div className="studio-panel">
+        <div className="studio-row studio-row-primary">
+          <div className="studio-section">
+            <div className="studio-label-row">
+              <span className="studio-label">{t('studio.workflow.label')}</span>
+              <div className="studio-meta-row">
+                <span className="studio-meta">{t(selectedWorkflow.descriptionKey)}</span>
+                <button className="btn btn-secondary studio-library-btn" type="button" onClick={onOpenLibrary}>
+                  {t('preset.library.open')}
+                </button>
+              </div>
+            </div>
+            <div className="studio-chip-strip">
+              {WORKFLOW_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  className={`studio-chip ${studio.workflowId === preset.id ? 'selected' : ''}`}
+                  onClick={() => applyStudioPatch({ workflowId: preset.id })}
+                  disabled={generating}
+                >
+                  {t(preset.labelKey)}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="studio-row">
+          <div className="studio-section">
+            <div className="studio-label-row">
+              <span className="studio-label">{t('studio.style.label')}</span>
+              <span className="studio-meta">{t('studio.style.meta')}</span>
+            </div>
+            <div className="studio-chip-strip">
+              {BRAND_STYLE_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  className={`studio-chip ${studio.styleIds.includes(preset.id) ? 'selected' : ''}`}
+                  onClick={() => toggleStyle(preset.id)}
+                  disabled={generating}
+                >
+                  {t(preset.labelKey)}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="studio-grid">
+          <label className="studio-select-block">
+            <span className="studio-label">{t('studio.surface.label')}</span>
+            <select
+              className="studio-select"
+              value={studio.surface}
+              onChange={(e) => applyStudioPatch({ surface: e.target.value as PromptStudioState['surface'] })}
+              disabled={generating}
+            >
+              {SURFACE_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>{t(option.labelKey)}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="studio-select-block">
+            <span className="studio-label">{t('studio.tone.label')}</span>
+            <select
+              className="studio-select"
+              value={studio.tone}
+              onChange={(e) => applyStudioPatch({ tone: e.target.value as PromptStudioState['tone'] })}
+              disabled={generating}
+            >
+              {TONE_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>{t(option.labelKey)}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="studio-select-block">
+            <span className="studio-label">{t('studio.density.label')}</span>
+            <select
+              className="studio-select"
+              value={studio.density}
+              onChange={(e) => applyStudioPatch({ density: e.target.value as PromptStudioState['density'] })}
+              disabled={generating}
+            >
+              {DENSITY_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>{t(option.labelKey)}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="studio-select-block">
+            <span className="studio-label">{t('studio.motion.label')}</span>
+            <select
+              className="studio-select"
+              value={studio.motion}
+              onChange={(e) => applyStudioPatch({ motion: e.target.value as PromptStudioState['motion'] })}
+              disabled={generating}
+            >
+              {MOTION_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>{t(option.labelKey)}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="studio-select-block">
+            <span className="studio-label">{t('studio.fidelity.label')}</span>
+            <select
+              className="studio-select"
+              value={studio.fidelity}
+              onChange={(e) => applyStudioPatch({ fidelity: e.target.value as PromptStudioState['fidelity'] })}
+              disabled={generating}
+            >
+              {FIDELITY_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>{t(option.labelKey)}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        </div>
+      )}
+
+      {showSecondaryControls && <div className="context-panel">
+        <div className="context-header-row">
+          <span className="studio-label">{t('mode.context.title')}</span>
+          <button className="btn btn-ghost context-toggle-btn" onClick={onToggleFineTune} type="button">
+            {t('mode.fineTune.hide')}
+          </button>
+        </div>
+        <div className="context-grid">
+          <label className="context-select-block">
+            <span className="context-label">{t('mode.context.carry')}</span>
+            <select
+              className="studio-select"
+              value={contextPreferences.carryPolicy}
+              onChange={(e) => onContextPreferencesChange({
+                ...contextPreferences,
+                carryPolicy: e.target.value as WorkflowContextPreferences['carryPolicy'],
+              })}
+              disabled={generating}
+            >
+              <option value="disabled">{t('mode.context.disabled')}</option>
+              <option value="last-turn">{t('mode.context.lastTurn')}</option>
+              <option value="full">{t('mode.context.full')}</option>
+            </select>
+          </label>
+          <label className="context-check">
+            <input
+              type="checkbox"
+              checked={contextPreferences.includePreviousPrompt}
+              onChange={(e) => onContextPreferencesChange({
+                ...contextPreferences,
+                includePreviousPrompt: e.target.checked,
+              })}
+              disabled={generating}
+            />
+            <span>{t('mode.context.prevPrompt')}</span>
+          </label>
+          <label className="context-check">
+            <input
+              type="checkbox"
+              checked={contextPreferences.includePreviousOutput}
+              onChange={(e) => onContextPreferencesChange({
+                ...contextPreferences,
+                includePreviousOutput: e.target.checked,
+              })}
+              disabled={generating}
+            />
+            <span>{t('mode.context.prevOutput')}</span>
+          </label>
+          <label className="context-check">
+            <input
+              type="checkbox"
+              checked={contextPreferences.includePreviousScreenshot}
+              onChange={(e) => onContextPreferencesChange({
+                ...contextPreferences,
+                includePreviousScreenshot: e.target.checked,
+              })}
+              disabled={generating}
+            />
+            <span>{t('mode.context.prevScreenshot')}</span>
+          </label>
+        </div>
+      </div>}
+
+      {showSecondaryControls && modeDefinition.requiresWebsiteReference && (
+        <div className="context-panel remix-panel">
+          <div className="context-header-row">
+            <span className="studio-label">{t('mode.remix.reference')}</span>
+            <span className="context-mini-copy">{t('mode.remix.referenceNote')}</span>
+          </div>
+          <div className="remix-reference-row">
+            <input
+              className="prompt-input remix-reference-input"
+              value={remixState?.url || ''}
+              onChange={(e) => onRemixUrlChange(e.target.value)}
+              placeholder={t('mode.remix.placeholder')}
+              disabled={generating}
+            />
+            <button className="btn btn-secondary" onClick={onFetchRemixReference} disabled={generating || fetchingRemixReference}>
+              {fetchingRemixReference ? t('mode.remix.loading') : t('mode.remix.fetch')}
             </button>
           </div>
-
-          {modeToolsOpen && (
-            <div className="mode-drawer">
-              <div className="mode-drawer-header">
-                <div className="mode-drawer-copy">
-                  <span className="mode-drawer-label">{t(modeDefinition.labelKey)}</span>
-                  <p className="mode-drawer-summary">{t(modeDefinition.summaryKey)}</p>
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-primary mode-surprise-btn"
-                  onClick={handleSurprise}
-                  disabled={generating}
-                >
-                  {t(modeDefinition.ui.surpriseLabelKey)}
-                </button>
-              </div>
-              <div className="studio-chip-strip mode-starter-strip">
-                {modeDefinition.starterPrompts.map((starter) => (
-                  <button
-                    key={starter.labelKey}
-                    type="button"
-                    className="studio-chip mode-starter-chip"
-                    onClick={() => handleInspiration(starter.prompt)}
-                    disabled={generating}
-                  >
-                    {t(starter.labelKey)}
-                  </button>
-                ))}
-              </div>
-
-              {isRemixMode && hasWebsiteReference && (
-                <div className="remix-drawer-note">
-                  {t('mode.remix.referenceReady')}
-                </div>
-              )}
-
-              <div className="fine-tune-row">
-                <button
-                  type="button"
-                  className={`btn btn-secondary fine-tune-toggle ${fineTuneExpanded ? 'expanded' : ''}`}
-                  onClick={onFineTuneToggle}
-                  disabled={generating}
-                >
-                  {t(modeDefinition.ui.fineTuneLabelKey)}
-                </button>
-                <span className="studio-meta">{t(modeDefinition.ui.fineTuneHintKey)}</span>
-              </div>
-              {fineTuneExpanded && studioPanel}
+          {!!remixState?.styleHints.length && (
+            <div className="remix-reference-hints">
+              {remixState.styleHints.slice(0, 8).map((hint) => (
+                <span key={hint} className="remix-reference-chip">{hint}</span>
+              ))}
             </div>
           )}
-        </>
+          {remixState?.error && (
+            <div className="remix-reference-error">{remixState.error}</div>
+          )}
+        </div>
+      )}
+
+      {showSecondaryControls && modeDefinition.id === 'video' && videoReference && (
+        <div className="context-panel video-reference-panel">
+          <div className="context-header-row">
+            <span className="studio-label">{t('mode.video.reference')}</span>
+            <span className="context-mini-copy">{videoReference.fileName}</span>
+          </div>
+          <div className="video-keyframe-strip">
+            {videoReference.keyframes.map((keyframe, index) => {
+              const selected = videoReference.selectedKeyframeIds.includes(keyframe.id)
+              return (
+                <button
+                  key={keyframe.id}
+                  className={`video-keyframe-chip ${selected ? 'selected' : ''}`}
+                  onClick={() => onVideoKeyframeToggle(keyframe.id)}
+                  disabled={generating}
+                  type="button"
+                  title={t('mode.video.keyframeTitle', { index: index + 1, time: keyframe.label })}
+                >
+                  <img src={keyframe.dataUrl} alt={t('mode.video.keyframeTitle', { index: index + 1, time: keyframe.label })} />
+                  <span>{keyframe.label}</span>
+                </button>
+              )
+            })}
+            <button className="btn btn-ghost video-reference-clear" onClick={onClearVideoReference} disabled={generating} type="button">
+              {t('mode.video.clear')}
+            </button>
+          </div>
+          {videoReference.error && (
+            <div className="remix-reference-error">{videoReference.error}</div>
+          )}
+          {!videoReference.error && videoReference.keyframes.length === 0 && (
+            <div className="context-mini-copy">{t('mode.video.noKeyframes')}</div>
+          )}
+          <div className="context-mini-copy">{t('mode.video.referenceNote')}</div>
+        </div>
       )}
 
       <textarea
@@ -429,25 +435,12 @@ export function PromptBar({
         onChange={(e) => onPromptChange(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={hasOutput
-          ? t(modeDefinition.ui.refinePlaceholderKey)
-          : t(modeDefinition.ui.generatePlaceholderKey)
+          ? t('prompt.placeholder.refine')
+          : (compact ? t(modeDefinition.placeholderKey) : t('prompt.placeholder.generate'))
         }
-        rows={4}
+        rows={compact ? 2 : 4}
         disabled={generating}
       />
-
-      {hasOutput && previousRoundAvailable && (
-        <label className={`context-toggle ${includePreviousRoundContext ? 'active' : ''}`}>
-          <input
-            type="checkbox"
-            checked={includePreviousRoundContext}
-            onChange={(e) => onIncludePreviousRoundContextChange(e.target.checked)}
-            disabled={generating}
-          />
-          <span className="context-toggle-label">{t('prompt.includePreviousRound')}</span>
-          <span className="context-toggle-hint">{t('prompt.includePreviousRoundHint')}</span>
-        </label>
-      )}
 
       <div className="prompt-footer">
         <button
@@ -460,6 +453,11 @@ export function PromptBar({
           <span className="plan-toggle-label">{t('prompt.plan.label')}</span>
           {planMode && <span className="plan-toggle-hint">{t('prompt.plan.hint')}</span>}
         </button>
+        {compact && (
+          <button className="btn btn-secondary compact-fine-tune-btn" onClick={onToggleFineTune} type="button">
+            {fineTuneExpanded ? t('mode.fineTune.hide') : t('mode.fineTune.show')}
+          </button>
+        )}
 
         <div className="prompt-footer-right">
           {hasOutput && (
@@ -474,16 +472,16 @@ export function PromptBar({
           <button
             className={`btn btn-primary generate-btn ${planMode ? 'plan-active' : ''} ${!hasKey ? 'no-key' : ''}`}
             onClick={handleSubmit}
-            disabled={!hasKey || generating || (!hasOutput && (isRemixMode ? !hasWebsiteReference : !prompt.trim()))}
+            disabled={!hasKey || generating || (!hasOutput && !prompt.trim())}
           >
             {!hasKey ? (
               <>{t('prompt.noKey')}</>
             ) : generating ? (
               <span className="btn-spinner" />
             ) : hasOutput ? (
-              <>{t(modeDefinition.ui.refineActionKey)}</>
+              <>{t('prompt.refine')}</>
             ) : (
-              <>{t(modeDefinition.ui.generateActionKey)}</>
+              <>{t('prompt.generate')}</>
             )}
           </button>
           <span className="prompt-hint mono">{hasKey ? t('prompt.shortcut') : t('prompt.keyHint')}</span>

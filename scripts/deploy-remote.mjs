@@ -85,7 +85,7 @@ try {
   const remoteArchive = '/root/vcanvas-payload.tar.gz'
   const remoteProxyService = '/etc/systemd/system/vcanvas-proxy.service'
   const remoteAppService = '/etc/systemd/system/vcanvas.service'
-  const appServiceBody = `[Unit]\nDescription=VCanvas unified web server\nAfter=network.target\n\n[Service]\nType=simple\nWorkingDirectory=${remoteRoot}\nEnvironment=VCANVAS_HOST=0.0.0.0\nEnvironment=VCANVAS_PORT=18087\nEnvironment=VCANVAS_STATIC_DIR=${remoteRoot}/dist\nExecStart=/usr/bin/node ${remoteRoot}/scripts/serve-vcanvas.mjs\nRestart=always\nRestartSec=3\nUser=root\n\n[Install]\nWantedBy=multi-user.target\n`
+  const appServiceBody = `[Unit]\nDescription=inscanvas unified web server\nAfter=network.target\n\n[Service]\nType=simple\nWorkingDirectory=${remoteRoot}\nEnvironment=VCANVAS_HOST=0.0.0.0\nEnvironment=VCANVAS_PORT=18087\nEnvironment=VCANVAS_STATIC_DIR=${remoteRoot}/dist\nExecStart=/usr/bin/node ${remoteRoot}/scripts/serve-vcanvas.mjs\nRestart=always\nRestartSec=3\nUser=root\n\n[Install]\nWantedBy=multi-user.target\n`
 
   const pythonScript = `
 import os

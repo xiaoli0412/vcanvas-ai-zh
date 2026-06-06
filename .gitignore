@@ -7,3 +7,5 @@ release-icon-test/
 *.log
 *.local
 .env*
+.vcanvas-data/
+output/

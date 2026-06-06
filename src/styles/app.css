@@ -188,10 +188,43 @@
 .preview-toolbar-left {
   display: flex;
   gap: 4px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.preview-annotation-toggle.active {
+  border-color: rgba(180, 140, 255, 0.44) !important;
+  background: rgba(180, 140, 255, 0.09) !important;
+  color: #cdbdff !important;
+}
+
+.preview-annotation-clear {
+  color: var(--text-muted) !important;
 }
 
 .preview-meta {
   font-size: 10px;
   color: var(--text-muted);
   letter-spacing: 0.04em;
+}
+
+@media (max-width: 760px) {
+  .workspace {
+    display: block;
+  }
+
+  .panel-left {
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    border-right: 0;
+  }
+
+  .panel-right {
+    display: none;
+  }
+
+  .api-key-overlay {
+    display: none;
+  }
 }

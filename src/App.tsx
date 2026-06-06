@@ -1,13 +1,22 @@
-import React, { startTransition, useState, useRef, useCallback, useEffect, useMemo } from 'react'
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { convertToExcalidrawElements } from '@excalidraw/excalidraw'
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
+import type { BinaryFileData } from '@excalidraw/excalidraw/types'
 import { Header } from './components/Header'
+import { ControlCenterModal } from './components/ControlCenterModal'
+import { ModePanel } from './components/ModePanel'
+import { ModelQuickSwitch } from './components/ModelQuickSwitch'
+import { PersonalSettingsModal } from './components/PersonalSettingsModal'
 import { ProviderModal } from './components/ProviderModal'
 import { PresetLibraryModal } from './components/PresetLibraryModal'
 import { Canvas } from './components/Canvas'
 import { FramePicker } from './components/FramePicker'
 import { PromptBar } from './components/PromptBar'
 import { Preview } from './components/Preview'
+import { PreviewAnnotations } from './components/PreviewAnnotations'
+import { WebEmbedPanel } from './components/WebEmbedPanel'
+import { WorkCenterModal } from './components/WorkCenterModal'
+import { NoticeOverlay } from './components/NoticeOverlay'
 import { StreamOverlay } from './components/StreamOverlay'
 import { PlanOverlay } from './components/PlanOverlay'
 import type { PlanPhase } from './components/PlanOverlay'
@@ -33,42 +42,18 @@ import {
   type PromptStudioState,
 } from './lib/promptPresets'
 import {
-  CANVAS_MODE_LIST,
-  applySurprisePrompt,
-  formatCanvasModeSummary,
-  getCanvasMode,
-  getModePromptStudioState,
-  getModeUrlDraft,
-  loadModeSessionState,
-  mergeModeSessionStudioState,
-  mergeModeSessionUrlDraft,
-  saveModeSessionState,
-  setActiveCanvasMode,
-  type ModeSessionState,
-} from './lib/canvasModes'
-import {
   buildGeneratePrompt,
   buildPlanPhaseContext,
   buildRefinePrompt,
   buildSystemPrompt,
 } from './lib/promptBuilder'
 import {
-  fetchWebsiteReference,
-  formatWebsiteReferenceSummary,
-  normalizeWebsiteUrl,
-  type WebsiteReferenceContext,
-} from './lib/websiteReference'
-import {
-  fitImportedMediaSize,
-  prepareImportedImage,
-  prepareImportedVideo,
-} from './lib/canvasMedia'
-import {
   PROVIDER_STATE_STORAGE_KEY,
   VISION_PROVIDER_STATE_STORAGE_KEY,
   getActiveModelId,
   getProvider,
   isProviderConfigured,
+  isModelVideoEnabled,
   loadProviderState,
   loadVisionSupportMap,
   saveProviderState,
@@ -77,15 +62,70 @@ import {
   type VisionSupportMap,
 } from './lib/providers'
 import type { Message } from './lib/api'
-import { createModeChip, formatOutcomeText, type ChatChip } from './lib/store'
+import type { ChatChip, ExportedCanvasData } from './lib/store'
+import {
+  CANVAS_MODE_DEFINITIONS,
+  getCanvasModeDefinition,
+  getModeContextPreferences,
+  getModePromptDraft,
+  getModeRemixState,
+  getModeStudioState,
+  loadModeSessionState,
+  saveModeSessionState,
+  type ModeSessionState,
+  type RemixModeState,
+} from './lib/canvasModes'
+import { buildWorkflowContextNotes, createWorkflowContext, createWorkflowTurnReference } from './lib/workflowContext'
+import { fetchWebsiteReference } from './lib/websiteReference'
+import { buildPreviewAnnotationNotes, type PreviewAnnotation } from './lib/previewAnnotations'
+import {
+  buildVideoReferenceNotes,
+  createVideoReference,
+  getSelectedVideoKeyframes,
+  type VideoReference,
+} from './lib/videoReferences'
+import {
+  buildWebEmbedContextNotes,
+  createWebEmbedReference,
+  updateWebEmbedUrl,
+  type WebEmbedReference,
+} from './lib/webEmbeds'
+import type { NoticeMessage, WorkflowTurnReference } from '../shared/contracts/publicServer'
 import { getVisionRoutingError, prepareVisionMessages } from './lib/vision'
 import './styles/app.css'
 
-interface PreviousRoundContext {
-  prompt: string
-  html: string
-  modeLabel: string
-  studioSummary: string
+const NOTICE_DISMISSED_STORAGE_KEY = 'vcanvas_dismissed_notices_v1'
+const NOTICE_SESSION_DISMISSED_STORAGE_KEY = 'vcanvas_session_dismissed_notices_v1'
+
+function noticeKey(notice: NoticeMessage) {
+  return `${notice.id}:${notice.updatedAt || notice.createdAt}`
+}
+
+function readNoticeKeys(storage: Storage | undefined, key: string) {
+  if (!storage) return new Set<string>()
+  try {
+    const raw = storage.getItem(key)
+    return new Set<string>(raw ? JSON.parse(raw) : [])
+  } catch {
+    return new Set<string>()
+  }
+}
+
+function writeNoticeKeys(storage: Storage | undefined, key: string, values: Set<string>) {
+  if (!storage) return
+  try {
+    storage.setItem(key, JSON.stringify([...values]))
+  } catch {
+    // Ignore storage failures; notices can still be dismissed for the current render cycle.
+  }
+}
+
+function shouldShowNotice(notice: NoticeMessage, dismissed: Set<string>, sessionDismissed: Set<string>) {
+  if (!notice.enabled) return false
+  if (notice.expiresAt && Date.parse(notice.expiresAt) < Date.now()) return false
+  const key = noticeKey(notice)
+  if (dismissed.has(key) || sessionDismissed.has(key)) return false
+  return notice.force === true || notice.kind === 'warning' || notice.kind === 'realtime'
 }
 
 const SYSTEM_PROMPT = `You are an expert frontend developer. The user will show you a sketch/wireframe/reference and describe what they want. Generate a COMPLETE, self-contained HTML file.
@@ -174,6 +214,22 @@ If someone looks at the output and instantly thinks "AI made this" — that's th
 - Large rounded-corner icons above every heading
 - Repeating the same information the user can already see`
 
+const INITIAL_MODE_STATE = loadModeSessionState(loadPromptStudioState())
+
+function dataUrlToImagePayload(dataUrl: string | null | undefined): Message['content'][number] | null {
+  if (!dataUrl) return null
+  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/)
+  if (!match) return null
+  return {
+    type: 'image' as const,
+    source: {
+      type: 'base64' as const,
+      media_type: match[1],
+      data: match[2],
+    },
+  }
+}
+
 export function App() {
   const editorRef = useRef<ExcalidrawImperativeAPI | null>(null)
   const [editor, setEditor] = useState<ExcalidrawImperativeAPI | null>(null)
@@ -181,30 +237,30 @@ export function App() {
   const [providerState, setProviderState] = useState<ProviderState>(() => loadProviderState(PROVIDER_STATE_STORAGE_KEY))
   const [visionProviderState, setVisionProviderState] = useState<ProviderState>(() => loadProviderState(VISION_PROVIDER_STATE_STORAGE_KEY))
   const [visionSupportMap, setVisionSupportMap] = useState<VisionSupportMap>(loadVisionSupportMap)
-  const [modeSession, setModeSession] = useState<ModeSessionState>(() => {
-    const classicStudio = loadPromptStudioState()
-    return loadModeSessionState({
-      existingClassicStudio: classicStudio,
-    })
-  })
-  const [websiteReference, setWebsiteReference] = useState<WebsiteReferenceContext | null>(null)
-  const [remixFetchLoading, setRemixFetchLoading] = useState(false)
-  const [remixFetchError, setRemixFetchError] = useState<string | null>(null)
-  const [promptDraft, setPromptDraft] = useState('')
+  const [modeState, setModeState] = useState<ModeSessionState>(INITIAL_MODE_STATE)
+  const [promptStudio, setPromptStudio] = useState<PromptStudioState>(() => getModeStudioState(INITIAL_MODE_STATE, INITIAL_MODE_STATE.activeModeId))
+  const [promptDraft, setPromptDraft] = useState(() => getModePromptDraft(INITIAL_MODE_STATE, INITIAL_MODE_STATE.activeModeId))
   const [savedPresets, setSavedPresets] = useState<PromptPresetRecord[]>(loadUserPromptPresets)
-  const [showSettings, setShowSettings] = useState(false)
+  const [showModelQuickSwitch, setShowModelQuickSwitch] = useState(false)
+  const [showControlCenter, setShowControlCenter] = useState(false)
+  const [siteNotices, setSiteNotices] = useState<NoticeMessage[]>([])
+  const [noticeDismissVersion, setNoticeDismissVersion] = useState(0)
+  const [showProviderSettings, setShowProviderSettings] = useState(false)
+  const [showPersonalSettings, setShowPersonalSettings] = useState(false)
   const [showPresetLibrary, setShowPresetLibrary] = useState(false)
-  const [fineTuneExpanded, setFineTuneExpanded] = useState(() => modeSession.activeModeId === 'classic-studio')
-  const [includePreviousRoundContext, setIncludePreviousRoundContext] = useState(true)
-  const [previousRoundContext, setPreviousRoundContext] = useState<PreviousRoundContext | null>(null)
+  const [showModePanel, setShowModePanel] = useState(false)
+  const [showWebEmbedPanel, setShowWebEmbedPanel] = useState(false)
+  const [showWorkCenter, setShowWorkCenter] = useState(false)
+  const [fineTuneExpanded, setFineTuneExpanded] = useState(false)
+  const [fetchingRemixReference, setFetchingRemixReference] = useState(false)
+  const [lastTurnReference, setLastTurnReference] = useState<WorkflowTurnReference | null>(null)
 
   const t = useMemo(() => createTranslator(locale), [locale])
-  const activeMode = useMemo(() => getCanvasMode(modeSession.activeModeId), [modeSession.activeModeId])
-  const promptStudio = useMemo(
-    () => getModePromptStudioState(modeSession, activeMode.id),
-    [modeSession, activeMode.id],
-  )
-  const remixUrl = useMemo(() => getModeUrlDraft(modeSession, 'remix'), [modeSession])
+  const activeModeId = modeState.activeModeId
+  const modeDefinition = useMemo(() => getCanvasModeDefinition(activeModeId), [activeModeId])
+  const compactPromptBar = true
+  const contextPreferences = useMemo(() => getModeContextPreferences(modeState, activeModeId), [modeState, activeModeId])
+  const remixState = useMemo<RemixModeState | null>(() => getModeRemixState(modeState, activeModeId), [modeState, activeModeId])
   const provider = getProvider(providerState.activeProviderId)
   const modelId = getActiveModelId(providerState)
   const apiKey = providerState.keys[provider.id] || ''
@@ -225,6 +281,10 @@ export function App() {
   const [usage, setUsage] = useState<{ input_tokens: number | string; output_tokens: number | string } | null>(null)
   const [selectedFrameIds, setSelectedFrameIds] = useState<Set<string>>(new Set())
   const [previewScreenshot, setPreviewScreenshot] = useState<string | null>(null)
+  const [previewAnnotationMode, setPreviewAnnotationMode] = useState(false)
+  const [previewAnnotations, setPreviewAnnotations] = useState<PreviewAnnotation[]>([])
+  const [videoReference, setVideoReference] = useState<VideoReference | null>(null)
+  const [webEmbeds, setWebEmbeds] = useState<WebEmbedReference[]>([])
   const [canvasVersion, setCanvasVersion] = useState(0)
   const [planMode, setPlanMode] = useState(false)
   const [planPhases, setPlanPhases] = useState<PlanPhase[]>([])
@@ -232,32 +292,25 @@ export function App() {
   const [planTokenCount, setPlanTokenCount] = useState(0)
   const [planDone, setPlanDone] = useState(false)
 
-  const currentWebsiteReference = activeMode.id === 'remix' ? websiteReference : null
-  const remixReferenceSummary = useMemo(
-    () => formatWebsiteReferenceSummary(currentWebsiteReference),
-    [currentWebsiteReference],
-  )
   const compiledSystemPrompt = useMemo(
-    () => buildSystemPrompt(SYSTEM_PROMPT, promptStudio, activeMode, currentWebsiteReference),
-    [promptStudio, activeMode, currentWebsiteReference],
+    () => buildSystemPrompt(SYSTEM_PROMPT, promptStudio, {
+      modeManifesto: modeDefinition.manifesto,
+    }),
+    [promptStudio, modeDefinition],
   )
-  const modeSummary = useMemo(
-    () => formatCanvasModeSummary(activeMode, t),
-    [activeMode, t],
-  )
-  const studioSummary = useMemo(
+  const promptStudioSummary = useMemo(
     () => formatPromptStudioSummary(promptStudio, t),
     [promptStudio, t],
   )
-  const promptStudioSummary = useMemo(
-    () => activeMode.id === 'classic-studio'
-      ? studioSummary
-      : `${t(activeMode.labelKey)} · ${studioSummary}`,
-    [activeMode, studioSummary, t],
-  )
-  const modeBadge = useMemo(() => t(activeMode.labelKey), [activeMode, t])
-  const generateActionLabel = useMemo(() => t(activeMode.ui.generateActionKey), [activeMode, t])
-  const refineActionLabel = useMemo(() => t(activeMode.ui.refineActionKey), [activeMode, t])
+  const videoRoutingNote = useMemo(() => {
+    if (activeModeId !== 'video') return ''
+    if (isModelVideoEnabled(provider, modelId)) return ''
+    return [
+      '## Video Capability Routing',
+      'The active model is not marked as video-capable. Do not assume direct video understanding.',
+      'Use selected keyframes, canvas screenshots, and visual translation notes as the authoritative video reference path.',
+    ].join('\n')
+  }, [activeModeId, provider, modelId])
 
   const previewRef = useRef<HTMLIFrameElement>(null)
   const panelLeftRef = useRef<HTMLDivElement>(null)
@@ -268,13 +321,44 @@ export function App() {
   }, [locale])
 
   useEffect(() => {
-    saveModeSessionState(modeSession)
-    savePromptStudioState(getModePromptStudioState(modeSession, 'classic-studio'))
-  }, [modeSession])
+    savePromptStudioState(promptStudio)
+  }, [promptStudio])
+
+  useEffect(() => {
+    setPromptStudio(getModeStudioState(modeState, activeModeId))
+    setPromptDraft(getModePromptDraft(modeState, activeModeId))
+  }, [modeState, activeModeId])
+
+  useEffect(() => {
+    saveModeSessionState(modeState)
+  }, [modeState])
 
   useEffect(() => {
     saveUserPromptPresets(savedPresets)
   }, [savedPresets])
+
+  useEffect(() => {
+    setPreviewAnnotationMode(false)
+    setPreviewAnnotations([])
+  }, [lastHTML])
+
+  const loadSiteNotices = useCallback(async () => {
+    try {
+      const response = await fetch('/api/notices')
+      const data = await response.json()
+      if (response.ok && data.ok !== false) {
+        setSiteNotices(Array.isArray(data.notices) ? data.notices : [])
+      }
+    } catch {
+      setSiteNotices([])
+    }
+  }, [])
+
+  useEffect(() => {
+    loadSiteNotices()
+    const timer = window.setInterval(loadSiteNotices, 60_000)
+    return () => window.clearInterval(timer)
+  }, [loadSiteNotices])
 
   const persistProviderState = useCallback((newState: ProviderState) => {
     setProviderState(newState)
@@ -303,58 +387,175 @@ export function App() {
     persistVisionSupportMap(map)
   }, [persistVisionSupportMap])
 
-  const handleModeChange = useCallback((modeId: ModeSessionState['activeModeId']) => {
-    startTransition(() => {
-      setModeSession((prev) => setActiveCanvasMode(prev, modeId))
-    })
-    setFineTuneExpanded(modeId === 'classic-studio')
+  const handleModeChange = useCallback((modeId: typeof activeModeId) => {
+    const mode = getCanvasModeDefinition(modeId)
+    setModeState((prev) => ({
+      ...prev,
+      activeModeId: modeId,
+      studioByMode: {
+        ...prev.studioByMode,
+        [modeId]: prev.studioByMode[modeId] || mode.defaultStudioState,
+      },
+      promptByMode: {
+        ...prev.promptByMode,
+        [modeId]: prev.promptByMode[modeId] || '',
+      },
+      contextByMode: {
+        ...prev.contextByMode,
+      },
+      remixByMode: {
+        ...prev.remixByMode,
+      },
+    }))
+    setShowModePanel(false)
+    setFineTuneExpanded(false)
   }, [])
 
-  const handlePromptStudioChange = useCallback((nextStudio: PromptStudioState) => {
-    setModeSession((prev) => mergeModeSessionStudioState(prev, activeMode.id, nextStudio))
-  }, [activeMode.id])
+  const handlePromptChange = useCallback((value: string) => {
+    setPromptDraft(value)
+    setModeState((prev) => ({
+      ...prev,
+      promptByMode: {
+        ...prev.promptByMode,
+        [prev.activeModeId]: value,
+      },
+    }))
+  }, [])
 
-  const handleRemixUrlChange = useCallback((nextUrl: string) => {
-    setModeSession((prev) => mergeModeSessionUrlDraft(prev, 'remix', nextUrl))
-    if (websiteReference && normalizeWebsiteUrl(nextUrl) !== websiteReference.url) {
-      setWebsiteReference(null)
-    }
-    if (remixFetchError) setRemixFetchError(null)
-  }, [remixFetchError, websiteReference])
+  const handleStudioChange = useCallback((nextStudio: PromptStudioState) => {
+    setPromptStudio(nextStudio)
+    setModeState((prev) => ({
+      ...prev,
+      studioByMode: {
+        ...prev.studioByMode,
+        [prev.activeModeId]: nextStudio,
+      },
+    }))
+  }, [])
 
-  const handleFetchWebsite = useCallback(async () => {
-    const nextUrl = normalizeWebsiteUrl(remixUrl)
-    if (remixFetchLoading) {
-      return
-    }
+  const handleContextPreferencesChange = useCallback((nextPreferences: { carryPolicy: 'disabled' | 'last-turn' | 'full'; includePreviousPrompt: boolean; includePreviousOutput: boolean; includePreviousScreenshot: boolean }) => {
+    setModeState((prev) => ({
+      ...prev,
+      contextByMode: {
+        ...prev.contextByMode,
+        [prev.activeModeId]: nextPreferences,
+      },
+    }))
+  }, [])
 
-    if (!nextUrl) {
-      setRemixFetchError(t('canvas.embedInvalid'))
-      return
-    }
+  const handleRemixUrlChange = useCallback((url: string) => {
+    setModeState((prev) => ({
+      ...prev,
+      remixByMode: {
+        ...prev.remixByMode,
+        [prev.activeModeId]: {
+          ...(prev.remixByMode[prev.activeModeId] || {
+            url: '',
+            html: '',
+            stylesheetSnippets: [],
+            styleHints: [],
+            fetchedAt: '',
+            error: null,
+            fetchStatus: 'idle',
+          }),
+          url,
+          error: null,
+          fetchStatus: 'idle',
+        },
+      },
+    }))
+  }, [])
 
-    setRemixFetchLoading(true)
-    setRemixFetchError(null)
+  const handleFetchRemixReference = useCallback(async () => {
+    const current = modeState.activeModeId
+    const mode = getCanvasModeDefinition(current)
+    if (!mode.requiresWebsiteReference) return
+    const url = modeState.remixByMode[current]?.url?.trim() || ''
+    if (!url) return
+    setFetchingRemixReference(true)
+    setModeState((prev) => ({
+      ...prev,
+      remixByMode: {
+        ...prev.remixByMode,
+        [current]: {
+          ...(prev.remixByMode[current] || {
+            url,
+            html: '',
+            stylesheetSnippets: [],
+            styleHints: [],
+            fetchedAt: '',
+            error: null,
+            fetchStatus: 'idle',
+          }),
+          fetchStatus: 'loading',
+          error: null,
+        },
+      },
+    }))
     try {
-      const reference = await fetchWebsiteReference(nextUrl)
-      setWebsiteReference(reference)
-      setModeSession((prev) => mergeModeSessionUrlDraft(prev, 'remix', reference.url))
-    } catch (error: any) {
-      setWebsiteReference(null)
-      setRemixFetchError(error?.message || String(error))
+      const reference = await fetchWebsiteReference(url)
+      setModeState((prev) => ({
+        ...prev,
+        remixByMode: {
+          ...prev.remixByMode,
+          [current]: {
+            ...reference,
+            fetchStatus: 'ready',
+          },
+        },
+      }))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setModeState((prev) => ({
+        ...prev,
+        remixByMode: {
+          ...prev.remixByMode,
+          [current]: {
+            ...(prev.remixByMode[current] || {
+              url,
+              html: '',
+              stylesheetSnippets: [],
+              styleHints: [],
+              fetchedAt: '',
+              error: null,
+              fetchStatus: 'idle',
+            }),
+            error: message,
+            fetchStatus: 'error',
+          },
+        },
+      }))
     } finally {
-      setRemixFetchLoading(false)
+      setFetchingRemixReference(false)
     }
-  }, [remixFetchLoading, remixUrl, t])
+  }, [modeState])
 
-  const handleClearWebsiteReference = useCallback(() => {
-    setWebsiteReference(null)
-    setRemixFetchError(null)
+  const handleVideoKeyframeToggle = useCallback((keyframeId: string) => {
+    setVideoReference((current) => {
+      if (!current) return current
+      const selected = new Set(current.selectedKeyframeIds)
+      if (selected.has(keyframeId)) {
+        selected.delete(keyframeId)
+      } else {
+        selected.add(keyframeId)
+      }
+      return {
+        ...current,
+        selectedKeyframeIds: Array.from(selected),
+      }
+    })
   }, [])
 
-  const handleSurprise = useCallback((currentPrompt: string) => {
-    setPromptDraft(applySurprisePrompt(currentPrompt, activeMode))
-  }, [activeMode])
+  const handleClearVideoReference = useCallback(() => {
+    setVideoReference(null)
+  }, [])
+
+  const handleSurprise = useCallback(() => {
+    const nextPrompt = promptDraft.trim()
+      ? `${promptDraft.trim()}\n\n${modeDefinition.surprisePrompt}`
+      : modeDefinition.surprisePrompt
+    handlePromptChange(nextPrompt)
+  }, [handlePromptChange, modeDefinition, promptDraft])
 
   const buildCurrentPresetPayload = useCallback(() => {
     return createPromptPresetPayload(promptStudio, promptDraft, providerState, visionProviderState, visionSupportMap)
@@ -383,35 +584,36 @@ export function App() {
 
   const handleApplyPreset = useCallback((preset: PromptPresetRecord) => {
     const applied = applyPromptPreset(preset, providerState, visionProviderState, visionSupportMap)
-    setModeSession((prev) => mergeModeSessionStudioState(prev, activeMode.id, applied.promptStudio))
-    setPromptDraft(applied.promptDraft)
+    handleStudioChange(applied.promptStudio)
+    handlePromptChange(applied.promptDraft)
     persistProviderState(applied.providerState)
     persistVisionProviderState(applied.visionProviderState)
     persistVisionSupportMap(applied.visionSupportMap)
     setShowPresetLibrary(false)
-  }, [activeMode.id, persistProviderState, persistVisionProviderState, persistVisionSupportMap, providerState, visionProviderState, visionSupportMap])
+  }, [handlePromptChange, handleStudioChange, persistProviderState, persistVisionProviderState, persistVisionSupportMap, providerState, visionProviderState, visionSupportMap])
 
   const addChip = useCallback((chip: ChatChip) => {
-    setChips((prev) => [
-      ...prev,
-      createModeChip(chip.role, chip.text, modeBadge, chip),
-    ])
-  }, [modeBadge])
+    setChips((prev) => [...prev, chip])
+  }, [])
 
   const handleClear = useCallback(() => {
     setMessages([])
     setChips([])
     setIteration(0)
     setLastHTML('')
-    setPromptDraft('')
+    handlePromptChange('')
     setStreamText('')
     setThinkingText('')
     setStreamTokenCount(0)
     setStreamDone(false)
     setUsage(null)
     setPreviewScreenshot(null)
-    setPreviousRoundContext(null)
-  }, [])
+    setPreviewAnnotationMode(false)
+    setPreviewAnnotations([])
+    setVideoReference(null)
+    setWebEmbeds([])
+    setLastTurnReference(null)
+  }, [handlePromptChange])
 
   const handleResize = useCallback((deltaX: number) => {
     const el = panelLeftRef.current
@@ -438,81 +640,77 @@ export function App() {
     })
   }, [t])
 
-  const insertImportedMedia = useCallback(async (
-    media: Awaited<ReturnType<typeof prepareImportedImage>>,
-    caption?: string,
-  ) => {
+  const handleAddWebEmbed = useCallback(() => {
     const api = editorRef.current
     if (!api) return
+    const rawUrl = window.prompt(t('webEmbed.prompt'))
+    if (!rawUrl) return
 
-    api.addFiles([media.fileData])
-
-    const appState = api.getAppState()
-    const fitted = fitImportedMediaSize(media.width, media.height)
-    const sceneX = appState.width / (2 * appState.zoom.value) - appState.scrollX - fitted.width / 2
-    const sceneY = appState.height / (2 * appState.zoom.value) - appState.scrollY - fitted.height / 2
-
-    const skeletons: Parameters<typeof convertToExcalidrawElements>[0] = [
-      {
-        type: 'image',
-        x: sceneX,
-        y: sceneY,
-        width: fitted.width,
-        height: fitted.height,
-        fileId: media.fileData.id as any,
-        status: 'saved',
-        scale: [1, 1],
-      },
-    ]
-
-    if (caption) {
-      skeletons.push({
-        type: 'text',
-        text: caption,
-        x: sceneX,
-        y: sceneY + fitted.height + 12,
-        fontSize: 16,
+    try {
+      const draft = createWebEmbedReference({ url: rawUrl })
+      const frameCount = getSources(api).filter(s => s.kind === 'frame').length
+      const newElements = convertToExcalidrawElements([{
+        type: 'frame',
+        x: 120 + frameCount * 42,
+        y: 120 + frameCount * 42,
+        width: 520,
+        height: 320,
+        name: `${t('webEmbed.framePrefix')}: ${draft.title}`,
+        children: [],
+      }])
+      api.updateScene({
+        elements: [...api.getSceneElements(), ...newElements],
       })
+      const frameId = newElements[0]?.id || null
+      setWebEmbeds((prev) => [...prev, { ...draft, frameId }])
+      setShowWebEmbedPanel(true)
+      setCanvasVersion((version) => version + 1)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      window.alert(t(message) === message ? message : t(message))
     }
+  }, [t])
 
-    const newElements = convertToExcalidrawElements(skeletons)
-    api.updateScene({
-      elements: [...api.getSceneElements(), ...newElements],
+  const handleReplaceWebEmbed = useCallback((id: string, url: string) => {
+    try {
+      setWebEmbeds((prev) => prev.map((embed) =>
+        embed.id === id ? updateWebEmbedUrl(embed, url) : embed,
+      ))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      window.alert(t(message) === message ? message : t(message))
+      setWebEmbeds((prev) => prev.map((embed) =>
+        embed.id === id
+          ? { ...embed, status: 'error', error: t(message) === message ? message : t(message), updatedAt: new Date().toISOString() }
+          : embed,
+      ))
+    }
+  }, [t])
+
+  const handleRemoveWebEmbed = useCallback((id: string) => {
+    setWebEmbeds((prev) => {
+      const next = prev.filter((embed) => embed.id !== id)
+      if (next.length === 0) setShowWebEmbedPanel(false)
+      return next
     })
   }, [])
 
-  const handleImportImage = useCallback(() => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = 'image/*'
-    input.onchange = async () => {
-      const file = input.files?.[0]
-      if (!file) return
-      const media = await prepareImportedImage(file)
-      await insertImportedMedia(media)
-    }
-    input.click()
-  }, [insertImportedMedia])
-
-  const handleImportVideo = useCallback(() => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = 'video/*'
-    input.onchange = async () => {
-      const file = input.files?.[0]
-      if (!file) return
-      const media = await prepareImportedVideo(file)
-      await insertImportedMedia(media, file.name)
-    }
-    input.click()
-  }, [insertImportedMedia])
+  const handleWebEmbedStatusChange = useCallback((id: string, status: WebEmbedReference['status'], error?: string | null) => {
+    setWebEmbeds((prev) => prev.map((embed) =>
+      embed.id === id
+        ? { ...embed, status, error: error || null, updatedAt: new Date().toISOString() }
+        : embed,
+    ))
+  }, [])
 
   const handleSave = useCallback(() => {
     const api = editorRef.current
     if (!api) return
-    const data = {
+    const data: ExportedCanvasData = {
       elements: api.getSceneElements(),
       files: api.getFiles(),
+      workflowState: lastTurnReference,
+      webEmbeds,
     }
     const blob = new Blob([JSON.stringify(data)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -521,24 +719,114 @@ export function App() {
     a.download = `${t('system.export.filename')}-${Date.now()}.json`
     a.click()
     URL.revokeObjectURL(url)
-  }, [t])
+  }, [t, lastTurnReference, webEmbeds])
+
+  const buildCurrentCanvasData = useCallback(() => {
+    const api = editorRef.current
+    if (!api) return null
+    const data: ExportedCanvasData = {
+      elements: api.getSceneElements(),
+      files: api.getFiles(),
+      workflowState: lastTurnReference,
+      webEmbeds,
+    }
+    return JSON.stringify(data)
+  }, [lastTurnReference, webEmbeds])
+
+  const handleExportHtml = useCallback(() => {
+    if (!lastHTML) return
+    const blob = new Blob([lastHTML], { type: 'text/html;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `inscanvas-${Date.now()}.html`
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [lastHTML])
 
   const handleLoad = useCallback(() => {
     const input = document.createElement('input')
     input.type = 'file'
-    input.accept = '.json'
+    input.accept = '.json,.png,.jpg,.jpeg,.webp,.gif,.mp4,.webm,.mov'
     input.onchange = async () => {
       const file = input.files?.[0]
       if (!file) return
-      const text = await file.text()
-      const data = JSON.parse(text)
       const api = editorRef.current
       if (!api) return
-      api.updateScene({ elements: data.elements || [] })
-      if (data.files) api.addFiles(Object.values(data.files))
+      if (file.type.startsWith('application/json') || file.name.endsWith('.json')) {
+        const text = await file.text()
+        const parsed = JSON.parse(text) as ExportedCanvasData
+        api.updateScene({ elements: (parsed.elements as any[]) || [] })
+        if (parsed.files) api.addFiles(Object.values(parsed.files as Record<string, BinaryFileData>))
+        setLastTurnReference(parsed.workflowState || null)
+        setWebEmbeds(parsed.webEmbeds || [])
+        return
+      }
+
+      const reader = new FileReader()
+      reader.onload = async () => {
+        const dataUrl = typeof reader.result === 'string' ? reader.result : ''
+        if (!dataUrl) return
+        const frameCount = getSources(api).filter((s) => s.kind === 'frame').length
+        const elementType = file.type.startsWith('video/') ? 'frame' : 'image'
+        const baseElement = {
+          x: 140 + frameCount * 36,
+          y: 140 + frameCount * 36,
+          width: file.type.startsWith('video/') ? 420 : 360,
+          height: file.type.startsWith('video/') ? 236 : 240,
+        }
+
+        if (elementType === 'image') {
+          const newElements = convertToExcalidrawElements([{
+            type: 'image',
+            fileId: file.name,
+            status: 'saved',
+            ...baseElement,
+          } as any])
+          api.updateScene({
+            elements: [...api.getSceneElements(), ...newElements],
+          })
+          api.addFiles([{
+            id: file.name,
+            mimeType: file.type || 'image/png',
+            dataURL: dataUrl,
+            created: Date.now(),
+            lastRetrieved: Date.now(),
+          } as any])
+          return
+        }
+
+        const videoLabel = `${t('canvas.videoLabel')}: ${file.name}`
+        const newElements = convertToExcalidrawElements([{
+          type: 'frame',
+          name: videoLabel,
+          children: [],
+          ...baseElement,
+        }])
+        api.updateScene({
+          elements: [...api.getSceneElements(), ...newElements],
+        })
+        handleModeChange('video')
+        try {
+          const nextVideoReference = await createVideoReference(file.name, dataUrl)
+          setVideoReference(nextVideoReference)
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          setVideoReference({
+            id: `video-${Date.now()}`,
+            fileName: file.name,
+            duration: 0,
+            keyframes: [],
+            selectedKeyframeIds: [],
+            createdAt: new Date().toISOString(),
+            error: message,
+          })
+        }
+      }
+      reader.readAsDataURL(file)
     }
     input.click()
-  }, [])
+  }, [handleModeChange, lastTurnReference, t])
 
   // Debounced canvas change — bumps version so FramePicker re-exports thumbs
   const canvasChangeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -579,31 +867,11 @@ export function App() {
     return results
   }, [selectedFrameIds, t])
 
-  const getEmbeddedWebsiteReferenceText = useCallback(() => {
+  const getCurrentCanvasLabels = useCallback(async () => {
     const api = editorRef.current
-    if (!api) return ''
-
-    const links = Array.from(new Set(
-      api.getSceneElements()
-        .map((element: any) => (element.type === 'embeddable' || element.type === 'iframe') ? element.link : '')
-        .filter((link: string) => typeof link === 'string' && link.trim()),
-    )).slice(0, 5)
-
-    if (links.length === 0) return ''
-
-    return `\n\nEmbedded web references:\n${links.map((link) => `- ${link}`).join('\n')}`
+    if (!api) return []
+    return getSources(api).map((source) => `${source.kind}:${source.name}`)
   }, [])
-
-  const handleExportHtml = useCallback(() => {
-    if (!lastHTML) return
-    const blob = new Blob([lastHTML], { type: 'text/html;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = `${t('system.export.filename')}-${Date.now()}.html`
-    anchor.click()
-    URL.revokeObjectURL(url)
-  }, [lastHTML, t])
 
   // Capture preview iframe as screenshot
   const capturePreview = useCallback(async (): Promise<string | null> => {
@@ -625,50 +893,34 @@ export function App() {
     }
   }, [])
 
-  const buildWebsiteReferenceInputs = useCallback(() => {
-    const reference = currentWebsiteReference
-    if (!reference?.screenshotDataUrl) {
-      return { imageContent: [] as Message['content'], chipImages: [] as ChatChip['images'] }
-    }
+  const getModeWorkflowContext = useCallback(async (currentPrompt: string, currentOutputHtml?: string) => {
+    const currentLabels = await getCurrentCanvasLabels()
+    const websiteReference = remixState?.fetchStatus === 'ready'
+      ? {
+        url: remixState.url,
+        html: remixState.html,
+        rebasedHtml: remixState.rebasedHtml || '',
+        screenshotDataUrl: remixState.screenshotDataUrl || null,
+        stylesheetSnippets: remixState.stylesheetSnippets || [],
+        styleHints: remixState.styleHints || [],
+        fetchedAt: remixState.fetchedAt,
+        error: remixState.error || null,
+      }
+      : null
 
-    const match = reference.screenshotDataUrl.match(/^data:([^;]+);base64,(.+)$/)
-    if (!match) {
-      return { imageContent: [] as Message['content'], chipImages: [] as ChatChip['images'] }
-    }
-
-    return {
-      imageContent: [{
-        type: 'image',
-        source: { type: 'base64', media_type: match[1], data: match[2] },
-      }] as Message['content'],
-      chipImages: [{ src: reference.screenshotDataUrl, label: reference.url }],
-    }
-  }, [currentWebsiteReference])
-
-  const buildPreviousRoundContextBlock = useCallback(() => {
-    if (!includePreviousRoundContext || !previousRoundContext) return ''
-
-    return [
-      '## Previous Round Context',
-      `Mode: ${previousRoundContext.modeLabel}`,
-      `Studio: ${previousRoundContext.studioSummary}`,
-      'Previous round prompt:',
-      previousRoundContext.prompt,
-      'Previous round HTML output:',
-      '```html',
-      previousRoundContext.html,
-      '```',
-    ].join('\n')
-  }, [includePreviousRoundContext, previousRoundContext])
-
-  const rememberPreviousRound = useCallback((prompt: string, html: string) => {
-    setPreviousRoundContext({
-      prompt,
-      html,
-      modeLabel: modeBadge,
-      studioSummary: promptStudioSummary,
+    return createWorkflowContext({
+      modeId: activeModeId,
+      prompt: currentPrompt,
+      currentCanvasLabels: currentLabels,
+      currentOutputHtml,
+      previousTurn: lastTurnReference,
+      preferences: contextPreferences,
+      websiteReference,
+      webEmbeds,
+      previewAnnotations,
+      videoReference,
     })
-  }, [modeBadge, promptStudioSummary])
+  }, [activeModeId, contextPreferences, getCurrentCanvasLabels, lastTurnReference, previewAnnotations, remixState, videoReference, webEmbeds])
 
   const prepareMessagesForCodeModel = useCallback(async (messages: Message[]) => {
     return prepareVisionMessages(providerState, messages, {
@@ -676,6 +928,62 @@ export function App() {
       analyzerState: visionProviderState,
     })
   }, [providerState, visionProviderState, visionSupportMap])
+
+  const appendWorkflowReferenceImages = useCallback((
+    userContent: Exclude<Message['content'], string>,
+    chipImages: NonNullable<ChatChip['images']>,
+    workflowContextNotes: string,
+    options?: { includeCurrentPreview?: boolean },
+  ) => {
+    const previousImage = dataUrlToImagePayload(lastTurnReference?.screenshotDataUrl || null)
+    if (contextPreferences.includePreviousScreenshot && previousImage) {
+      userContent.push(previousImage)
+      chipImages.push({
+        src: lastTurnReference!.screenshotDataUrl!,
+        label: t('mode.context.prevScreenshot'),
+      })
+    }
+
+    const remixImage = dataUrlToImagePayload(remixState?.fetchStatus === 'ready' ? remixState.screenshotDataUrl : null)
+    if (remixImage) {
+      userContent.push(remixImage)
+      chipImages.push({
+        src: remixState!.screenshotDataUrl!,
+        label: t('mode.remix.reference'),
+      })
+    }
+
+    if (options?.includeCurrentPreview && previewScreenshot) {
+      const currentPreviewImage = dataUrlToImagePayload(previewScreenshot)
+      if (currentPreviewImage) {
+        userContent.push(currentPreviewImage)
+        chipImages.push({
+          src: previewScreenshot,
+          label: t('system.prompt.currentOutput'),
+        })
+      }
+    }
+
+    if (workflowContextNotes.trim()) {
+      userContent.push({ type: 'text', text: workflowContextNotes })
+    }
+  }, [contextPreferences.includePreviousScreenshot, lastTurnReference, previewScreenshot, remixState, t])
+
+  const appendVideoKeyframeImages = useCallback((
+    userContent: Exclude<Message['content'], string>,
+    chipImages: NonNullable<ChatChip['images']>,
+  ) => {
+    if (activeModeId !== 'video') return
+    for (const keyframe of getSelectedVideoKeyframes(videoReference)) {
+      const imagePayload = dataUrlToImagePayload(keyframe.dataUrl)
+      if (!imagePayload) continue
+      userContent.push(imagePayload)
+      chipImages.push({
+        src: keyframe.dataUrl,
+        label: `${t('mode.video.keyframe')} ${keyframe.label}`,
+      })
+    }
+  }, [activeModeId, t, videoReference])
 
   const handleGenerate = useCallback(async (prompt: string) => {
     if (!isProviderConfigured(providerState) || generating) return
@@ -688,23 +996,25 @@ export function App() {
     setUsage(null)
 
     const frameImages = await getSelectedFrameImages()
-    const promptWithEmbeddedReferences = `${prompt}${getEmbeddedWebsiteReferenceText()}`.trim()
-    const effectivePrompt = promptWithEmbeddedReferences
-      || (currentWebsiteReference
-        ? 'Reconstruct a homepage inspired by the referenced site while making it clean, original, and production-ready.'
-        : '')
-
-    const compiledPrompt = buildGeneratePrompt(promptWithEmbeddedReferences, promptStudio, activeMode, currentWebsiteReference)
+    const workflowContext = await getModeWorkflowContext(prompt)
+    const workflowContextNotes = [
+      buildWorkflowContextNotes(workflowContext),
+      buildWebEmbedContextNotes(webEmbeds),
+      activeModeId === 'video' ? buildVideoReferenceNotes(videoReference) : '',
+      videoRoutingNote,
+    ].filter(Boolean).join('\n\n')
+    const compiledPrompt = buildGeneratePrompt(prompt, promptStudio, {
+      modeStarter: modeDefinition.starterPrompts[0],
+      workflowContextNotes,
+    })
+    const compiledSystem = buildSystemPrompt(SYSTEM_PROMPT, promptStudio, {
+      modeManifesto: modeDefinition.manifesto,
+      workflowContextNotes,
+    })
 
     // Build user message content
     const userContent: Message['content'] = []
     const chipImages: ChatChip['images'] = []
-    const websiteReferenceInputs = buildWebsiteReferenceInputs()
-
-    for (const part of websiteReferenceInputs.imageContent) {
-      userContent.push(part)
-    }
-    chipImages.push(...websiteReferenceInputs.chipImages)
 
     for (const img of frameImages) {
       userContent.push({
@@ -713,10 +1023,11 @@ export function App() {
       })
       chipImages.push({ src: 'data:image/png;base64,' + img.base64, label: img.label })
     }
+    appendVideoKeyframeImages(userContent, chipImages)
     userContent.push({ type: 'text', text: compiledPrompt })
 
     const newMessages: Message[] = [
-      { role: 'system', content: compiledSystemPrompt },
+      { role: 'system', content: compiledSystem },
       { role: 'user', content: userContent },
     ]
 
@@ -724,15 +1035,17 @@ export function App() {
       const dispatch = await prepareMessagesForCodeModel(newMessages)
 
       setMessages(dispatch.preparedMessages)
-      addChip({
-        role: 'user',
-        text: `${promptStudioSummary}${remixReferenceSummary ? `\n${remixReferenceSummary}` : ''}\n${promptWithEmbeddedReferences || compiledPrompt}`,
-        images: chipImages,
-      })
+      addChip({ role: 'user', text: `${promptStudioSummary}\n${prompt}`, images: chipImages })
       if (dispatch.analyzerSummary) {
         addChip({ role: 'assistant', text: dispatch.analyzerSummary })
       }
       setIteration((i) => i + 1)
+      setLastTurnReference(createWorkflowTurnReference({
+        id: `turn-${Date.now()}`,
+        modeId: activeModeId,
+        prompt,
+        html: '',
+      }))
 
       await streamChat(provider, providerState, apiKey, modelId, dispatch.preparedMessages, {
         onChunk: (text, tokenIdx) => {
@@ -748,9 +1061,14 @@ export function App() {
           if (html) {
             setTimeout(() => {
               setLastHTML(html)
-              rememberPreviousRound(effectivePrompt || compiledPrompt, html)
+              setLastTurnReference(createWorkflowTurnReference({
+                id: `turn-${Date.now()}`,
+                modeId: activeModeId,
+                prompt,
+                html,
+              }))
               setGenerating(false)
-              addChip({ role: 'assistant', text: formatOutcomeText(generateActionLabel) })
+              addChip({ role: 'assistant', text: t('system.chip.generated') })
             }, 500)
           } else {
             setGenerating(false)
@@ -771,7 +1089,7 @@ export function App() {
       setGenerating(false)
       addChip({ role: 'assistant', text: 'ERR:' + (t(err.message) === err.message ? err.message : t(err.message)) })
     }
-  }, [provider, providerState, apiKey, modelId, generating, getSelectedFrameImages, addChip, prepareMessagesForCodeModel, t, compiledSystemPrompt, promptStudio, promptStudioSummary, activeMode, currentWebsiteReference, buildWebsiteReferenceInputs, remixReferenceSummary, getEmbeddedWebsiteReferenceText, rememberPreviousRound, generateActionLabel])
+  }, [provider, providerState, apiKey, modelId, generating, getSelectedFrameImages, addChip, prepareMessagesForCodeModel, t, promptStudio, activeModeId, getModeWorkflowContext, modeDefinition, contextPreferences, lastTurnReference, promptStudioSummary, videoReference, appendVideoKeyframeImages, webEmbeds, videoRoutingNote])
 
   const handleRefine = useCallback(async (prompt: string) => {
     if (!isProviderConfigured(providerState) || generating) return
@@ -785,33 +1103,39 @@ export function App() {
 
     // Capture current preview screenshot
     const screenshotB64 = await capturePreview()
-    setPreviewScreenshot(screenshotB64 ? 'data:image/png;base64,' + screenshotB64 : null)
+    const currentPreviewDataUrl = screenshotB64 ? 'data:image/png;base64,' + screenshotB64 : null
+    setPreviewScreenshot(currentPreviewDataUrl)
 
-    const promptWithEmbeddedReferences = `${prompt}${getEmbeddedWebsiteReferenceText()}`.trim()
-    const refinementPrompt = buildRefinePrompt(promptWithEmbeddedReferences, promptStudio, t('system.prompt.refineDefault'), activeMode, currentWebsiteReference)
-    const previousRoundContextBlock = buildPreviousRoundContextBlock()
-    const effectivePrompt = promptWithEmbeddedReferences || t('system.prompt.refineDefault')
+    const workflowContext = await getModeWorkflowContext(prompt || t('system.prompt.refineDefault'), lastHTML)
+    const workflowContextNotes = [
+      buildWorkflowContextNotes(workflowContext),
+      buildWebEmbedContextNotes(webEmbeds),
+      buildPreviewAnnotationNotes(previewAnnotations),
+      activeModeId === 'video' ? buildVideoReferenceNotes(videoReference) : '',
+      videoRoutingNote,
+    ].filter(Boolean).join('\n\n')
+    const refinementPrompt = buildRefinePrompt(prompt, promptStudio, t('system.prompt.refineDefault'), {
+      modeStarter: modeDefinition.starterPrompts[0],
+      workflowContextNotes,
+    })
+    const compiledSystem = buildSystemPrompt(SYSTEM_PROMPT, promptStudio, {
+      modeManifesto: modeDefinition.manifesto,
+      workflowContextNotes,
+    })
 
     const userContent: Message['content'] = []
     const chipImages: ChatChip['images'] = []
-    const websiteReferenceInputs = buildWebsiteReferenceInputs()
 
     // 1. Screenshot of current rendered output
-    if (screenshotB64) {
+    if (screenshotB64 && currentPreviewDataUrl) {
       userContent.push({
         type: 'image',
         source: { type: 'base64', media_type: 'image/png', data: screenshotB64 },
       })
-      chipImages.push({ src: 'data:image/png;base64,' + screenshotB64, label: t('system.prompt.currentOutput') })
+      chipImages.push({ src: currentPreviewDataUrl, label: t('system.prompt.currentOutput') })
     }
 
-    // 2. Website reference (when in remix mode)
-    for (const part of websiteReferenceInputs.imageContent) {
-      userContent.push(part)
-    }
-    chipImages.push(...websiteReferenceInputs.chipImages)
-
-    // 3. Canvas sketches (original reference)
+    // 2. Canvas sketches (original reference)
     const frameImages = await getSelectedFrameImages()
     for (const img of frameImages) {
       userContent.push({
@@ -820,21 +1144,18 @@ export function App() {
       })
       chipImages.push({ src: 'data:image/png;base64,' + img.base64, label: img.label })
     }
+    appendVideoKeyframeImages(userContent, chipImages)
 
-    // 4. Previous HTML + refinement prompt (flat, no stacked history)
+    // 3. Previous HTML + refinement prompt (flat, no stacked history)
     userContent.push({
       type: 'text',
-      text: [
-        previousRoundContextBlock || `Here is the current HTML output:\n\n\`\`\`html\n${lastHTML}\n\`\`\``,
-        `Here's a screenshot of how it currently renders.`,
-        refinementPrompt,
-        'Please provide the COMPLETE updated HTML file in a ```html code fence.',
-      ].filter(Boolean).join('\n\n'),
+      text: `Here is the current HTML output:\n\n\`\`\`html\n${lastHTML}\n\`\`\`\n\nHere's a screenshot of how it currently renders. ${refinementPrompt}\n\nPlease provide the COMPLETE updated HTML file in a \`\`\`html code fence.`,
     })
+    appendWorkflowReferenceImages(userContent, chipImages, workflowContextNotes)
 
     // Flat message list: system + single user turn (no conversation history)
     const newMessages: Message[] = [
-      { role: 'system', content: compiledSystemPrompt },
+      { role: 'system', content: compiledSystem },
       { role: 'user', content: userContent },
     ]
 
@@ -842,11 +1163,7 @@ export function App() {
       const dispatch = await prepareMessagesForCodeModel(newMessages)
 
       setMessages(dispatch.preparedMessages)
-      addChip({
-        role: 'user',
-        text: `${promptStudioSummary}${remixReferenceSummary ? `\n${remixReferenceSummary}` : ''}\n${promptWithEmbeddedReferences || t('system.chip.refineAction')}`,
-        images: chipImages.length ? chipImages : undefined,
-      })
+      addChip({ role: 'user', text: `${promptStudioSummary}\n${prompt || t('system.chip.refineAction')}`, images: chipImages.length ? chipImages : undefined })
       if (dispatch.analyzerSummary) {
         addChip({ role: 'assistant', text: dispatch.analyzerSummary })
       }
@@ -866,9 +1183,15 @@ export function App() {
           if (html) {
             setTimeout(() => {
               setLastHTML(html)
-              rememberPreviousRound(effectivePrompt, html)
+              setLastTurnReference(createWorkflowTurnReference({
+                id: `turn-${Date.now()}`,
+                modeId: activeModeId,
+                prompt: prompt || t('system.prompt.refineDefault'),
+                html,
+                screenshotDataUrl: currentPreviewDataUrl,
+              }))
               setGenerating(false)
-              addChip({ role: 'assistant', text: formatOutcomeText(refineActionLabel) })
+              addChip({ role: 'assistant', text: t('system.chip.refined') })
             }, 500)
           } else {
             setGenerating(false)
@@ -884,14 +1207,14 @@ export function App() {
       setGenerating(false)
       addChip({ role: 'assistant', text: 'ERR:' + (t(err.message) === err.message ? err.message : t(err.message)) })
     }
-  }, [provider, providerState, apiKey, modelId, generating, lastHTML, capturePreview, getSelectedFrameImages, addChip, prepareMessagesForCodeModel, t, compiledSystemPrompt, promptStudio, promptStudioSummary, activeMode, currentWebsiteReference, buildWebsiteReferenceInputs, remixReferenceSummary, getEmbeddedWebsiteReferenceText, buildPreviousRoundContextBlock, rememberPreviousRound, refineActionLabel])
+  }, [provider, providerState, apiKey, modelId, generating, lastHTML, capturePreview, getSelectedFrameImages, addChip, prepareMessagesForCodeModel, t, promptStudio, promptStudioSummary, getModeWorkflowContext, modeDefinition, appendWorkflowReferenceImages, activeModeId, previewAnnotations, videoReference, appendVideoKeyframeImages, webEmbeds, videoRoutingNote])
 
   // ── Plan Mode: multi-step Gaze → Dream → Create ──
 
-  const planPhaseContext = useMemo(
-    () => buildPlanPhaseContext(promptStudio, activeMode, currentWebsiteReference),
-    [promptStudio, activeMode, currentWebsiteReference],
-  )
+  const planPhaseContext = useMemo(() => buildPlanPhaseContext(promptStudio, {
+    modeManifesto: modeDefinition.manifesto,
+    modeStarter: modeDefinition.starterPrompts[0],
+  }), [promptStudio, modeDefinition])
 
   const makeGazePrompt = useCallback((userRequest: string) =>
     `You are an artist and visual thinker. Gaze deeply into this image. Let it speak to you.
@@ -984,19 +1307,15 @@ ${compiledSystemPrompt}`,
     setPlanPhases(initialPhases)
 
     const frameImages = await getSelectedFrameImages()
-    const promptWithEmbeddedReferences = `${prompt}${getEmbeddedWebsiteReferenceText()}`.trim()
-    const effectivePrompt = promptWithEmbeddedReferences
-      || (currentWebsiteReference
-        ? 'Reconstruct a homepage inspired by the referenced site while making it clean, original, and production-ready.'
-        : '')
     const chipImages: ChatChip['images'] = []
     const imageContent: Message['content'] = []
-    const websiteReferenceInputs = buildWebsiteReferenceInputs()
-
-    for (const part of websiteReferenceInputs.imageContent) {
-      imageContent.push(part)
-    }
-    chipImages.push(...websiteReferenceInputs.chipImages)
+    const workflowContext = await getModeWorkflowContext(prompt)
+    const workflowContextNotes = [
+      buildWorkflowContextNotes(workflowContext),
+      buildWebEmbedContextNotes(webEmbeds),
+      activeModeId === 'video' ? buildVideoReferenceNotes(videoReference) : '',
+      videoRoutingNote,
+    ].filter(Boolean).join('\n\n')
 
     for (const img of frameImages) {
       imageContent.push({
@@ -1005,17 +1324,15 @@ ${compiledSystemPrompt}`,
       })
       chipImages.push({ src: 'data:image/png;base64,' + img.base64, label: img.label })
     }
+    appendVideoKeyframeImages(imageContent, chipImages)
+    appendWorkflowReferenceImages(imageContent, chipImages, workflowContextNotes)
 
-    addChip({
-      role: 'user',
-      text: `${t('system.chip.planTag')} ${promptStudioSummary}${remixReferenceSummary ? `\n${remixReferenceSummary}` : ''}\n${promptWithEmbeddedReferences}`,
-      images: chipImages,
-    })
+    addChip({ role: 'user', text: `${t('system.chip.planTag')} ${promptStudioSummary}\n${prompt}`, images: chipImages })
 
     try {
       // Phase 1: Gaze
       const gazeResult = await runPlanPhase([
-        { role: 'user', content: [...imageContent, { type: 'text', text: makeGazePrompt(promptWithEmbeddedReferences) }] },
+        { role: 'user', content: [...imageContent, { type: 'text', text: `${workflowContextNotes}\n\n${makeGazePrompt(prompt)}` }] },
       ], 0, (text) => {
         setPlanPhases(prev => prev.map((p, i) => i === 0 ? { ...p, text: p.text + text } : p))
       })
@@ -1027,9 +1344,9 @@ ${compiledSystemPrompt}`,
       setPlanActiveIndex(1)
 
       const dreamResult = await runPlanPhase([
-        { role: 'user', content: [...imageContent, { type: 'text', text: makeGazePrompt(promptWithEmbeddedReferences) }] },
+        { role: 'user', content: [...imageContent, { type: 'text', text: `${workflowContextNotes}\n\n${makeGazePrompt(prompt)}` }] },
         { role: 'assistant', content: gazeResult },
-        { role: 'user', content: [{ type: 'text', text: makeDreamPrompt(promptWithEmbeddedReferences) }] },
+        { role: 'user', content: [{ type: 'text', text: makeDreamPrompt(prompt) }] },
       ], 1, (text) => {
         setPlanPhases(prev => prev.map((p, i) => i === 1 ? { ...p, text: p.text + text } : p))
       })
@@ -1044,7 +1361,7 @@ ${compiledSystemPrompt}`,
       setStreamDone(false)
 
       const createMessages: Message[] = [
-        { role: 'user', content: [...imageContent, { type: 'text', text: makePlanCreatePrompt(gazeResult, dreamResult, promptWithEmbeddedReferences) }] },
+        { role: 'user', content: [...imageContent, { type: 'text', text: makePlanCreatePrompt(gazeResult, dreamResult, prompt) }] },
       ]
 
       let createTokenIdx = 0
@@ -1063,10 +1380,15 @@ ${compiledSystemPrompt}`,
       if (html) {
         setTimeout(() => {
           setLastHTML(html)
-          rememberPreviousRound(effectivePrompt || promptWithEmbeddedReferences, html)
+          setLastTurnReference(createWorkflowTurnReference({
+            id: `turn-${Date.now()}`,
+            modeId: activeModeId,
+            prompt,
+            html,
+          }))
           setGenerating(false)
           setIteration((i) => i + 1)
-          addChip({ role: 'assistant', text: formatOutcomeText(`${t('prompt.plan.label')} · ${generateActionLabel}`) })
+          addChip({ role: 'assistant', text: t('system.chip.planComplete') })
         }, 800)
       } else {
         setGenerating(false)
@@ -1077,7 +1399,7 @@ ${compiledSystemPrompt}`,
       setPlanDone(true)
       addChip({ role: 'assistant', text: 'ERR: ' + (t(err.message) === err.message ? err.message : t(err.message)) })
     }
-  }, [providerState, generating, getSelectedFrameImages, addChip, runPlanPhase, t, promptStudioSummary, makeGazePrompt, makeDreamPrompt, makePlanCreatePrompt, buildWebsiteReferenceInputs, remixReferenceSummary, getEmbeddedWebsiteReferenceText, currentWebsiteReference, rememberPreviousRound, generateActionLabel])
+  }, [providerState, generating, getSelectedFrameImages, addChip, runPlanPhase, t, promptStudioSummary, makeGazePrompt, makeDreamPrompt, makePlanCreatePrompt, getModeWorkflowContext, appendWorkflowReferenceImages, activeModeId, videoReference, appendVideoKeyframeImages, webEmbeds, videoRoutingNote])
 
   const handlePlanRefine = useCallback(async (prompt: string) => {
     if (!isProviderConfigured(providerState) || generating) return
@@ -1095,27 +1417,28 @@ ${compiledSystemPrompt}`,
     setPlanPhases(initialPhases)
 
     const screenshotB64 = await capturePreview()
-    setPreviewScreenshot(screenshotB64 ? 'data:image/png;base64,' + screenshotB64 : null)
+    const currentPreviewDataUrl = screenshotB64 ? 'data:image/png;base64,' + screenshotB64 : null
+    setPreviewScreenshot(currentPreviewDataUrl)
 
     const frameImages = await getSelectedFrameImages()
-    const promptWithEmbeddedReferences = `${prompt}${getEmbeddedWebsiteReferenceText()}`.trim()
-    const effectivePrompt = promptWithEmbeddedReferences || t('system.prompt.planRefineDefault')
     const chipImages: ChatChip['images'] = []
     const imageContent: Message['content'] = []
-    const websiteReferenceInputs = buildWebsiteReferenceInputs()
-    const previousRoundContextBlock = buildPreviousRoundContextBlock()
+    const workflowContext = await getModeWorkflowContext(prompt || t('system.prompt.planRefineDefault'), lastHTML)
+    const workflowContextNotes = [
+      buildWorkflowContextNotes(workflowContext),
+      buildWebEmbedContextNotes(webEmbeds),
+      buildPreviewAnnotationNotes(previewAnnotations),
+      activeModeId === 'video' ? buildVideoReferenceNotes(videoReference) : '',
+      videoRoutingNote,
+    ].filter(Boolean).join('\n\n')
 
     if (screenshotB64) {
       imageContent.push({
         type: 'image',
         source: { type: 'base64', media_type: 'image/png', data: screenshotB64 },
       })
-      chipImages.push({ src: 'data:image/png;base64,' + screenshotB64, label: t('system.prompt.currentOutput') })
+      chipImages.push({ src: currentPreviewDataUrl!, label: t('system.prompt.currentOutput') })
     }
-    for (const part of websiteReferenceInputs.imageContent) {
-      imageContent.push(part)
-    }
-    chipImages.push(...websiteReferenceInputs.chipImages)
     for (const img of frameImages) {
       imageContent.push({
         type: 'image',
@@ -1123,18 +1446,19 @@ ${compiledSystemPrompt}`,
       })
       chipImages.push({ src: 'data:image/png;base64,' + img.base64, label: img.label })
     }
+    appendVideoKeyframeImages(imageContent, chipImages)
 
-    const refinementPrompt = buildRefinePrompt(promptWithEmbeddedReferences, promptStudio, t('system.prompt.planRefineDefault'), activeMode, currentWebsiteReference)
-    addChip({
-      role: 'user',
-      text: `${t('system.chip.planRefineTag')} ${promptStudioSummary}${remixReferenceSummary ? `\n${remixReferenceSummary}` : ''}\n${promptWithEmbeddedReferences || t('system.prompt.planRefineDefault')}`,
-      images: chipImages,
+    const refinementPrompt = buildRefinePrompt(prompt, promptStudio, t('system.prompt.planRefineDefault'), {
+      modeStarter: modeDefinition.starterPrompts[0],
+      workflowContextNotes,
     })
+    appendWorkflowReferenceImages(imageContent, chipImages, workflowContextNotes, { includeCurrentPreview: false })
+    addChip({ role: 'user', text: `${t('system.chip.planRefineTag')} ${promptStudioSummary}\n${prompt || t('system.prompt.planRefineDefault')}`, images: chipImages })
 
     try {
       // Gaze at both screenshot and canvas
       const gazeResult = await runPlanPhase([
-        { role: 'user', content: [...imageContent, { type: 'text', text: makeGazePrompt(refinementPrompt) + '\n\nThe first image is the current rendered output. Subsequent images are the original sketches/references.' + (previousRoundContextBlock ? `\n\n${previousRoundContextBlock}` : '') }] },
+        { role: 'user', content: [...imageContent, { type: 'text', text: `${workflowContextNotes}\n\n${makeGazePrompt(refinementPrompt)}\n\nThe first image is the current rendered output. Subsequent images are the original sketches/references.` }] },
       ], 0, (text) => {
         setPlanPhases(prev => prev.map((p, i) => i === 0 ? { ...p, text: p.text + text } : p))
       })
@@ -1143,9 +1467,9 @@ ${compiledSystemPrompt}`,
       setPlanActiveIndex(1)
 
       const dreamResult = await runPlanPhase([
-        { role: 'user', content: [...imageContent, { type: 'text', text: makeGazePrompt(refinementPrompt) + (previousRoundContextBlock ? `\n\n${previousRoundContextBlock}` : '') }] },
+        { role: 'user', content: [...imageContent, { type: 'text', text: `${workflowContextNotes}\n\n${makeGazePrompt(refinementPrompt)}` }] },
         { role: 'assistant', content: gazeResult },
-        { role: 'user', content: [{ type: 'text', text: makeDreamPrompt(refinementPrompt) + `\n\n${previousRoundContextBlock || `This is a REFINEMENT. Here is the current HTML to evolve:\n\`\`\`html\n${lastHTML}\n\`\`\``}` }] },
+        { role: 'user', content: [{ type: 'text', text: makeDreamPrompt(refinementPrompt) + `\n\nThis is a REFINEMENT. Here is the current HTML to evolve:\n\`\`\`html\n${lastHTML}\n\`\`\`` }] },
       ], 1, (text) => {
         setPlanPhases(prev => prev.map((p, i) => i === 1 ? { ...p, text: p.text + text } : p))
       })
@@ -1158,7 +1482,7 @@ ${compiledSystemPrompt}`,
 
       let createTokenIdx2 = 0
       const createResult = await runPlanPhase([
-        { role: 'user', content: [...imageContent, { type: 'text', text: makePlanCreatePrompt(gazeResult, dreamResult, refinementPrompt) + `\n\n${previousRoundContextBlock || `Here is the previous HTML to improve upon:\n\`\`\`html\n${lastHTML}\n\`\`\``}` }] },
+        { role: 'user', content: [...imageContent, { type: 'text', text: makePlanCreatePrompt(gazeResult, dreamResult, refinementPrompt) + `\n\nHere is the previous HTML to improve upon:\n\`\`\`html\n${lastHTML}\n\`\`\`` }] },
       ], 2, (text) => {
         createTokenIdx2++
         setStreamText(prev => prev + text)
@@ -1173,10 +1497,16 @@ ${compiledSystemPrompt}`,
       if (html) {
         setTimeout(() => {
           setLastHTML(html)
-          rememberPreviousRound(effectivePrompt, html)
+          setLastTurnReference(createWorkflowTurnReference({
+            id: `turn-${Date.now()}`,
+            modeId: activeModeId,
+            prompt: prompt || t('system.prompt.planRefineDefault'),
+            html,
+            screenshotDataUrl: currentPreviewDataUrl,
+          }))
           setGenerating(false)
           setIteration((i) => i + 1)
-          addChip({ role: 'assistant', text: formatOutcomeText(`${t('prompt.plan.label')} · ${refineActionLabel}`) })
+          addChip({ role: 'assistant', text: t('system.chip.planRefineComplete') })
         }, 800)
       } else {
         setGenerating(false)
@@ -1187,28 +1517,122 @@ ${compiledSystemPrompt}`,
       setPlanDone(true)
       addChip({ role: 'assistant', text: 'ERR: ' + (t(err.message) === err.message ? err.message : t(err.message)) })
     }
-  }, [providerState, generating, lastHTML, capturePreview, getSelectedFrameImages, addChip, runPlanPhase, t, promptStudio, promptStudioSummary, makeGazePrompt, makeDreamPrompt, makePlanCreatePrompt, activeMode, currentWebsiteReference, buildWebsiteReferenceInputs, remixReferenceSummary, getEmbeddedWebsiteReferenceText, buildPreviousRoundContextBlock, rememberPreviousRound, refineActionLabel])
+  }, [providerState, generating, lastHTML, capturePreview, getSelectedFrameImages, addChip, runPlanPhase, t, promptStudio, promptStudioSummary, makeGazePrompt, makeDreamPrompt, makePlanCreatePrompt, getModeWorkflowContext, appendWorkflowReferenceImages, activeModeId, previewAnnotations, modeDefinition, videoReference, appendVideoKeyframeImages, webEmbeds, videoRoutingNote])
+
+  const dismissedNoticeKeys = useMemo(
+    () => readNoticeKeys(typeof window !== 'undefined' ? window.localStorage : undefined, NOTICE_DISMISSED_STORAGE_KEY),
+    [noticeDismissVersion],
+  )
+  const sessionDismissedNoticeKeys = useMemo(
+    () => readNoticeKeys(typeof window !== 'undefined' ? window.sessionStorage : undefined, NOTICE_SESSION_DISMISSED_STORAGE_KEY),
+    [noticeDismissVersion],
+  )
+  const activeNotice = useMemo(
+    () => siteNotices.find((notice) => shouldShowNotice(notice, dismissedNoticeKeys, sessionDismissedNoticeKeys)) || null,
+    [dismissedNoticeKeys, sessionDismissedNoticeKeys, siteNotices],
+  )
+  const handleDismissNotice = useCallback((notice: NoticeMessage) => {
+    const key = noticeKey(notice)
+    if (notice.dismissible === false) {
+      const values = readNoticeKeys(window.sessionStorage, NOTICE_SESSION_DISMISSED_STORAGE_KEY)
+      values.add(key)
+      writeNoticeKeys(window.sessionStorage, NOTICE_SESSION_DISMISSED_STORAGE_KEY, values)
+    } else {
+      const values = readNoticeKeys(window.localStorage, NOTICE_DISMISSED_STORAGE_KEY)
+      values.add(key)
+      writeNoticeKeys(window.localStorage, NOTICE_DISMISSED_STORAGE_KEY, values)
+    }
+    setNoticeDismissVersion((version) => version + 1)
+  }, [])
 
   const canGenerate = isProviderConfigured(providerState)
   const needsKey = !canGenerate
 
   return (
-    <div className="app-shell" data-mode={activeMode.id}>
+    <>
+      <NoticeOverlay
+        notice={activeNotice}
+        onDismiss={handleDismissNotice}
+        onOpenControlCenter={() => setShowControlCenter(true)}
+        t={t}
+      />
       <Header
-        modes={CANVAS_MODE_LIST}
-        modeId={activeMode.id}
-        modeSummary={modeSummary}
         providerName={provider.name}
         modelLabel={modelLabel}
         studioSummary={promptStudioSummary}
+        modeLabel={t(modeDefinition.labelKey)}
+        modeSummary={t(modeDefinition.summaryKey)}
         hasKey={canGenerate}
-        onModeChange={handleModeChange}
-        onOpenSettings={() => setShowSettings(true)}
+        onOpenSettings={() => setShowModelQuickSwitch(true)}
+        onOpenModePanel={() => setShowModePanel(true)}
+        onOpenControlCenter={() => setShowControlCenter(true)}
         locale={locale}
         onToggleLocale={() => setLocale(prev => prev === 'zh-CN' ? 'en' : 'zh-CN')}
         t={t}
       />
-      {showSettings && (
+      {showControlCenter && (
+        <ControlCenterModal
+          onClose={() => {
+            setShowControlCenter(false)
+            loadSiteNotices()
+          }}
+          onOpenPersonalSettings={() => {
+            setShowControlCenter(false)
+            setShowPersonalSettings(true)
+          }}
+          onOpenProviderSettings={() => {
+            setShowControlCenter(false)
+            setShowProviderSettings(true)
+          }}
+          onOpenWorkCenter={() => {
+            setShowControlCenter(false)
+            setShowWorkCenter(true)
+          }}
+          t={t}
+        />
+      )}
+      <ModePanel
+        visible={showModePanel}
+        activeModeId={activeModeId}
+        modes={CANVAS_MODE_DEFINITIONS}
+        contextPreferences={contextPreferences}
+        remixState={remixState}
+        onClose={() => setShowModePanel(false)}
+        onModeChange={handleModeChange}
+        onContextPreferencesChange={handleContextPreferencesChange}
+        onRemixUrlChange={handleRemixUrlChange}
+        onFetchRemixReference={handleFetchRemixReference}
+        fetchingRemixReference={fetchingRemixReference}
+        t={t}
+      />
+      {showModelQuickSwitch && (
+        <ModelQuickSwitch
+          state={providerState}
+          hasKey={canGenerate}
+          onUpdate={handleProviderUpdate}
+          onOpenConnectionSettings={() => {
+            setShowModelQuickSwitch(false)
+            setShowProviderSettings(true)
+          }}
+          onOpenPersonalSettings={() => {
+            setShowModelQuickSwitch(false)
+            setShowPersonalSettings(true)
+          }}
+          onClose={() => setShowModelQuickSwitch(false)}
+          t={t}
+        />
+      )}
+      {showPersonalSettings && (
+        <PersonalSettingsModal
+          onClose={() => setShowPersonalSettings(false)}
+          onOpenConnectionSettings={() => {
+            setShowPersonalSettings(false)
+            setShowProviderSettings(true)
+          }}
+          t={t}
+        />
+      )}
+      {showProviderSettings && (
         <ProviderModal
           state={providerState}
           visionState={visionProviderState}
@@ -1216,7 +1640,7 @@ ${compiledSystemPrompt}`,
           onUpdate={handleProviderUpdate}
           onUpdateVisionState={handleVisionProviderUpdate}
           onUpdateVisionSupportMap={handleVisionSupportUpdate}
-          onClose={() => setShowSettings(false)}
+          onClose={() => setShowProviderSettings(false)}
           t={t}
         />
       )}
@@ -1232,6 +1656,16 @@ ${compiledSystemPrompt}`,
           t={t}
         />
       )}
+      {showWorkCenter && (
+        <WorkCenterModal
+          lastHTML={lastHTML}
+          modeId={activeModeId}
+          promptDraft={promptDraft}
+          getCanvasData={buildCurrentCanvasData}
+          onClose={() => setShowWorkCenter(false)}
+          t={t}
+        />
+      )}
       <div className="workspace">
         <div className="panel-left" ref={panelLeftRef}>
           <Canvas onEditorReady={(e) => { editorRef.current = e; setEditor(e) }} onCanvasChange={handleCanvasChange} locale={locale} />
@@ -1240,43 +1674,54 @@ ${compiledSystemPrompt}`,
             selectedIds={selectedFrameIds}
             onSelectionChange={setSelectedFrameIds}
             onAddFrame={handleAddFrame}
-            onImportImage={handleImportImage}
-            onImportVideo={handleImportVideo}
+            onAddWebEmbed={handleAddWebEmbed}
+            onManageWebEmbeds={() => setShowWebEmbedPanel((visible) => !visible)}
+            onOpenWorkCenter={() => setShowWorkCenter(true)}
+            webEmbedCount={webEmbeds.length}
             canvasVersion={canvasVersion}
             onSave={handleSave}
             onLoad={handleLoad}
             previewScreenshot={previewScreenshot}
             t={t}
           />
+          {showWebEmbedPanel && (
+            <WebEmbedPanel
+              embeds={webEmbeds}
+              onReplace={handleReplaceWebEmbed}
+              onRemove={handleRemoveWebEmbed}
+              onStatusChange={handleWebEmbedStatusChange}
+              onClose={() => setShowWebEmbedPanel(false)}
+              t={t}
+            />
+          )}
           <MessageStrip chips={chips} t={t} />
           <PromptBar
-            modeDefinition={activeMode}
             onGenerate={planMode ? handlePlanGenerate : handleGenerate}
             onRefine={planMode ? handlePlanRefine : handleRefine}
             onClear={handleClear}
-            onSurprise={handleSurprise}
             prompt={promptDraft}
-            onPromptChange={setPromptDraft}
+            onPromptChange={handlePromptChange}
             studio={promptStudio}
-            onStudioChange={handlePromptStudioChange}
+            onStudioChange={handleStudioChange}
             onOpenLibrary={() => setShowPresetLibrary(true)}
-            fineTuneExpanded={fineTuneExpanded}
-            onFineTuneToggle={() => setFineTuneExpanded((prev) => !prev)}
-            remixUrl={remixUrl}
-            onRemixUrlChange={handleRemixUrlChange}
-            onFetchRemixReference={handleFetchWebsite}
-            remixFetchLoading={remixFetchLoading}
-            remixFetchError={remixFetchError}
-            hasWebsiteReference={!!websiteReference}
-            websiteReferenceSummary={remixReferenceSummary || t('mode.remix.referenceReady')}
-            onClearWebsiteReference={handleClearWebsiteReference}
             hasOutput={!!lastHTML}
-            previousRoundAvailable={!!previousRoundContext}
-            includePreviousRoundContext={includePreviousRoundContext}
-            onIncludePreviousRoundContextChange={setIncludePreviousRoundContext}
             generating={generating}
             planMode={planMode}
             onPlanModeToggle={() => setPlanMode(p => !p)}
+            modeDefinition={modeDefinition}
+            compact={compactPromptBar}
+            fineTuneExpanded={fineTuneExpanded}
+            onToggleFineTune={() => setFineTuneExpanded((prev) => !prev)}
+            onSurprise={handleSurprise}
+            contextPreferences={contextPreferences}
+            onContextPreferencesChange={handleContextPreferencesChange}
+            remixState={remixState}
+            onRemixUrlChange={handleRemixUrlChange}
+            onFetchRemixReference={handleFetchRemixReference}
+            fetchingRemixReference={fetchingRemixReference}
+            videoReference={videoReference}
+            onVideoKeyframeToggle={handleVideoKeyframeToggle}
+            onClearVideoReference={handleClearVideoReference}
             hasKey={canGenerate}
             t={t}
           />
@@ -1313,17 +1758,25 @@ ${compiledSystemPrompt}`,
                     </>
                   )}
                 </div>
-                <button className="btn btn-primary" style={{ marginTop: '16px', width: '100%' }} onClick={() => setShowSettings(true)}>
+                <button className="btn btn-primary" style={{ marginTop: '16px', width: '100%' }} onClick={() => setShowModelQuickSwitch(true)}>
                   {t('overlay.openSettings')}
                 </button>
               </div>
             </div>
           )}
           <div className="preview-container">
-            <Preview html={lastHTML} iframeRef={previewRef} modeDefinition={activeMode} t={t} />
+            <Preview html={lastHTML} iframeRef={previewRef} t={t} />
+            {lastHTML && (
+              <PreviewAnnotations
+                active={previewAnnotationMode && !generating}
+                annotations={previewAnnotations}
+                onChange={setPreviewAnnotations}
+                t={t}
+              />
+            )}
             {generating && !planMode && (
               <StreamOverlay
-                modeDefinition={activeMode}
+                modeDefinition={modeDefinition}
                 streamText={streamText}
                 thinkingText={thinkingText}
                 tokenCount={streamTokenCount}
@@ -1333,7 +1786,7 @@ ${compiledSystemPrompt}`,
             )}
             {generating && planMode && (
               <PlanOverlay
-                modeDefinition={activeMode}
+                modeDefinition={modeDefinition}
                 phases={planPhases}
                 activePhaseIndex={planActiveIndex}
                 tokenCount={planTokenCount}
@@ -1348,6 +1801,23 @@ ${compiledSystemPrompt}`,
           {lastHTML && (
             <div className="preview-toolbar">
               <div className="preview-toolbar-left">
+                <button
+                  className={`btn btn-secondary preview-annotation-toggle ${previewAnnotationMode ? 'active' : ''}`}
+                  onClick={() => setPreviewAnnotationMode((active) => !active)}
+                  disabled={generating}
+                >
+                  {t('preview.annotations.toggle')}
+                  {previewAnnotations.length > 0 ? ` ${previewAnnotations.length}` : ''}
+                </button>
+                {previewAnnotations.length > 0 && (
+                  <button
+                    className="btn btn-ghost preview-annotation-clear"
+                    onClick={() => setPreviewAnnotations([])}
+                    disabled={generating}
+                  >
+                    {t('preview.annotations.clear')}
+                  </button>
+                )}
                 <button className="btn btn-secondary" onClick={() => {
                   navigator.clipboard.writeText(lastHTML)
                 }}>{t('preview.copy')}</button>
@@ -1365,6 +1835,6 @@ ${compiledSystemPrompt}`,
           )}
         </div>
       </div>
-    </div>
+    </>
   )
 }

@@ -9,6 +9,10 @@ export interface ModelDef {
   id: string
   label: string
   vision?: boolean
+  video?: boolean
+  toolCalling?: boolean
+  contextWindow?: number
+  favorite?: boolean
 }
 
 export interface ProviderDef {
@@ -58,9 +62,6 @@ export interface ResolvedProviderRequest {
   modelId: string
   useProxy?: boolean
 }
-
-export const COMPATIBLE_OPENAI_PROVIDER_ID = 'custom'
-const LEGACY_DEFAULT_PROVIDER_ID = 'zai'
 
 function withBearer(apiKey: string): Record<string, string> {
   const headers: Record<string, string> = {
@@ -128,32 +129,21 @@ export const PROVIDERS: ProviderDef[] = [
     name: 'ChatGPT',
     type: 'openai',
     endpoint: 'https://api.openai.com/v1/chat/completions',
-    models: [
-      { id: 'gpt-4.1', label: 'GPT-4.1', vision: true },
-      { id: 'gpt-4.1-mini', label: 'GPT-4.1 Mini', vision: true },
-      { id: 'gpt-4o', label: 'GPT-4o', vision: true },
-      { id: 'gpt-4o-mini', label: 'GPT-4o Mini', vision: true },
-    ],
+    models: [],
     keyHintKey: 'provider.keyHint.chatgpt',
     keyUrl: 'https://platform.openai.com/api-keys',
-    keyUrlLabel: 'OpenAI',
-    storageKey: 'chatgpt_key',
+    keyUrlLabel: 'OpenAI Platform',
+    storageKey: 'openai_key',
   },
   {
     id: 'kimi',
     name: 'Kimi',
     type: 'openai',
     endpoint: 'https://api.moonshot.ai/v1/chat/completions',
-    models: [
-      { id: 'kimi-k2.6', label: 'Kimi K2.6', vision: true },
-      { id: 'kimi-k2.5', label: 'Kimi K2.5', vision: true },
-      { id: 'kimi-k2', label: 'Kimi K2', vision: true },
-      { id: 'kimi-k2-thinking', label: 'Kimi K2 Thinking', vision: true },
-      { id: 'moonshot-v1', label: 'Moonshot V1', vision: true },
-    ],
+    models: [],
     keyHintKey: 'provider.keyHint.kimi',
-    keyUrl: 'https://platform.moonshot.ai',
-    keyUrlLabel: 'Moonshot',
+    keyUrl: 'https://platform.kimi.ai/',
+    keyUrlLabel: 'Kimi API',
     storageKey: 'kimi_key',
   },
   {
@@ -161,9 +151,7 @@ export const PROVIDERS: ProviderDef[] = [
     name: 'z.ai',
     type: 'openai',
     endpoint: 'https://api.z.ai/api/paas/v4/chat/completions',
-    models: [
-      { id: 'glm-5v-turbo', label: 'GLM-5V Turbo', vision: true },
-    ],
+    models: [],
     keyHintKey: 'provider.keyHint.zai',
     keyUrl: 'https://z.ai',
     keyUrlLabel: 'z.ai',
@@ -174,11 +162,7 @@ export const PROVIDERS: ProviderDef[] = [
     name: 'Google',
     type: 'gemini',
     endpoint: 'https://generativelanguage.googleapis.com/v1beta',
-    models: [
-      { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro', vision: true },
-      { id: 'gemini-3-flash-preview', label: 'Gemini 3.1 Flash', vision: true },
-      { id: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Flash Lite', vision: true },
-    ],
+    models: [],
     keyHintKey: 'provider.keyHint.google',
     keyUrl: 'https://aistudio.google.com/apikey',
     keyUrlLabel: 'AI Studio',
@@ -189,9 +173,7 @@ export const PROVIDERS: ProviderDef[] = [
     name: 'Fireworks',
     type: 'openai',
     endpoint: 'https://api.fireworks.ai/inference/v1/chat/completions',
-    models: [
-      { id: 'accounts/fireworks/routers/kimi-k2p5-turbo', label: 'Kimi K2.5 Turbo', vision: true },
-    ],
+    models: [],
     keyHintKey: 'provider.keyHint.fireworks',
     keyUrl: 'https://app.fireworks.ai/fire-pass',
     keyUrlLabel: 'Fire Pass',
@@ -203,15 +185,7 @@ export const PROVIDERS: ProviderDef[] = [
     type: 'openai',
     endpoint: 'https://openrouter.ai/api/v1/chat/completions',
     fetchModels: true,
-    models: [
-      { id: 'anthropic/claude-4.6-sonnet-20260217', label: 'Claude 4.6 Sonnet', vision: true },
-      { id: 'anthropic/claude-opus-4.6', label: 'Claude 4.6 Opus', vision: true },
-      { id: 'google/gemini-3-flash-preview-20251217', label: 'Gemini 3 Flash', vision: true },
-      { id: 'x-ai/grok-4.1-fast', label: 'Grok 4.1 Fast', vision: true },
-      { id: 'qwen/qwen3.5-plus-02-15', label: 'Qwen 3.5 Plus', vision: true },
-      { id: 'xiaomi/mimo-v2-omni', label: 'MiMo V2 Omni', vision: true },
-      { id: 'moonshotai/kimi-k2.5-0127', label: 'Kimi K2.5', vision: true },
-    ],
+    models: [],
     keyHintKey: 'provider.keyHint.openrouter',
     keyUrl: 'https://openrouter.ai/keys',
     keyUrlLabel: 'OpenRouter',
@@ -293,16 +267,20 @@ export function isModelVisionEnabled(
   return provider.type === 'gemini'
 }
 
+export function isModelVideoEnabled(
+  provider: ProviderDef,
+  modelId: string,
+): boolean {
+  const model = provider.models.find(m => m.id === modelId)
+  return model?.video === true
+}
+
 export function getProvider(id: string): ProviderDef {
   return PROVIDERS.find(p => p.id === id) || PROVIDERS[0]
 }
 
 function normalizeUrl(value?: string) {
   return value?.trim().replace(/\/+$/, '') || ''
-}
-
-function hasConfiguredKey(value?: string) {
-  return (value || '').trim().length > 4
 }
 
 function ensurePath(url: string, path: string) {
@@ -336,7 +314,7 @@ function migrateLegacyCustom(raw: any): CustomProviderConfig {
     mode,
     baseUrl: raw?.custom?.baseUrl || '',
     endpoint: raw?.custom?.endpoint || raw?.customEndpoint || '',
-    modelId: raw?.custom?.modelId || raw?.customModelId || (raw?.activeProviderId === 'custom' ? raw?.activeModelId || '' : ''),
+    modelId: raw?.custom?.modelId || raw?.customModelId || raw?.activeModelId || '',
     resourceUrl: raw?.custom?.resourceUrl || '',
     deployment: raw?.custom?.deployment || '',
     apiVersion: raw?.custom?.apiVersion || '2024-10-21',
@@ -351,14 +329,14 @@ export function makeDefaultProviderState(): ProviderState {
   }
 
   const oldProvider = localStorage.getItem('vcanvas_provider')
-  let activeProviderId = COMPATIBLE_OPENAI_PROVIDER_ID
-  if (oldProvider === 'glm5v' && hasConfiguredKey(keys.zai)) activeProviderId = 'zai'
-  else if (oldProvider === 'gemini' && hasConfiguredKey(keys.google)) activeProviderId = 'google'
+  let activeProviderId = 'custom'
+  if (oldProvider === 'glm5v' && keys.zai) activeProviderId = 'zai'
+  else if (oldProvider === 'gemini' && keys.google) activeProviderId = 'google'
 
   const provider = getProvider(activeProviderId)
   return {
     activeProviderId,
-    activeModelId: provider.id === COMPATIBLE_OPENAI_PROVIDER_ID ? '' : (provider.models[0]?.id || ''),
+    activeModelId: provider.models[0]?.id || '',
     keys,
     custom: { ...DEFAULT_CUSTOM },
   }
@@ -386,30 +364,21 @@ export function loadProviderState(storageKey = PROVIDER_STATE_STORAGE_KEY): Prov
         }
       }
       if (!PROVIDERS.find(p => p.id === parsed.activeProviderId)) {
-        parsed.activeProviderId = COMPATIBLE_OPENAI_PROVIDER_ID
+        parsed.activeProviderId = PROVIDERS[0].id
+      }
+      if (storageKey === PROVIDER_STATE_STORAGE_KEY && parsed.activeProviderId === 'zai' && !parsed.keys.zai) {
+        parsed.activeProviderId = 'custom'
       }
       const provider = getProvider(parsed.activeProviderId)
-      const custom = migrateLegacyCustom(parsed)
-      const normalizedKeys = parsed.keys as Record<string, string>
-      const hasAnyConfiguredKey = Object.values(normalizedKeys).some(hasConfiguredKey)
-      const shouldFallbackToCompatible = parsed.activeProviderId === LEGACY_DEFAULT_PROVIDER_ID
-        && !hasConfiguredKey(normalizedKeys[LEGACY_DEFAULT_PROVIDER_ID])
-        && !hasAnyConfiguredKey
       const activeModelId = parsed.activeProviderId === 'custom'
-        ? (custom.modelId || parsed.customModelId || '')
+        ? (parsed.custom?.modelId || parsed.customModelId || '')
         : (parsed.activeModelId || provider.models[0]?.id || '')
 
-      const nextActiveProviderId = shouldFallbackToCompatible
-        ? COMPATIBLE_OPENAI_PROVIDER_ID
-        : parsed.activeProviderId
-
       return {
-        activeProviderId: nextActiveProviderId,
-        activeModelId: nextActiveProviderId === COMPATIBLE_OPENAI_PROVIDER_ID
-          ? (custom.modelId || '')
-          : activeModelId,
-        keys: normalizedKeys,
-        custom,
+        activeProviderId: parsed.activeProviderId,
+        activeModelId,
+        keys: parsed.keys,
+        custom: migrateLegacyCustom(parsed),
       }
     }
   } catch { /* ignore */ }
@@ -460,15 +429,18 @@ export function getCustomConfigErrorForPurpose(
   if (!endpoint) return 'provider.validation.compatibleEndpointRequired'
   if (!isAbsoluteUrl(endpoint)) return 'provider.validation.invalidUrl'
   if (needsModel && !custom.modelId?.trim()) return 'provider.validation.customModelRequired'
-  if (apiKey.trim().length <= 4) return 'provider.validation.apiKeyRequired'
   return null
 }
 
 export function getProviderConfigError(state: ProviderState): string | null {
   if (state.activeProviderId !== 'custom') {
-    return (state.keys[state.activeProviderId] || '').trim().length > 4
-      ? null
-      : 'provider.validation.apiKeyRequired'
+    if ((state.keys[state.activeProviderId] || '').trim().length <= 4) {
+      return 'provider.validation.apiKeyRequired'
+    }
+    if (!state.activeModelId?.trim()) {
+      return 'provider.validation.modelRequired'
+    }
+    return null
   }
 
   return getCustomConfigError(state.custom, state.keys.custom || '')

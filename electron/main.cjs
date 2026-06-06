@@ -10,15 +10,15 @@ let proxyHandle = null
 function createMenu() {
   const template = [
     {
-      label: 'VCanvas',
+      label: 'Inscanvas',
       submenu: [
         {
-          label: 'About VCanvas',
+          label: 'About Inscanvas',
           click: async () => {
             await dialog.showMessageBox({
               type: 'info',
-              title: 'About VCanvas',
-              message: 'VCanvas',
+              title: 'About Inscanvas',
+              message: 'Inscanvas',
               detail: `Version ${app.getVersion()}\nDesktop build with embedded proxy support for OpenAI-compatible endpoints.`,
             })
           },
@@ -82,7 +82,7 @@ async function createMainWindow() {
     backgroundColor: '#0c0e11',
     autoHideMenuBar: true,
     show: false,
-    title: 'VCanvas',
+    title: 'Inscanvas',
     icon: path.join(__dirname, '..', 'assets', 'icons', process.platform === 'win32' ? 'app.ico' : 'app-256.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),

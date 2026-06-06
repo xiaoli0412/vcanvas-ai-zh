@@ -1,0 +1,69 @@
+# inscanvas Public Server Baseline
+
+## Branch
+- Current owner-cadence branch: `codex/canvas-lab-public-server-v1.10.9`
+- Main phase-0/1 branch retained on publish: `codex/canvas-lab-public-server`
+- Legacy branch retained remotely for rollback comparison: `publish/codex/creative-lab`
+
+## Frozen Compatibility Baseline
+- Frontend canvas stack remains `React + Vite + Excalidraw`.
+- Current user-visible generation path remains browser-side for now.
+- Existing `/_vcanvas_proxy`, `/proxy`, `/health`, Electron bootstrap, static build, and remote deployment script remain supported.
+- Existing provider storage, prompt studio storage, and canvas save/load behavior remain readable during migration.
+
+## Phase-1 Additions Started
+- `shared/contracts/publicServer.ts` defines the first public-server contract set.
+- `server/` now hosts the public-server TypeScript skeleton and placeholder API routes.
+- `server/data/localDataStore.ts` provides the default zero-configuration JSON persistence adapter under `.vcanvas-data/`, covering settings, notices, provider channels, works, workflow runs, sessions, users, quotas, redeem codes, blocked IPs, rate-limit events, sign-in records, share links, gallery entries, and audit events.
+- `src/lib/canvasModes.ts` now carries the 12-mode Canvas 2.0 state model, including legacy-mode migration from the earlier six-mode branch.
+- `src/lib/workflowContext.ts` introduces explicit workflow context composition for previous-turn carryover and remix references.
+- `src/lib/websiteReference.ts` introduces client-side remix reference fetching against `/api/remix/fetch`.
+- `src/components/ModePanel.tsx` and `src/components/PromptBar.tsx` now keep modes, website remix input, and fine-tune controls in secondary UI so the canvas remains first.
+- `src/components/PreviewAnnotations.tsx` adds right-side preview annotations that feed location-aware notes into refine and plan-refine prompts.
+- `src/lib/videoReferences.ts` extracts local video keyframes for video mode and sends selected frames as visual anchors across generate/refine/plan flows.
+- `src/components/WebEmbedPanel.tsx` and `src/lib/webEmbeds.ts` add Web Embed v1: URL placeholder frames, edit/replace/remove controls, compact iframe preview, visible fallback, save/load support, and prompt metadata.
+- `server/routes/providers.ts` and `server/routes/notices.ts` add phase-1 public-server contracts for model channel governance and site notice delivery without claiming unverified model capability data.
+- Session, settings, works, quota, ops, and workflow routes now expose the planned phase-1 local/mock surface for guest/server-managed execution, personal/site settings, works CRUD/import/share/gallery-submit, sign-in/redeem, 24h workflow run retention, cleanup, and compressed workflow context payloads.
+- `scripts/serve-vcanvas.mjs` now mirrors the core Fastify API surface for existing `/opt/vcanvas` static deployments instead of serving only `/health`, static files, and proxy calls.
+- Frontend provider defaults are OpenAI-compatible first: `custom` remains the storage ID, but the UI label/default entry is `Compatible OpenAI`; ChatGPT and Kimi are distinct cards, and unverified model lists are intentionally not hardcoded.
+- The header model control is now a compact quick switch. Channel/model management moves into `Personal Settings · Models & Channels`, with search, favorites, manual model IDs, capability badges, and batch capability editing through the server provider contract.
+- Video mode now explicitly falls back to keyframe/vision translation notes when the active model is not marked `video=true`; direct video-understanding requests are not assumed for non-video models.
+- `src/components/WorkCenterModal.tsx` adds the first canvas-first Works Center UI layer: save the latest generated HTML with a canvas snapshot, import standalone HTML, edit metadata, export, share, submit to the mock gallery queue, and delete works from a secondary modal opened by the compact canvas toolbar.
+- `src/components/ControlCenterModal.tsx` adds the first `inscanvas` control-center UI layer: mock login/register/guest, session/IP/UA visibility, quota sign-in/redeem entry, profile fields, site settings, notice creation, gallery front desk, and ops cleanup all live in a secondary modal instead of a permanent side panel.
+- `src/components/ControlCenterModal.tsx` now also exposes an admin-only user-management tab backed by `/api/users`, showing tier/enabled state, IP/activity summaries, work/workflow counts, provider channel counts, and masked-key counts without returning clear-text keys.
+- `src/components/ControlCenterModal.tsx` now adds user search plus manual IP block/unblock controls backed by `/api/security/blocked-ips`; the server refuses to block the current request IP in local/mock mode to avoid admin self-lockout.
+- `src/components/NoticeOverlay.tsx` consumes forced warning/realtime notices from `/api/notices` and displays them as app-level secondary overlays with local/session acknowledgement.
+- `src/components/WorkCenterModal.tsx` now catches work-limit situations before save/import and shows an in-modal deletion chooser so users can free one slot without leaving the canvas.
+- Classic/custom mode now opens with a compact prompt bar by default. Starter chips, Studio, context carry settings, remix details, video keyframes, and Web Embed management stay behind secondary controls so the canvas remains primary.
+- Mobile/narrow layouts hide the right preview panel and keep the header horizontally scrollable instead of crushing the canvas or stacking the brand vertically.
+- Site settings and notice payloads now preserve nested `sharePolicy`, `noticePolicy`, `updatePolicy`, and `migrationPolicy` defaults when old local JSON data is migrated or partially patched.
+- `scripts/serve-vcanvas.mjs` mirrors the Fastify delete semantics for works, including cleanup of share links and gallery entries, so the deployment server does not accumulate orphaned public metadata.
+- Public share pages now resolve enabled share links at `/share/:slug`; saved HTML is returned directly so imported static landing pages are not wrapped or broken, while missing/expired/paused links return branded fallback pages.
+- Public gallery front-desk pages now resolve at `/gallery` in both Fastify and `scripts/serve-vcanvas.mjs`, rendering pending/published local/mock entries as a read-only standalone page in the simple deep-blue inscanvas direction.
+- `1.10.11` language/theme baseline aligns the app and public pages around default Chinese, always-available Header language switching, HarmonyOS Sans system-first body/control typography, and a deeper blue with slight purple accent palette (`#080d1c`, `#0b1024`, `#111831`).
+- `ModelQuickSwitch` and `PersonalSettingsModal` are now wired to the shared i18n dictionary; public `/gallery` and `/share/:slug` fallback pages use Chinese copy in both Fastify and the lightweight deployment server while leaving brand/provider/API/model identifiers unchanged.
+- `1.10.11` typography now embeds local OFL fonts: Noto Serif SC / Source Han Serif style for high-quality Songti display titles and Fusion Pixel 10px Monospaced SC for short playful titles/brand accents, while dense controls keep HarmonyOS/system sans fallbacks. Font notices are tracked in `docs/third-party-fonts.md`.
+- `/gallery` now uses a lighter Xiaohongshu-style masonry feed in both Fastify and `scripts/serve-vcanvas.mjs`: optional snapshot covers first, compact metadata, shorter notices, and simple gradient placeholders when no preview image exists.
+- `/api/dispatch/status` and `/api/dispatch/route` now expose a planned-only distributed dispatch contract with weighted candidate selection, current-load awareness, and explicit fallback reasons; no real cross-server queue execution is implied in this phase.
+
+## 2026-06-06 Verification Snapshot
+- `npm run typecheck`
+- `npm run typecheck:server`
+- `node --check scripts/serve-vcanvas.mjs`
+- `npm run build`
+- Fastify smoke test: `/health`, `/_vcanvas_proxy`, `/`, `/share/:slug`, `/gallery`, `/api/session/register|login|me`, `/api/users`, `/api/security/blocked-ips`, `/api/providers`, `/api/settings/site`, `/api/notices`, `/api/quotas/sign-in|redeem`, `/api/works` CRUD/share/gallery-submit/delete, `/api/gallery`, `/api/workflows/generate|refine|plan`, `/api/remix/fetch`, `/api/ops/status`, `/api/maintenance/cleanup`.
+- Lightweight `scripts/serve-vcanvas.mjs` smoke test: same endpoint set as Fastify, including public `/share/:slug` and `/gallery`, with post-delete counts confirming no orphaned share/gallery records and parity for `/api/users` plus `/api/security/blocked-ips`.
+- Follow-up smoke test: admin user patch, forced warning notice payload, work-limit 409, delete-for-space, and re-save passed on both Fastify and lightweight services.
+- Security follow-up smoke test: `/api/security/blocked-ips` list/block/self-block rejection/blocked request rejection/unblock passed on both Fastify and lightweight services.
+- Browser/CDP screenshots reviewed at desktop `1440x960` and mobile `390x844`; opening the Control Center leaves `.workspace` dimensions unchanged (`1440x920` desktop, `390x804` mobile).
+- Browser screenshot review for the security slice confirmed user search, blocked-IP state, and ops blocked-IP list render inside the secondary Control Center modal without changing `.workspace` size (`1440x920` before and after).
+- Public-route smoke test passed on both Fastify and lightweight services: mock user login, work save, share creation, `/share/:slug`, gallery submission, `/gallery`, and `/api/gallery`.
+- Public-page browser screenshot review passed for `/gallery` desktop `1440x960`, `/gallery` mobile `390x844`, and direct `/share/:slug` desktop `1440x960`.
+- `1.10.11` final verification passed for embedded font loading, default Chinese, Header language toggle desktop/mobile, compact PromptBar/FramePicker/MessageStrip typography, public `/gallery` screenshots at `1440x960` and `390x844`, and `/api/dispatch/*` parity.
+- Fastify static serving now streams real files from `VCANVAS_STATIC_DIR` before SPA fallback, so `/assets/*.js`, `/assets/*.css`, and `/fonts/*` no longer fall through to `index.html`.
+
+## Deferred Beyond This Commit
+- Real auth on top of latest `newapi`, production key encryption, payment-grade quotas, PostgreSQL/Redis persistence, and external `newapi/subapi/octopus` bridges.
+- Production-grade native Excalidraw embeddable element integration, deeper iframe-block detection, and persisted web-embed previews.
+- Queue-backed screenshots, Redis, PostgreSQL, and worker orchestration.
+- Verified official model catalogs and Asterbot-style model capability auto-detection across every provider channel.

@@ -1,0 +1,266 @@
+# Codex Resume Handoff — 2026-05-31
+
+## 当前分支
+- 本地分支：`codex/canvas-lab-public-server-v1.10.9`
+- 远端跟踪：`publish/codex/canvas-lab-public-server-v1.10.9`
+- 主线基线分支：`publish/codex/canvas-lab-public-server`
+
+## 当前目标上下文
+- 依据文档：
+  - `C:\Users\李昊桐\Downloads\Canvas重构方案2.0.md`
+  - `C:\Users\李昊桐\Downloads\Canvas_2.0_重构计划注意细则.md`
+- 当前执行策略：
+  - 先把前台画布壳、12 模式、二级入口、上下文链路、文案基线稳定下来
+  - 暂不直接跳到完整用户系统 / newapi 真桥接
+  - 保持“画布第一”，重型控制继续退居二级入口
+
+## 本轮已完成
+- 已完成分支重命名与 upstream 切换：
+  - `codex/creative-lab` -> `codex/canvas-lab-public-server`
+- 已落地 public-server 一期骨架：
+  - `server/`
+  - `shared/`
+  - `tsconfig.server.json`
+- 已落地 Canvas 2.0 的 12 模式基础架构：
+  - `custom`
+  - `pure`
+  - `video`
+  - `web-copy`
+  - `inspiration`
+  - `cinema`
+  - `lite-app`
+  - `eclectic`
+  - `ppt`
+  - `docs`
+  - `showcase`
+  - `frontier`
+- 已完成旧模式迁移兼容：
+  - `classic-studio -> custom`
+  - `spark -> inspiration`
+  - `map -> docs`
+  - `story -> cinema`
+  - `wild -> eclectic`
+  - `remix -> web-copy`
+- 已把模式入口保持为二级面板，不再常驻压缩画布
+- 已增加：
+  - HTML 导出
+  - 图片 / 视频同级导入入口
+  - 工作流上下文携带选项
+  - 网站参考抓取基础链路
+- 本轮新增补完：
+  - 模式分组信息与 badge 元数据
+  - `ModePanel` 分组展示
+  - compact 模式 starter chip 改为可翻译标签，不再直接截断英文 prompt
+  - `PlanPhaseContext` 加入 `modeStarter`
+  - `Plan Refine` 也补入 `modeStarter + workflowContextNotes`
+  - 补齐缺失翻译：
+    - `canvas.videoLabel`
+    - `mode.remix.placeholder`
+    - 全套 `mode.starter.*`
+    - `mode.group.*`
+    - `mode.badge.*`
+  - 同步修正文档：
+    - `docs/public-server-baseline.md`
+    - `docs/canvas-2.0-master-checklist.md`
+- 2026-06-06 续做新增：
+  - 新增右侧预览批注模式：
+    - `src/components/PreviewAnnotations.tsx`
+    - `src/components/PreviewAnnotations.css`
+    - `src/lib/previewAnnotations.ts`
+  - 预览工具条增加 `批注` 开关和清批注按钮
+  - 用户可在当前产物预览上点击放置位置化批注，并输入修改意见
+  - 普通 `Refine` 与 `Plan Refine` 会把批注坐标和文字注入 `Workflow Context`
+  - 产物切换或清空时会自动清理旧批注，避免批注错位
+  - 新增视频模式关键帧引用路径：
+    - `src/lib/videoReferences.ts`
+    - 导入视频后自动切到 `video` 模式
+    - 浏览器本地抽取 3-4 张关键帧
+    - `PromptBar` 在视频模式显示关键帧缩略图，支持选择/取消选择
+  - `Generate / Refine / Plan / Plan Refine` 都会把选中关键帧作为图片上下文发送
+  - 新增 Web Embed v1：
+    - `src/lib/webEmbeds.ts`
+    - `src/components/WebEmbedPanel.tsx`
+    - 左下工具栏可添加网页嵌入 URL，并在画布创建 URL 占位 Frame
+    - 二级面板支持替换、移除、iframe 预览与失败兜底链接
+    - 保存 / 加载 JSON 会携带 `webEmbeds`
+    - `Generate / Refine / Plan / Plan Refine` 会把网页嵌入 URL 元数据注入上下文
+  - 补齐 public-server phase-1 route contracts：
+    - `/api/session/me|login|logout|guest`
+    - `/api/settings/site|personal`
+    - `/api/providers`
+    - `/api/notices`
+    - `/api/works` CRUD 占位
+  - 2026-06-06 续推进：
+    - 经典 / 自定义模式默认底栏彻底收口：只保留 prompt、Plan、细调入口、生成 / 润色和少量状态
+    - starter chips、模式说明、Studio、上下文携带、remix、视频关键帧全部改为展开细调后显示
+    - 移动端隐藏右侧 preview 分栏，避免 API key 覆盖层和 preview 把画布挤坏
+    - Header 在窄屏改为横向滚动，不再把 `INSC ANVAS` 压成竖排
+    - 默认 Provider 恢复为 `Compatible OpenAI`，内部仍沿用 `custom` 存储 ID
+    - 新增独立前端 Provider 卡：`ChatGPT`、`Kimi`
+    - 未经官方文档或 live `/models` 核查的模型不再作为新增 Provider 的预设硬编码目标
+    - 新增 `.vcanvas-data` 本地 JSON 持久化 adapter
+    - Fastify 与 `scripts/serve-vcanvas.mjs` 的核心 API 能力对齐：
+      - `/health`
+      - `/_vcanvas_proxy`
+      - `/api/session/*`
+      - `/api/providers`
+      - `/api/notices`
+      - `/api/settings/*`
+      - `/api/works/*`
+      - `/api/workflows/generate|refine|plan`
+      - `/api/remix/fetch`
+    - works、workflow runs、settings、notices、provider channels、sessions、audit events 进入本地持久化骨架
+    - workflow runs 默认 24h 留存，并对 HTML / 网页参考 / 上轮产物做压缩 v1
+  - 2026-06-06 主线续推进：
+    - 顶部模型入口拆为紧凑 `ModelQuickSwitch`，不再从 Header 直接展开完整 Provider 配置
+    - 新增 `PersonalSettingsModal`，承载“个人设置 - 模型与渠道”
+    - 模型治理支持搜索、手动模型 ID、收藏固定、图像/视频/工具调用/上下文窗口徽标、批量能力编辑
+    - ProviderModal 中旧的单字母 `V` 替换为明确能力徽标
+    - `shared/contracts/publicServer.ts` 扩展用户、权限、签到、限流、分享、鉴赏厅、托管、运维与导出清单类型
+    - `.vcanvas-data` 扩展 users、quotaLedgers、redeemCodes、blockedIps、rateLimitEvents、signInRecords、shareLinks、galleryEntries
+    - `/api/session/*` 升级为本地持久用户骨架，保留 8h 不活跃过期、访客临时身份和 IP/UA 审计
+    - `/api/providers` 支持 batch capability update，并对非管理视图预留密钥遮罩策略
+    - `/api/works/import-html`、`/api/works/:id/share`、`/api/works/:id/gallery-submit`、`/api/gallery` 落地 local/mock v1
+    - `/api/quotas/sign-in|redeem`、`/api/ops/status`、`/api/maintenance/cleanup` 落地 local/mock v1
+    - Fastify 与 `scripts/serve-vcanvas.mjs` 同步上述核心 API parity
+    - 视频模式在当前模型未标记 `video=true` 时明确走关键帧 / 视觉转译，不假设直接视频理解
+  - 2026-06-06 作品中心续推进：
+    - 新增 `WorkCenterModal`，从左下紧凑画布工具栏以二级弹层打开，不增加常驻画布占用
+    - 前端接通 `/api/session/me`、`/api/works`、`/api/works/import-html`、`/api/works/:id/share`、`/api/works/:id/gallery-submit`、`/api/gallery`
+    - 支持保存当前生成 HTML + 当前画布 JSON 快照、导入 HTML、编辑名称/简介、导出 HTML、分享、提交鉴赏厅和删除
+    - 中英 i18n 与暗紫 / 深蓝弹层样式已补齐
+  - 2026-06-06 控制中心续推进：
+    - 新增 `ControlCenterModal`，从 Header 的 `控制台` 二级入口打开，不新增常驻侧栏
+    - 控制中心覆盖：
+      - 总览：mock 登录、本地/mock 注册、访客、会话剩余、执行模式、IP/UA/时间提示
+      - 个人：资料字段、签到、兑换入口
+      - 站点：站点名称、公网 URL、安全模式、GitHub repo、访客/注册/鉴赏厅/强警告开关
+      - 提示：announcement / realtime / warning 创建与只读列表
+      - 鉴赏厅：pending/published 作品只读前台
+      - 运维：本地 JSON 状态、托管策略、手动 cleanup
+    - 扩展 `SiteSettings`、`NoticeMessage`、`ProviderChannel`、`QuotaLedger` 的补充细则字段：
+      - share / notice / update / migration policy
+      - notice force / dismissible / image / expiresAt
+      - provider verification metadata
+      - hosted daily usage
+    - `/api/session/register` 落地 Fastify 与轻量服务本地/mock parity
+    - `scripts/serve-vcanvas.mjs` 修齐 works delete parity：删除作品时同步清理 shareLinks 与 galleryEntries
+    - 服务端设置合并层补齐嵌套策略默认值，兼容旧 `.vcanvas-data` 局部字段迁移
+  - 2026-06-06 继续推进：
+    - 新增应用级 `NoticeOverlay`：
+      - 读取 `/api/notices`
+      - 对 warning / realtime / force notice 弹出二级强提示
+      - dismissible notice 写 localStorage
+      - non-dismissible notice 只允许本次会话确认，避免永久卡住画布
+    - 新增 `/api/users` Fastify + 轻量服务 parity：
+      - 仅 host-admin/admin 可访问
+      - 返回用户、等级、启用状态、IP/登录活动、作品/流程/Provider 数量、遮罩密钥数量
+      - PATCH 支持 tier / enabled 更新
+      - 不返回任何明文 API key
+    - 控制中心新增 `用户` admin tab：
+      - 展示 local/mock 用户管理
+      - 支持本地等级调整与启用/禁用
+    - Works Center 新增作品上限二级删除选择：
+      - 保存/导入前如果达到 `workLimitPerOwner`
+      - 在弹层内列出旧作品，用户可先删除腾空间
+      - 删除后可继续保存，不需要离开画布
+  - 2026-06-06 继续推进安全骨架：
+    - 新增 `/api/security/blocked-ips` Fastify + 轻量服务 parity：
+      - host-admin/admin 可列出、手动封禁、解封 IP
+      - 写入 `blockedIps` 与 `auditEvents`
+      - 本地/mock 模式拒绝封禁当前请求 IP，避免管理员自锁
+    - 控制中心 `用户` tab 新增搜索：
+      - 可按用户 ID、用户名、邮箱、等级、最近 IP 搜索
+    - 控制中心 `用户` tab 新增 IP 封禁/解封：
+      - 用户最近 IP 已封禁时显示状态与解封按钮
+      - 当前请求 IP 不允许从 UI 直接封禁
+    - 控制中心 `运维` tab 新增生效中封禁 IP 列表
+  - 2026-06-06 继续推进公开作品前台：
+    - 新增 Fastify `/share/:slug`：
+      - 启用中的分享链接直接返回保存的 HTML，不包裹用户静态页面
+      - 分享暂停、过期、缺失时返回 inscanvas 品牌 fallback 页
+    - 新增 Fastify `/gallery`：
+      - 独立只读鉴赏厅前台
+      - 显示 pending-review / published 的 local/mock 条目
+      - 有有效分享链接的作品可直接进入 `/share/:slug`
+    - `scripts/serve-vcanvas.mjs` 同步 `/share/:slug` 与 `/gallery` parity
+  - 页面风格保持暗紫 / 深蓝，不增加任何常驻画布 chrome
+  - 2026-06-06 字体 / 语言 / 简约主题推进：
+    - 默认语言改为中文；已有本地语言选择仍保留
+    - Header 语言切换在桌面和移动端都保持可见，不再被窄屏 CSS 隐藏
+    - 全局正文与控件字体改为 HarmonyOS Sans 系统优先栈，mono 继续用于模型 ID、代码和技术徽标
+    - 本地内嵌 OFL 字体：Noto Serif SC 作为高级宋体展示字体，Fusion Pixel 10px Monospaced SC 作为短标题 / 品牌像素字体
+    - 暗紫基调收敛为深蓝微紫：`#080d1c / #0b1024 / #111831` 为主背景，紫色只作为低饱和 accent
+    - `ModelQuickSwitch`、`PersonalSettingsModal`、Header `by/Studio` 等功能文本接入 i18n
+    - Fastify 与 `scripts/serve-vcanvas.mjs` 的 `/gallery`、`/share/:slug` fallback 和状态页默认中文，并共享简约公开页外壳
+    - `/gallery` 进一步收口成轻量瀑布流：优先读取作品快照封面，缺失时使用简洁渐变占位，减少副标题和长说明
+    - 新增 `/api/dispatch/status` 与 `/api/dispatch/route` planned-only 调度口，保留后续多服务器均衡负载接入点
+    - 参考 New API `v1.0.0-rc.10` 的紧凑管理台方向，只吸收信息密度、徽标、卡片和移动端可读性原则，不复制代码或素材
+
+## 已验证
+- `npm run typecheck` 通过
+- `npm run typecheck:server` 通过
+- `node --check scripts/serve-vcanvas.mjs` 通过
+- `npm run build` 通过
+- 当前仍有大 chunk 警告，但没有构建失败
+- Fastify 服务验证通过：
+  - health、proxy、index、session register/login/me、providers、settings patch、notices create、quota sign-in/redeem、works CRUD/share/gallery-submit/delete、gallery、workflow generate/refine/plan、remix fetch、ops、cleanup
+  - 追加验证 `/api/users`、`/api/security/blocked-ips`、强警告 notice payload、作品上限失败、删除释放空间后再保存
+- 轻量部署服务 `node scripts/serve-vcanvas.mjs` 验证通过：
+  - 同上核心接口
+  - 删除作品后 shareLinks/galleryEntries 无残留
+  - `/api/users`、`/api/security/blocked-ips`、强警告 notice、作品上限与删除释放空间 parity 通过
+- 浏览器截图审查通过：
+  - 桌面 `1440x960`
+  - 移动 `390x844`
+  - 重点确认控制中心打开前后 `.workspace` 尺寸不变，桌面 `1440x920`，移动 `390x804`
+  - 追加安全切片截图：用户搜索 + IP 封禁状态、运维封禁列表；控制中心打开前后 `.workspace` 均为 `1440x920`
+- 当前公开作品切片验证通过：
+  - `npm run typecheck`
+  - `npm run typecheck:server`
+  - `node --check scripts/serve-vcanvas.mjs`
+  - `npm run build`
+  - Fastify 与轻量服务公开路由烟测：保存 HTML、分享、`/share/:slug`、提交鉴赏厅、`/gallery`、`/api/gallery`
+  - Playwright 截图：`/gallery` 桌面与移动、`/share/:slug` 桌面
+- 当前字体 / 语言 / 简约主题切片已完成最终验证：
+  - `npm run typecheck`
+  - `npm run typecheck:server`
+  - `node --check scripts/serve-vcanvas.mjs`
+  - `npm run build`
+  - Fastify 与轻量服务 `/gallery`、`/share/not-exist`、有 HTML 的 `/share/:slug`、`/api/gallery`、`/api/dispatch/status`、`POST /api/dispatch/route`
+  - Fastify 静态资源服务修复：`/assets/*.js` 不再回落为 `index.html`
+  - 浏览器截图：主应用、模式面板、模型快速切换、个人设置、控制中心、作品中心、公开 `/gallery` 的桌面与移动布局
+
+## 当前工作树状态
+- 本轮计划提交信息：`feat: refine language theme and typography`
+- 推送目标：`publish/codex/canvas-lab-public-server-v1.10.9`
+- 不推送 `origin`
+
+## 下次启动后建议直接继续的顺序
+1. 先运行：
+   - `git status --short --branch`
+   - `npm run typecheck`
+   - `npm run build`
+2. 先做控制中心后续项：
+   - 用户管理继续项：真实 newapi 用户同步、邮箱/钱包/QQ 头像字段
+   - 强警告继续项：站点设置里配置默认强警告策略、长文免责声明弹层、导出/分享前确认
+   - 作品继续项：作品超限时支持“删除并自动继续保存”、公开分享页安全策略细化、分享渲染页后续 SEO/审核提示
+3. 然后继续 Canvas 2.0 补充细则高优先级项：
+   - 通过官方文档或 live `/models` 核查后再补 ModelScope / Ollama / DMX / 百炼 / MiMo / Step / Nvidia 的模型能力
+   - Web Embed v1 的 CSP / X-Frame-Options 受限页面可见兜底继续打磨
+   - 鉴赏厅审核模型、独立分享渲染策略、作品流程图导出
+4. 前台稳定后，再推进真实平台化：
+   - `newapi / subapi / octopus` bridge 真实接入
+   - provider key 加密、权限审计、安全核查模型
+   - GitHub 更新提醒、低峰更新、数据导出导入、备份回滚 UI
+
+## 重要约束
+- 不要轻易改动以下兼容键：
+  - `vcanvas_*` localStorage keys
+  - `VCANVAS_*` env names
+  - `/opt/vcanvas` 部署路径
+- 用户当前更在意：
+  - 画布空间不能被挤占
+  - 二级入口而不是大面积常驻控制
+  - 原本偏暗紫 / 深蓝的高级感
+  - 先把前台体验打磨稳，再继续平台化

@@ -1,0 +1,439 @@
+export type UserTier = 'host-admin' | 'admin' | 'vip' | 'user' | 'guest'
+
+export type ExecutionMode = 'browser-local' | 'server-managed'
+
+export type UserPermission =
+  | 'manage-site'
+  | 'manage-users'
+  | 'manage-models'
+  | 'manage-gallery'
+  | 'use-server-execution'
+  | 'publish-gallery'
+  | 'manage-own-works'
+
+export type CanvasModeId =
+  | 'custom'
+  | 'pure'
+  | 'video'
+  | 'web-copy'
+  | 'inspiration'
+  | 'cinema'
+  | 'lite-app'
+  | 'eclectic'
+  | 'ppt'
+  | 'docs'
+  | 'showcase'
+  | 'frontier'
+
+export type ContextCarryPolicy = 'disabled' | 'last-turn' | 'full'
+
+export interface ProviderCapability {
+  vision: boolean
+  video?: boolean
+  toolCalling?: boolean
+  contextWindow?: number
+  serverSide?: boolean
+}
+
+export interface ModelCapability extends ProviderCapability {
+  id: string
+  label: string
+  source: 'builtin' | 'fetched' | 'manual'
+  favorite?: boolean
+  verifiedAt?: string | null
+  verifiedSourceUrl?: string | null
+}
+
+export interface ProviderChannel {
+  id: string
+  label: string
+  endpoint?: string
+  apiType: 'openai-compatible' | 'openai' | 'azure-openai' | 'gemini' | 'ollama'
+  models: ModelCapability[]
+  ownerId?: string | null
+  apiKeyMasked?: string | null
+  verifiedAt?: string | null
+  verifiedSourceUrl?: string | null
+  verificationMethod?: 'official-doc' | 'live-models' | 'manual' | null
+  verificationNotes?: string | null
+  capabilityDetectionConfidence?: 'unknown' | 'low' | 'medium' | 'high'
+  lastModelFetchAt?: string | null
+  favoriteModelIds?: string[]
+  favorite?: boolean
+  enabled?: boolean
+}
+
+export interface UserProfile {
+  displayName: string
+  avatarUrl?: string | null
+  motto?: string
+  qq?: string | null
+}
+
+export interface UserAccount {
+  id: string
+  email?: string | null
+  username: string
+  tier: UserTier
+  profile: UserProfile
+  enabled: boolean
+  createdAt: string
+  updatedAt: string
+  lastLoginAt?: string | null
+  lastLoginIp?: string | null
+}
+
+export interface SignInRecord {
+  id: string
+  userId: string
+  tier: UserTier
+  ip?: string | null
+  userAgent?: string | null
+  createdAt: string
+}
+
+export interface BlockedIp {
+  ip: string
+  reason: string
+  blockedAt: string
+  expiresAt?: string | null
+  createdBy?: string | null
+}
+
+export interface RateLimitEvent {
+  id: string
+  subject: string
+  subjectType: 'ip' | 'user' | 'tier' | 'global'
+  route: string
+  tier: UserTier
+  ip?: string | null
+  createdAt: string
+}
+
+export interface WebsiteReferenceContext {
+  url: string
+  html: string
+  rebasedHtml?: string
+  screenshotDataUrl?: string | null
+  stylesheetSnippets: string[]
+  styleHints: string[]
+  fetchedAt: string
+  error?: string | null
+}
+
+export interface WebEmbedReference {
+  id: string
+  url: string
+  title: string
+  frameId?: string | null
+  status: 'idle' | 'preview-ready' | 'blocked' | 'error'
+  error?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface PreviewAnnotation {
+  id: string
+  x: number
+  y: number
+  text: string
+  createdAt: string
+}
+
+export interface VideoReference {
+  id: string
+  fileName: string
+  duration: number
+  selectedKeyframeIds: string[]
+  createdAt: string
+  error?: string | null
+}
+
+export interface WorkflowTurnReference {
+  id: string
+  modeId: CanvasModeId
+  prompt: string
+  html?: string
+  screenshotDataUrl?: string | null
+  createdAt: string
+}
+
+export interface WorkflowContext {
+  modeId: CanvasModeId
+  prompt: string
+  carryPolicy: ContextCarryPolicy
+  currentCanvasLabels: string[]
+  currentOutputHtml?: string
+  previousTurn?: WorkflowTurnReference | null
+  includePreviousPrompt: boolean
+  includePreviousOutput: boolean
+  includePreviousScreenshot: boolean
+  websiteReference?: WebsiteReferenceContext | null
+  webEmbeds?: WebEmbedReference[]
+  previewAnnotations?: PreviewAnnotation[]
+  videoReference?: VideoReference | null
+}
+
+export interface WorkflowRun {
+  id: string
+  ownerId: string
+  modeId: CanvasModeId
+  executionMode: ExecutionMode
+  prompt: string
+  context: WorkflowContext
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+  createdAt: string
+  updatedAt: string
+  expiresAt?: string | null
+}
+
+export interface WorkSnapshot {
+  id: string
+  workId: string
+  html?: string
+  canvasData?: string
+  previewImageUrl?: string | null
+  createdAt: string
+}
+
+export interface WorkRecord {
+  id: string
+  ownerId: string
+  title: string
+  description?: string
+  modeId: CanvasModeId
+  status: 'draft' | 'saved' | 'published' | 'archived'
+  html?: string
+  shareSlug?: string | null
+  galleryStatus?: 'private' | 'pending-review' | 'published' | 'rejected'
+  exportMetadata?: {
+    exportedAt?: string | null
+    includesFlowMap?: boolean
+    disclaimerComment?: string
+  }
+  disclaimerInjectedAt?: string | null
+  createdAt: string
+  updatedAt: string
+  snapshots: WorkSnapshot[]
+}
+
+export interface ShareLink {
+  id: string
+  workId: string
+  ownerId: string
+  slug: string
+  enabled: boolean
+  createdAt: string
+  expiresAt?: string | null
+  disclaimerComment?: string
+}
+
+export interface GalleryEntry {
+  id: string
+  workId: string
+  ownerId: string
+  status: 'pending-review' | 'published' | 'rejected'
+  submittedAt: string
+  reviewedAt?: string | null
+  reviewerId?: string | null
+  rejectionReason?: string | null
+}
+
+export interface QuotaLedger {
+  userId: string
+  tier: UserTier
+  premiumCredits: number
+  baseCallsRemaining: number
+  hostedRunsRemaining?: number
+  hostedRunsUsedToday?: number
+  resetAt: string
+  hostedResetAt?: string
+}
+
+export interface RedeemCode {
+  id: string
+  code: string
+  tierUpgrade?: UserTier
+  premiumCredits?: number
+  expiresAt: string
+  maxRedemptions: number
+  redeemedCount: number
+  redeemedBy?: string[]
+  enabled?: boolean
+}
+
+export interface SiteSettings {
+  siteName: string
+  siteDescription?: string
+  publicBaseUrl?: string
+  defaultModeId: CanvasModeId
+  guestEnabled: boolean
+  registrationEnabled?: boolean
+  serverExecutionDefault: boolean
+  publicGalleryEnabled: boolean
+  experimentalFeaturesEnabled: boolean
+  securityMode?: 'normal' | 'limited' | 'host-admin-only'
+  workLimitPerOwner?: number
+  galleryPublishLimits?: Partial<Record<UserTier, number | null>>
+  highLoadDegradeThreshold?: number
+  longDisclaimer?: string
+  sharePolicy?: {
+    enabled: boolean
+    publicBaseUrl?: string
+    pauseOnSecurityWarning?: boolean
+  }
+  noticePolicy?: {
+    forceWarnings: boolean
+    allowMarkdown: boolean
+    allowImages: boolean
+  }
+  updatePolicy?: {
+    githubRepo: string
+    checkEnabled: boolean
+    lowTrafficAutoUpdate: boolean
+  }
+  migrationPolicy?: {
+    exportEnabled: boolean
+    requireVerification: boolean
+  }
+  opsPublicEnabled?: boolean
+  dispatchPolicy?: {
+    enabled: boolean
+    strategy: 'round-robin-weighted'
+    nodes: DispatchNode[]
+  }
+}
+
+export interface PersonalSettings {
+  userId?: string
+  displayName: string
+  avatarUrl?: string | null
+  motto?: string
+  preferredModeId?: CanvasModeId
+  favoriteModelKeys?: string[]
+  experimental?: {
+    serverHighResourceHosting: boolean
+  }
+}
+
+export interface AuthSession {
+  id: string
+  userId: string
+  tier: UserTier
+  executionMode: ExecutionMode
+  lastActiveAt: string
+  expiresAt: string
+  ip?: string | null
+  userAgent?: string | null
+}
+
+export interface RateLimitPolicy {
+  id: string
+  scope: 'ip' | 'user' | 'tier' | 'global'
+  enabled: boolean
+  windowSeconds: number
+  maxRequests: number
+  lockoutSeconds?: number
+}
+
+export interface NoticeMessage {
+  id: string
+  kind: 'announcement' | 'realtime' | 'warning'
+  title: string
+  body: string
+  format: 'plain' | 'markdown'
+  audience: UserTier[] | 'all'
+  enabled: boolean
+  force?: boolean
+  dismissible?: boolean
+  imageUrl?: string | null
+  expiresAt?: string | null
+  createdAt: string
+  updatedAt?: string
+}
+
+export interface DisclaimerPolicy {
+  shortText: string
+  longText: string
+  injectOnExport: boolean
+  injectOnShare: boolean
+}
+
+export interface HostingPolicy {
+  defaultExecutionMode: ExecutionMode
+  resourceHeavyModeDefault: ExecutionMode
+  serverHighResourceHostingEnabled: boolean
+  dailyHostedLimit: number
+  fallbackReason?: string | null
+}
+
+export interface DispatchNode {
+  id: string
+  url: string
+  weight: number
+  enabled: boolean
+  currentLoad?: number
+  lastSeenAt?: string | null
+}
+
+export interface DispatchSnapshot {
+  strategy: 'round-robin-weighted'
+  selectedNode?: DispatchNode | null
+  nodes: DispatchNode[]
+  message: string
+  plannedOnly: boolean
+  fallbackReason?: string | null
+}
+
+export interface OpsSnapshot {
+  takenAt: string
+  counts: {
+    users: number
+    sessions: number
+    workflows: number
+    works: number
+    shareLinks: number
+    galleryEntries: number
+    rateLimitEvents: number
+    blockedIps: number
+  }
+  hostingPolicy: HostingPolicy
+  storage: {
+    adapter: 'local-json'
+    retentionHours: number
+  }
+  highLoadMode: boolean
+  dispatch?: DispatchSnapshot
+}
+
+export interface DataExportManifest {
+  exportedAt: string
+  adapter: 'local-json'
+  includes: string[]
+  counts: Record<string, number>
+}
+
+export interface AuditEvent {
+  id: string
+  actorId?: string | null
+  actorTier: UserTier
+  action: string
+  ip?: string | null
+  createdAt: string
+  metadata?: Record<string, unknown>
+}
+
+export interface NewApiBridge {
+  kind: 'newapi'
+  available: boolean
+}
+
+export interface SubapiBridge {
+  kind: 'subapi'
+  available: boolean
+}
+
+export interface OctopusBridge {
+  kind: 'octopus'
+  available: boolean
+}
