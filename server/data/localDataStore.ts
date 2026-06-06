@@ -94,6 +94,45 @@ function mergeByKey<T>(defaults: T[], input: T[] | undefined, getKey: (item: T) 
   return [...merged.values()]
 }
 
+function mergeSiteSettings(defaults: SiteSettings, input?: Partial<SiteSettings>): SiteSettings {
+  const sharePolicy: NonNullable<SiteSettings['sharePolicy']> = {
+    enabled: true,
+    publicBaseUrl: '',
+    pauseOnSecurityWarning: true,
+    ...(defaults.sharePolicy || {}),
+    ...(input?.sharePolicy || {}),
+  }
+  const noticePolicy: NonNullable<SiteSettings['noticePolicy']> = {
+    forceWarnings: true,
+    allowMarkdown: true,
+    allowImages: true,
+    ...(defaults.noticePolicy || {}),
+    ...(input?.noticePolicy || {}),
+  }
+  const updatePolicy: NonNullable<SiteSettings['updatePolicy']> = {
+    githubRepo: 'xiaoli0412/vcanvas-ai-zh',
+    checkEnabled: true,
+    lowTrafficAutoUpdate: false,
+    ...(defaults.updatePolicy || {}),
+    ...(input?.updatePolicy || {}),
+  }
+  const migrationPolicy: NonNullable<SiteSettings['migrationPolicy']> = {
+    exportEnabled: true,
+    requireVerification: true,
+    ...(defaults.migrationPolicy || {}),
+    ...(input?.migrationPolicy || {}),
+  }
+
+  return {
+    ...defaults,
+    ...(input || {}),
+    sharePolicy,
+    noticePolicy,
+    updatePolicy,
+    migrationPolicy,
+  }
+}
+
 function mergeDefaults(input: Partial<PublicServerData>): PublicServerData {
   const defaults = createDefaultData()
   const users = mergeById(defaults.users, input.users)
@@ -101,7 +140,7 @@ function mergeDefaults(input: Partial<PublicServerData>): PublicServerData {
   return {
     ...defaults,
     ...input,
-    siteSettings: { ...defaults.siteSettings, ...(input.siteSettings || {}) },
+    siteSettings: mergeSiteSettings(defaults.siteSettings, input.siteSettings),
     personalSettings: { ...defaults.personalSettings, ...(input.personalSettings || {}) },
     disclaimerPolicy: { ...defaults.disclaimerPolicy, ...(input.disclaimerPolicy || {}) },
     providerChannels: mergeById(defaults.providerChannels, input.providerChannels),

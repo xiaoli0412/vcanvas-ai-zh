@@ -28,16 +28,20 @@
 - The header model control is now a compact quick switch. Channel/model management moves into `Personal Settings · Models & Channels`, with search, favorites, manual model IDs, capability badges, and batch capability editing through the server provider contract.
 - Video mode now explicitly falls back to keyframe/vision translation notes when the active model is not marked `video=true`; direct video-understanding requests are not assumed for non-video models.
 - `src/components/WorkCenterModal.tsx` adds the first canvas-first Works Center UI layer: save the latest generated HTML with a canvas snapshot, import standalone HTML, edit metadata, export, share, submit to the mock gallery queue, and delete works from a secondary modal opened by the compact canvas toolbar.
+- `src/components/ControlCenterModal.tsx` adds the first `inscanvas` control-center UI layer: mock login/register/guest, session/IP/UA visibility, quota sign-in/redeem entry, profile fields, site settings, notice creation, gallery front desk, and ops cleanup all live in a secondary modal instead of a permanent side panel.
 - Classic/custom mode now opens with a compact prompt bar by default. Starter chips, Studio, context carry settings, remix details, video keyframes, and Web Embed management stay behind secondary controls so the canvas remains primary.
 - Mobile/narrow layouts hide the right preview panel and keep the header horizontally scrollable instead of crushing the canvas or stacking the brand vertically.
+- Site settings and notice payloads now preserve nested `sharePolicy`, `noticePolicy`, `updatePolicy`, and `migrationPolicy` defaults when old local JSON data is migrated or partially patched.
+- `scripts/serve-vcanvas.mjs` mirrors the Fastify delete semantics for works, including cleanup of share links and gallery entries, so the deployment server does not accumulate orphaned public metadata.
 
 ## 2026-06-06 Verification Snapshot
 - `npm run typecheck`
 - `npm run typecheck:server`
+- `node --check scripts/serve-vcanvas.mjs`
 - `npm run build`
-- Fastify smoke test: `/health`, `/_vcanvas_proxy`, `/`, `/api/providers`, `/api/session/me`, `/api/settings/site`, `/api/notices`, `/api/works` CRUD, `/api/workflows/generate`, `/api/remix/fetch`.
-- Lightweight `scripts/serve-vcanvas.mjs` smoke test: same endpoint set as Fastify.
-- Browser screenshots reviewed at desktop `1440x960` and mobile `390x844`.
+- Fastify smoke test: `/health`, `/_vcanvas_proxy`, `/`, `/api/session/register|login|me`, `/api/providers`, `/api/settings/site`, `/api/notices`, `/api/quotas/sign-in|redeem`, `/api/works` CRUD/share/gallery-submit/delete, `/api/gallery`, `/api/workflows/generate|refine|plan`, `/api/remix/fetch`, `/api/ops/status`, `/api/maintenance/cleanup`.
+- Lightweight `scripts/serve-vcanvas.mjs` smoke test: same endpoint set as Fastify, with post-delete counts confirming no orphaned share/gallery records.
+- Browser/CDP screenshots reviewed at desktop `1440x960` and mobile `390x844`; opening the Control Center leaves `.workspace` dimensions unchanged (`1440x920` desktop, `390x804` mobile).
 
 ## Deferred Beyond This Commit
 - Real auth on top of latest `newapi`, production key encryption, payment-grade quotas, PostgreSQL/Redis persistence, and external `newapi/subapi/octopus` bridges.

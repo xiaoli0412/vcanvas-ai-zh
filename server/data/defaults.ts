@@ -13,6 +13,8 @@ const ZERO_TIME = new Date(0).toISOString()
 
 export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   siteName: 'inscanvas Public Server',
+  siteDescription: 'Canvas-first creative workspace with local public-server foundations.',
+  publicBaseUrl: '',
   defaultModeId: 'custom',
   guestEnabled: true,
   registrationEnabled: true,
@@ -30,6 +32,26 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   },
   highLoadDegradeThreshold: 0.9,
   longDisclaimer: 'inscanvas is a creative canvas platform. Public works and shared exports are user-directed content and must be reviewed by the creator before publication.',
+  sharePolicy: {
+    enabled: true,
+    publicBaseUrl: '',
+    pauseOnSecurityWarning: true,
+  },
+  noticePolicy: {
+    forceWarnings: true,
+    allowMarkdown: true,
+    allowImages: true,
+  },
+  updatePolicy: {
+    githubRepo: 'xiaoli0412/vcanvas-ai-zh',
+    checkEnabled: true,
+    lowTrafficAutoUpdate: false,
+  },
+  migrationPolicy: {
+    exportEnabled: true,
+    requireVerification: true,
+  },
+  opsPublicEnabled: false,
 }
 
 export const DEFAULT_PERSONAL_SETTINGS: PersonalSettings = {
@@ -96,6 +118,7 @@ export const DEFAULT_QUOTA_LEDGERS: QuotaLedger[] = [
     premiumCredits: 0,
     baseCallsRemaining: 8,
     hostedRunsRemaining: 0,
+    hostedRunsUsedToday: 0,
     resetAt: ZERO_TIME,
     hostedResetAt: ZERO_TIME,
   },
@@ -105,6 +128,7 @@ export const DEFAULT_QUOTA_LEDGERS: QuotaLedger[] = [
     premiumCredits: 999999,
     baseCallsRemaining: 999999,
     hostedRunsRemaining: 999999,
+    hostedRunsUsedToday: 0,
     resetAt: ZERO_TIME,
     hostedResetAt: ZERO_TIME,
   },
@@ -119,6 +143,10 @@ export const DEFAULT_NOTICES: NoticeMessage[] = [
     format: 'plain',
     audience: 'all',
     enabled: true,
+    force: false,
+    dismissible: true,
+    imageUrl: null,
+    expiresAt: null,
     createdAt: ZERO_TIME,
     updatedAt: ZERO_TIME,
   },

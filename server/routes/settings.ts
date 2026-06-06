@@ -3,6 +3,29 @@ import { createId, getClientIp, localDataStore } from '../data/localDataStore'
 import type { PersonalSettings, SiteSettings } from '../../shared/contracts/publicServer'
 import { getActor } from '../lib/platformPolicy'
 
+const defaultSharePolicy: NonNullable<SiteSettings['sharePolicy']> = {
+  enabled: true,
+  publicBaseUrl: '',
+  pauseOnSecurityWarning: true,
+}
+
+const defaultNoticePolicy: NonNullable<SiteSettings['noticePolicy']> = {
+  forceWarnings: true,
+  allowMarkdown: true,
+  allowImages: true,
+}
+
+const defaultUpdatePolicy: NonNullable<SiteSettings['updatePolicy']> = {
+  githubRepo: 'xiaoli0412/vcanvas-ai-zh',
+  checkEnabled: true,
+  lowTrafficAutoUpdate: false,
+}
+
+const defaultMigrationPolicy: NonNullable<SiteSettings['migrationPolicy']> = {
+  exportEnabled: true,
+  requireVerification: true,
+}
+
 export async function registerSettingsRoutes(app: FastifyInstance) {
   app.get('/api/settings/site', async () => {
     const data = await localDataStore.read()
@@ -25,6 +48,10 @@ export async function registerSettingsRoutes(app: FastifyInstance) {
       data.siteSettings = {
         ...data.siteSettings,
         ...body,
+        sharePolicy: { ...defaultSharePolicy, ...(data.siteSettings.sharePolicy || {}), ...(body.sharePolicy || {}) },
+        noticePolicy: { ...defaultNoticePolicy, ...(data.siteSettings.noticePolicy || {}), ...(body.noticePolicy || {}) },
+        updatePolicy: { ...defaultUpdatePolicy, ...(data.siteSettings.updatePolicy || {}), ...(body.updatePolicy || {}) },
+        migrationPolicy: { ...defaultMigrationPolicy, ...(data.siteSettings.migrationPolicy || {}), ...(body.migrationPolicy || {}) },
       }
       if (body.disclaimerPolicy && typeof body.disclaimerPolicy === 'object') {
         data.disclaimerPolicy = {

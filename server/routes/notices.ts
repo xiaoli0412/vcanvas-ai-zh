@@ -28,6 +28,10 @@ export async function registerNoticeRoutes(app: FastifyInstance) {
         format: body.format || existing?.format || 'plain',
         audience: body.audience || existing?.audience || 'all',
         enabled: body.enabled ?? existing?.enabled ?? true,
+        force: body.force ?? existing?.force ?? body.kind === 'warning',
+        dismissible: body.dismissible ?? existing?.dismissible ?? body.kind !== 'warning',
+        imageUrl: body.imageUrl ?? existing?.imageUrl ?? null,
+        expiresAt: body.expiresAt ?? existing?.expiresAt ?? null,
         createdAt: existing?.createdAt || now,
         updatedAt: now,
       }

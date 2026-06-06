@@ -55,6 +55,9 @@ export interface ProviderChannel {
   verifiedAt?: string | null
   verifiedSourceUrl?: string | null
   verificationMethod?: 'official-doc' | 'live-models' | 'manual' | null
+  verificationNotes?: string | null
+  capabilityDetectionConfidence?: 'unknown' | 'low' | 'medium' | 'high'
+  lastModelFetchAt?: string | null
   favoriteModelIds?: string[]
   favorite?: boolean
   enabled?: boolean
@@ -242,6 +245,7 @@ export interface QuotaLedger {
   premiumCredits: number
   baseCallsRemaining: number
   hostedRunsRemaining?: number
+  hostedRunsUsedToday?: number
   resetAt: string
   hostedResetAt?: string
 }
@@ -260,6 +264,8 @@ export interface RedeemCode {
 
 export interface SiteSettings {
   siteName: string
+  siteDescription?: string
+  publicBaseUrl?: string
   defaultModeId: CanvasModeId
   guestEnabled: boolean
   registrationEnabled?: boolean
@@ -271,6 +277,26 @@ export interface SiteSettings {
   galleryPublishLimits?: Partial<Record<UserTier, number | null>>
   highLoadDegradeThreshold?: number
   longDisclaimer?: string
+  sharePolicy?: {
+    enabled: boolean
+    publicBaseUrl?: string
+    pauseOnSecurityWarning?: boolean
+  }
+  noticePolicy?: {
+    forceWarnings: boolean
+    allowMarkdown: boolean
+    allowImages: boolean
+  }
+  updatePolicy?: {
+    githubRepo: string
+    checkEnabled: boolean
+    lowTrafficAutoUpdate: boolean
+  }
+  migrationPolicy?: {
+    exportEnabled: boolean
+    requireVerification: boolean
+  }
+  opsPublicEnabled?: boolean
 }
 
 export interface PersonalSettings {
@@ -313,6 +339,10 @@ export interface NoticeMessage {
   format: 'plain' | 'markdown'
   audience: UserTier[] | 'all'
   enabled: boolean
+  force?: boolean
+  dismissible?: boolean
+  imageUrl?: string | null
+  expiresAt?: string | null
   createdAt: string
   updatedAt?: string
 }

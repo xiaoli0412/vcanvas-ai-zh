@@ -219,6 +219,27 @@
   background: var(--bg-elevated);
 }
 
+.header-control-btn {
+  height: 26px;
+  padding: 4px 10px;
+  border: 1px solid rgba(108, 117, 190, 0.24);
+  border-radius: var(--radius);
+  background: rgba(77, 92, 172, 0.1);
+  color: #9aa8ff;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.header-control-btn:hover {
+  border-color: rgba(154, 168, 255, 0.48);
+  background: rgba(77, 92, 172, 0.18);
+  color: var(--text-primary);
+}
+
 /* What is this button */
 .what-is-this-btn {
   font-size: 10px !important;

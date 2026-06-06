@@ -3,6 +3,7 @@ import { convertToExcalidrawElements } from '@excalidraw/excalidraw'
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import type { BinaryFileData } from '@excalidraw/excalidraw/types'
 import { Header } from './components/Header'
+import { ControlCenterModal } from './components/ControlCenterModal'
 import { ModePanel } from './components/ModePanel'
 import { ModelQuickSwitch } from './components/ModelQuickSwitch'
 import { PersonalSettingsModal } from './components/PersonalSettingsModal'
@@ -206,6 +207,7 @@ export function App() {
   const [promptDraft, setPromptDraft] = useState(() => getModePromptDraft(INITIAL_MODE_STATE, INITIAL_MODE_STATE.activeModeId))
   const [savedPresets, setSavedPresets] = useState<PromptPresetRecord[]>(loadUserPromptPresets)
   const [showModelQuickSwitch, setShowModelQuickSwitch] = useState(false)
+  const [showControlCenter, setShowControlCenter] = useState(false)
   const [showProviderSettings, setShowProviderSettings] = useState(false)
   const [showPersonalSettings, setShowPersonalSettings] = useState(false)
   const [showPresetLibrary, setShowPresetLibrary] = useState(false)
@@ -1476,10 +1478,29 @@ ${compiledSystemPrompt}`,
         hasKey={canGenerate}
         onOpenSettings={() => setShowModelQuickSwitch(true)}
         onOpenModePanel={() => setShowModePanel(true)}
+        onOpenControlCenter={() => setShowControlCenter(true)}
         locale={locale}
         onToggleLocale={() => setLocale(prev => prev === 'zh-CN' ? 'en' : 'zh-CN')}
         t={t}
       />
+      {showControlCenter && (
+        <ControlCenterModal
+          onClose={() => setShowControlCenter(false)}
+          onOpenPersonalSettings={() => {
+            setShowControlCenter(false)
+            setShowPersonalSettings(true)
+          }}
+          onOpenProviderSettings={() => {
+            setShowControlCenter(false)
+            setShowProviderSettings(true)
+          }}
+          onOpenWorkCenter={() => {
+            setShowControlCenter(false)
+            setShowWorkCenter(true)
+          }}
+          t={t}
+        />
+      )}
       <ModePanel
         visible={showModePanel}
         activeModeId={activeModeId}

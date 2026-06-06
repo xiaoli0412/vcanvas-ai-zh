@@ -128,20 +128,39 @@
     - 前端接通 `/api/session/me`、`/api/works`、`/api/works/import-html`、`/api/works/:id/share`、`/api/works/:id/gallery-submit`、`/api/gallery`
     - 支持保存当前生成 HTML + 当前画布 JSON 快照、导入 HTML、编辑名称/简介、导出 HTML、分享、提交鉴赏厅和删除
     - 中英 i18n 与暗紫 / 深蓝弹层样式已补齐
+  - 2026-06-06 控制中心续推进：
+    - 新增 `ControlCenterModal`，从 Header 的 `控制台` 二级入口打开，不新增常驻侧栏
+    - 控制中心覆盖：
+      - 总览：mock 登录、本地/mock 注册、访客、会话剩余、执行模式、IP/UA/时间提示
+      - 个人：资料字段、签到、兑换入口
+      - 站点：站点名称、公网 URL、安全模式、GitHub repo、访客/注册/鉴赏厅/强警告开关
+      - 提示：announcement / realtime / warning 创建与只读列表
+      - 鉴赏厅：pending/published 作品只读前台
+      - 运维：本地 JSON 状态、托管策略、手动 cleanup
+    - 扩展 `SiteSettings`、`NoticeMessage`、`ProviderChannel`、`QuotaLedger` 的补充细则字段：
+      - share / notice / update / migration policy
+      - notice force / dismissible / image / expiresAt
+      - provider verification metadata
+      - hosted daily usage
+    - `/api/session/register` 落地 Fastify 与轻量服务本地/mock parity
+    - `scripts/serve-vcanvas.mjs` 修齐 works delete parity：删除作品时同步清理 shareLinks 与 galleryEntries
+    - 服务端设置合并层补齐嵌套策略默认值，兼容旧 `.vcanvas-data` 局部字段迁移
 
 ## 已验证
 - `npm run typecheck` 通过
 - `npm run typecheck:server` 通过
+- `node --check scripts/serve-vcanvas.mjs` 通过
 - `npm run build` 通过
 - 当前仍有大 chunk 警告，但没有构建失败
 - Fastify 服务验证通过：
-  - health、proxy、index、providers、session、settings、notices、works CRUD、workflow generate、remix fetch
+  - health、proxy、index、session register/login/me、providers、settings patch、notices create、quota sign-in/redeem、works CRUD/share/gallery-submit/delete、gallery、workflow generate/refine/plan、remix fetch、ops、cleanup
 - 轻量部署服务 `node scripts/serve-vcanvas.mjs` 验证通过：
   - 同上核心接口
+  - 删除作品后 shareLinks/galleryEntries 无残留
 - 浏览器截图审查通过：
   - 桌面 `1440x960`
   - 移动 `390x844`
-  - 重点确认画布不再被底栏和右侧覆盖层挤压
+  - 重点确认控制中心打开前后 `.workspace` 尺寸不变，桌面 `1440x920`，移动 `390x804`
 
 ## 当前工作树状态
 - 本轮计划提交信息：`feat: harden canvas 2.0 public server foundation`
@@ -153,17 +172,18 @@
    - `git status --short --branch`
    - `npm run typecheck`
    - `npm run build`
-2. 先做前台稳定性继续项：
-   - 检查 12 模式面板在中文下的实际显示
-   - 检查“展开细调”后的 starter chips / Studio / 上下文是否符合预期
-   - 实机确认 `Plan / Refine / Plan Refine` 的模式人格差异
-3. 然后继续 Canvas 2.0 文档中的下一批高优先级前台项：
-   - 检查“个人设置 - 模型与渠道”的模型搜索、收藏、批量能力编辑和手动模型 ID
-   - Web Embed v1 的浏览器实机回归，包括 CSP / X-Frame-Options 受限页面的可见兜底
-   - 通过官方文档或 live `/models` 核查后再补各渠道预设模型
-4. 前台稳定后，再推进：
-   - `newapi / subapi / octopus` bridge 空壳细化
-   - session / auth / tier / quota 基础服务接口
+2. 先做控制中心后续项：
+   - 用户管理界面：只允许 host-admin/admin 进入，默认遮罩 API key 与敏感字段
+   - 强警告真实弹出：把 notice force policy 从控制中心配置接到应用级提醒层
+   - 作品超 10 条时的前端删除选择，而不仅是接口 409
+3. 然后继续 Canvas 2.0 补充细则高优先级项：
+   - 通过官方文档或 live `/models` 核查后再补 ModelScope / Ollama / DMX / 百炼 / MiMo / Step / Nvidia 的模型能力
+   - Web Embed v1 的 CSP / X-Frame-Options 受限页面可见兜底继续打磨
+   - 分享公开路由与鉴赏厅前台独立路由
+4. 前台稳定后，再推进真实平台化：
+   - `newapi / subapi / octopus` bridge 真实接入
+   - provider key 加密、权限审计、安全核查模型
+   - GitHub 更新提醒、低峰更新、数据导出导入、备份回滚 UI
 
 ## 重要约束
 - 不要轻易改动以下兼容键：

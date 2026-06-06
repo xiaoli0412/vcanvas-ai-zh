@@ -113,6 +113,8 @@ function defaultData() {
   return {
     siteSettings: {
       siteName: 'inscanvas Public Server',
+      siteDescription: 'Canvas-first creative workspace with local public-server foundations.',
+      publicBaseUrl: '',
       defaultModeId: 'custom',
       guestEnabled: true,
       registrationEnabled: true,
@@ -124,6 +126,11 @@ function defaultData() {
       galleryPublishLimits: { 'host-admin': null, admin: null, vip: 9, user: 6, guest: 0 },
       highLoadDegradeThreshold: 0.9,
       longDisclaimer: 'inscanvas is a creative canvas platform. Public works and shared exports are user-directed content and must be reviewed by the creator before publication.',
+      sharePolicy: { enabled: true, publicBaseUrl: '', pauseOnSecurityWarning: true },
+      noticePolicy: { forceWarnings: true, allowMarkdown: true, allowImages: true },
+      updatePolicy: { githubRepo: 'xiaoli0412/vcanvas-ai-zh', checkEnabled: true, lowTrafficAutoUpdate: false },
+      migrationPolicy: { exportEnabled: true, requireVerification: true },
+      opsPublicEnabled: false,
     },
     personalSettings: {
       userId: 'guest-local',
@@ -161,7 +168,7 @@ function defaultData() {
       { id: 'nvidia', label: 'Nvidia', apiType: 'openai-compatible', models: [], verifiedAt: null, verifiedSourceUrl: 'https://docs.nvidia.com/nim/', enabled: true },
     ],
     notices: [
-      { id: 'phase-2-public-server', kind: 'announcement', title: 'inscanvas public server phase 2', body: 'Canvas-first mode, local persistence, provider governance, and public-server contracts are active in this branch.', format: 'plain', audience: 'all', enabled: true, createdAt: now0, updatedAt: now0 },
+      { id: 'phase-2-public-server', kind: 'announcement', title: 'inscanvas public server phase 2', body: 'Canvas-first mode, local persistence, provider governance, and public-server contracts are active in this branch.', format: 'plain', audience: 'all', enabled: true, force: false, dismissible: true, imageUrl: null, expiresAt: null, createdAt: now0, updatedAt: now0 },
     ],
     works: [],
     workflows: [],
@@ -170,8 +177,8 @@ function defaultData() {
       { id: 'local-admin', email: null, username: 'local-admin', tier: 'host-admin', profile: { displayName: 'inscanvas owner', avatarUrl: null, motto: 'Canvas first.', qq: null }, enabled: true, createdAt: now0, updatedAt: now0, lastLoginAt: null, lastLoginIp: null },
     ],
     quotaLedgers: [
-      { userId: 'guest-local', tier: 'guest', premiumCredits: 0, baseCallsRemaining: 8, hostedRunsRemaining: 0, resetAt: now0, hostedResetAt: now0 },
-      { userId: 'local-admin', tier: 'host-admin', premiumCredits: 999999, baseCallsRemaining: 999999, hostedRunsRemaining: 999999, resetAt: now0, hostedResetAt: now0 },
+      { userId: 'guest-local', tier: 'guest', premiumCredits: 0, baseCallsRemaining: 8, hostedRunsRemaining: 0, hostedRunsUsedToday: 0, resetAt: now0, hostedResetAt: now0 },
+      { userId: 'local-admin', tier: 'host-admin', premiumCredits: 999999, baseCallsRemaining: 999999, hostedRunsRemaining: 999999, hostedRunsUsedToday: 0, resetAt: now0, hostedResetAt: now0 },
     ],
     redeemCodes: [],
     blockedIps: [],
@@ -203,7 +210,14 @@ function mergeData(data) {
   return {
     ...defaults,
     ...(data || {}),
-    siteSettings: { ...defaults.siteSettings, ...(data?.siteSettings || {}) },
+    siteSettings: {
+      ...defaults.siteSettings,
+      ...(data?.siteSettings || {}),
+      sharePolicy: { ...defaults.siteSettings.sharePolicy, ...(data?.siteSettings?.sharePolicy || {}) },
+      noticePolicy: { ...defaults.siteSettings.noticePolicy, ...(data?.siteSettings?.noticePolicy || {}) },
+      updatePolicy: { ...defaults.siteSettings.updatePolicy, ...(data?.siteSettings?.updatePolicy || {}) },
+      migrationPolicy: { ...defaults.siteSettings.migrationPolicy, ...(data?.siteSettings?.migrationPolicy || {}) },
+    },
     personalSettings: {
       ...defaults.personalSettings,
       ...(data?.personalSettings || {}),
@@ -617,6 +631,31 @@ async function handleApi(req, res, url) {
     return true
   }
 
+  if (url.pathname === '/api/session/register' && method === 'POST') {
+    if (data.siteSettings.registrationEnabled === false) {
+      sendJson(res, 403, { ok: false, error: 'inscanvas registration is temporarily closed by site settings.' })
+      return true
+    }
+    const body = await readJsonBody(req)
+    const tier = normalizeTier(body.tier || 'user')
+    const userId = body.userId || body.username || `user-${Date.now()}`
+    const session = makeSession({ userId, tier, executionMode: tier === 'guest' ? 'browser-local' : 'server-managed', req })
+    const user = upsertUser(data, { id: userId, username: body.username || userId, email: body.email || null, tier, displayName: body.displayName || 'inscanvas user', ip: clientIp(req) })
+    data.sessions = [...data.sessions.filter((item) => item.userId !== session.userId), session]
+    data.signInRecords.push({ id: createId('signin'), userId, tier, ip: clientIp(req), userAgent: req.headers['user-agent'] || '', createdAt: new Date().toISOString() })
+    withAudit(data, req, 'session.register', userId, tier)
+    writeData(data)
+    sendJson(res, 200, {
+      ok: true,
+      executionMode: session.executionMode,
+      user: { id: userId, tier, displayName: user.profile.displayName, permissions: permissionsForTier(tier) },
+      session,
+      quota: data.quotaLedgers.find((ledger) => ledger.userId === userId) || null,
+      note: 'Local/mock inscanvas registration is active until the newapi bridge is attached.',
+    })
+    return true
+  }
+
   if (url.pathname === '/api/session/logout' && method === 'POST') {
     const body = await readJsonBody(req)
     data.sessions = body.userId ? data.sessions.filter((item) => item.userId !== body.userId) : []
@@ -704,6 +743,10 @@ async function handleApi(req, res, url) {
       format: body.format || existing?.format || 'plain',
       audience: body.audience || existing?.audience || 'all',
       enabled: body.enabled ?? existing?.enabled ?? true,
+      force: body.force ?? existing?.force ?? body.kind === 'warning',
+      dismissible: body.dismissible ?? existing?.dismissible ?? body.kind !== 'warning',
+      imageUrl: body.imageUrl ?? existing?.imageUrl ?? null,
+      expiresAt: body.expiresAt ?? existing?.expiresAt ?? null,
       createdAt: existing?.createdAt || now,
       updatedAt: now,
     }
@@ -878,6 +921,8 @@ async function handleApi(req, res, url) {
     if (method === 'DELETE') {
       const work = data.works[index]
       data.works = data.works.filter((item) => item.id !== id)
+      data.shareLinks = data.shareLinks.filter((item) => item.workId !== id)
+      data.galleryEntries = data.galleryEntries.filter((item) => item.workId !== id)
       withAudit(data, req, 'work.delete', work?.ownerId || null, work?.ownerId === 'guest-local' ? 'guest' : 'user', { workId: id })
       writeData(data)
       sendJson(res, 200, { ok: true, id })

@@ -11,6 +11,7 @@ interface Props {
   hasKey: boolean
   onOpenSettings: () => void
   onOpenModePanel: () => void
+  onOpenControlCenter: () => void
   locale: Locale
   onToggleLocale: () => void
   t: Translate
@@ -25,6 +26,7 @@ export function Header({
   hasKey,
   onOpenSettings,
   onOpenModePanel,
+  onOpenControlCenter,
   locale,
   onToggleLocale,
   t,
@@ -64,6 +66,9 @@ export function Header({
             </svg>
             <span>GitHub</span>
           </a>
+          <button className="header-control-btn" onClick={onOpenControlCenter}>
+            {t('control.open')}
+          </button>
           <button className="btn btn-ghost what-is-this-btn" onClick={() => setShowAbout(true)}>
             {t('header.about')}
           </button>

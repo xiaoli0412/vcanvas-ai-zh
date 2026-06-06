@@ -116,6 +116,79 @@ export async function registerSessionRoutes(app: FastifyInstance) {
     }
   })
 
+  app.post('/api/session/register', async (request, reply) => {
+    const body = (request.body || {}) as {
+      userId?: string
+      username?: string
+      email?: string
+      tier?: UserTier
+      displayName?: string
+    }
+    const data = await localDataStore.read()
+    if (data.siteSettings.registrationEnabled === false) {
+      reply.code(403).send({ ok: false, error: 'inscanvas registration is temporarily closed by site settings.' })
+      return
+    }
+
+    const tier = normalizeTier(body.tier || 'user')
+    const userId = body.userId?.trim() || body.username?.trim() || `user-${Date.now()}`
+    const ip = getClientIp(request)
+    const userAgent = String(request.headers['user-agent'] || '')
+    const session = makeSession({
+      userId,
+      tier,
+      executionMode: tier === 'guest' ? 'browser-local' : 'server-managed',
+      ip,
+      userAgent,
+    })
+
+    const result = await localDataStore.update((current) => {
+      const user = upsertUser(current, {
+        id: userId,
+        username: body.username || userId,
+        email: body.email || null,
+        tier,
+        displayName: body.displayName || 'inscanvas user',
+        ip,
+      })
+      current.sessions = [...current.sessions.filter((item) => item.userId !== session.userId), session]
+      current.signInRecords.push({
+        id: createId('signin'),
+        userId,
+        tier,
+        ip,
+        userAgent,
+        createdAt: new Date().toISOString(),
+      })
+      current.auditEvents.push({
+        id: createId('audit'),
+        actorId: session.userId,
+        actorTier: session.tier,
+        action: 'session.register',
+        ip: session.ip,
+        createdAt: new Date().toISOString(),
+      })
+      return {
+        user,
+        quota: current.quotaLedgers.find((ledger) => ledger.userId === userId) || null,
+      }
+    })
+
+    return {
+      ok: true,
+      executionMode: session.executionMode,
+      user: {
+        id: session.userId,
+        tier: session.tier,
+        displayName: result.user.profile.displayName,
+        permissions: getTierPermissions(session.tier),
+      },
+      session,
+      quota: result.quota,
+      note: 'Local/mock inscanvas registration is active until the newapi bridge is attached.',
+    }
+  })
+
   app.post('/api/session/logout', async (request) => {
     const body = (request.body || {}) as { userId?: string; sessionId?: string }
     await localDataStore.update((data) => {

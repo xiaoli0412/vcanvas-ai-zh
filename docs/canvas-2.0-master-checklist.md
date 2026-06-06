@@ -12,6 +12,7 @@
 - Header model entry is split into a compact quick switch plus secondary `Personal Settings · Models & Channels`; provider editing no longer expands from the canvas header directly.
 - Local/mock public-server v1 now persists users, quota ledgers, redeem codes, blocked IPs, rate-limit events, sign-in records, share links, and gallery entries.
 - A secondary `Works Center` modal is now wired from the compact canvas toolbar, covering current HTML save, HTML import, work metadata edits, share links, gallery submission, export, and delete without adding persistent canvas chrome.
+- A secondary `inscanvas Control Center` modal is now wired from the header, covering mock login/register/guest session state, personal quota/profile entry, admin site settings, notices/warnings, gallery front desk, and ops cleanup without adding a persistent sidebar.
 - Frontend, server typecheck, build, service smoke tests, and desktop/mobile browser screenshots passed on 2026-06-06.
 
 ## Completion Matrix
@@ -21,7 +22,8 @@
 - `done` 5-tier role model with host-admin/admin/vip/user/guest in shared contracts and local/mock session payloads
 - `done` 8h inactivity relogin skeleton in local session routes
 - `done` guest temporary login + right-top login notice payload
-- `in_progress` local/mock persisted users, sign-in records, permissions, and quota ledgers
+- `done` local/mock persisted users, sign-in records, permissions, and quota ledgers
+- `done` Control Center v1 exposes mock login, local/mock register, guest session, session-left, login IP/UA/time, profile fields, sign-in, and redeem entry
 - `todo` QQ avatar sync
 - `todo` wallet/payment area split with stronger protection
 
@@ -31,12 +33,14 @@
 - `todo` injection/leak prevention across UI and service routes
 - `in_progress` long/short disclaimer system
 - `in_progress` export/share comment injection with IP/time metadata
+- `in_progress` admin-only site/security controls are visible in Control Center; production key encryption and security review model remain deferred
 
 ### 3. Performance
 - `todo` multi-user concurrency path and async work distribution
 - `in_progress` cleanup endpoint for expired workflows, sessions, rate-limit events, and blocked IPs
 - `in_progress` dynamic server/client execution fallback metadata
 - `done` server-hosted high-resource toggle for video/web copy in personal settings and workflow policy
+- `done` Control Center v1 surfaces ops status and manual cleanup as secondary controls
 
 ### 4. Canvas Tools / Modes
 - `done` secondary mode panel and canvas-first prompt shell
@@ -66,7 +70,9 @@
 ### 6. Settings
 - `in_progress` site settings IA
 - `in_progress` personal settings IA
-- `in_progress` notice / warning / announcement systems
+- `done` Control Center v1 gives users one secondary entry for personal center, site settings, notices, gallery, quotas, and ops
+- `in_progress` notice / warning / announcement systems with persisted `force`, `dismissible`, markdown/image metadata, and admin creation UI
+- `in_progress` site settings now include site profile, share policy, notice policy, security mode, update policy, migration policy, and ops public switch
 - `in_progress` ops status and cleanup endpoints for local-json deployment health
 
 ### 7. Works / Gallery / Share
@@ -75,6 +81,7 @@
 - `done` import HTML through `/api/works/import-html` with the 10-work owner limit
 - `done` share links through `/api/works/:id/share`
 - `in_progress` gallery / 鉴赏厅 with mock review status and tier quotas
+- `done` Control Center v1 includes a read-only gallery front desk preview without adding a route-level public gallery yet
 - `in_progress` per-tier work and gallery limits
 
 ### 8. Frontend / Branding
@@ -85,7 +92,7 @@
 ### 9. Backend Logic
 - `done` public-server skeleton and first API placeholders
 - `done` phase-1 session, providers, notices, settings, works, assets, remix, and workflow route contracts
-- `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve `/health`, `/_vcanvas_proxy`, `/api/session/*`, `/api/providers`, `/api/notices`, `/api/settings/*`, `/api/works/*`, `/api/remix/fetch`, and workflow enqueue routes
+- `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve `/health`, `/_vcanvas_proxy`, `/api/session/*`, `/api/providers`, `/api/notices`, `/api/settings/*`, `/api/works/*`, `/api/gallery`, `/api/quotas/*`, `/api/ops/status`, `/api/maintenance/cleanup`, `/api/remix/fetch`, and workflow enqueue routes
 - `done` local JSON persistence adapter for site settings, personal settings, notices, providers, works, workflow runs, sessions, users, quotas, shares, gallery entries, rate-limit events, blocked IPs, and audit events
 - `in_progress` 24h workflow run retention with compressed context payloads
 - `todo` bridge `newapi`, `subapi`, `octopus`
@@ -95,10 +102,11 @@
 ## 2026-06-06 Validation
 - `npm run typecheck` passed.
 - `npm run typecheck:server` passed.
+- `node --check scripts/serve-vcanvas.mjs` passed.
 - `npm run build` passed with existing large chunk warnings only.
-- Fastify smoke test passed for health, proxy, index, providers, session, settings, notices, works CRUD, workflow generate, and remix fetch.
-- Lightweight deployment server smoke test passed for the same core endpoints.
-- Browser screenshots reviewed at `1440x960` and `390x844`; default canvas view is compact and mobile no longer shows the right preview panel crushing the canvas.
+- Fastify smoke test passed for health, proxy, index, session register/login/me, providers, site settings patch, notices create, quotas sign-in/redeem, works CRUD/share/gallery-submit/delete, gallery, workflow generate/refine/plan, remix fetch, ops status, and cleanup.
+- Lightweight deployment server smoke test passed for the same endpoint set, including parity cleanup of share/gallery metadata when deleting a work.
+- Browser/CDP screenshots reviewed at `1440x960` and `390x844`; Control Center opens as a secondary modal and leaves `.workspace` dimensions unchanged on both viewports.
 
 ### 10. Sign-in / Quota
 - `in_progress` login-as-signin flow through local/mock records
