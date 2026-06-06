@@ -64,6 +64,7 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [overLimitMode, setOverLimitMode] = useState<'save' | 'import' | null>(null)
   const importRef = useRef<HTMLInputElement | null>(null)
 
   const selectedWork = works.find((work) => work.id === selectedId) || works[0] || null
@@ -93,6 +94,7 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
     setLimit(workPayload.limit || 10)
     setShareLinks(workPayload.shareLinks || [])
     setGalleryEntries(galleryPayload.entries || galleryPayload.items || [])
+    if ((workPayload.items || []).length < (workPayload.limit || 10)) setOverLimitMode(null)
     setSelectedId((current) => current || workPayload.items?.[0]?.id || '')
   }
 
@@ -123,6 +125,10 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
 
   const saveCurrent = () => runAction(async () => {
     if (!lastHTML.trim()) throw new Error(t('works.error.noHtml'))
+    if (works.length >= limit) {
+      setOverLimitMode('save')
+      return t('works.notice.overLimit')
+    }
     const response = await fetch('/api/works', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -179,6 +185,13 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
     setSelectedId('')
   }, t('works.notice.deleted'))
 
+  const deleteForSpace = (workId: string) => runAction(async () => {
+    const response = await fetch(`/api/works/${encodeURIComponent(workId)}`, { method: 'DELETE' })
+    await readJson(response)
+    if (selectedId === workId) setSelectedId('')
+    return t('works.notice.deletedForSpace')
+  }, t('works.notice.deletedForSpace'))
+
   const importHtml = () => {
     importRef.current?.click()
   }
@@ -189,6 +202,10 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
     if (!file) return
     await runAction(async () => {
       const html = await file.text()
+      if (works.length >= limit) {
+        setOverLimitMode('import')
+        return t('works.notice.overLimit')
+      }
       const response = await fetch('/api/works/import-html', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -239,6 +256,25 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
         {(error || notice) && (
           <div className={`wcm-message ${error ? 'error' : 'ok'}`}>
             {error || notice}
+          </div>
+        )}
+
+        {overLimitMode && (
+          <div className="wcm-limit-panel">
+            <div>
+              <strong>{t('works.limit.title')}</strong>
+              <p>{t(overLimitMode === 'save' ? 'works.limit.saveDesc' : 'works.limit.importDesc')}</p>
+            </div>
+            <button className="btn btn-ghost" onClick={() => setOverLimitMode(null)}>{t('common.close')}</button>
+            <div className="wcm-limit-list">
+              {works.map((work) => (
+                <button key={work.id} className="wcm-limit-item" onClick={() => deleteForSpace(work.id)} disabled={busy}>
+                  <span>{work.title}</span>
+                  <small>{formatDate(work.updatedAt)} · {work.galleryStatus || 'private'}</small>
+                  <strong>{t('works.limit.deleteThis')}</strong>
+                </button>
+              ))}
+            </div>
           </div>
         )}
 

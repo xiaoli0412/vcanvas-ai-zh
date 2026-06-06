@@ -234,6 +234,14 @@
   line-height: 1.55;
 }
 
+.ccm-section-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
 .ccm-login-row,
 .ccm-actions,
 .ccm-redeem,
@@ -387,6 +395,94 @@
   font-size: 9px;
 }
 
+.ccm-user-table {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.ccm-user-row {
+  display: grid;
+  grid-template-columns: minmax(190px, 1.1fr) minmax(220px, 1.2fr) minmax(230px, 0.9fr);
+  gap: 10px;
+  align-items: center;
+  padding: 11px;
+  border: 1px solid rgba(42, 52, 72, 0.78);
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, rgba(154, 168, 255, 0.06), transparent 42%),
+    rgba(8, 10, 18, 0.62);
+}
+
+.ccm-user-row.disabled {
+  opacity: 0.62;
+}
+
+.ccm-user-main,
+.ccm-user-metrics,
+.ccm-user-controls {
+  min-width: 0;
+}
+
+.ccm-user-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ccm-user-main strong {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.ccm-user-main span,
+.ccm-user-main small {
+  min-width: 0;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ccm-user-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.ccm-user-metrics span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 8px;
+  border: 1px solid rgba(42, 52, 72, 0.75);
+  border-radius: 10px;
+  background: rgba(5, 7, 13, 0.42);
+  color: #aeb8ff;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.ccm-user-metrics small {
+  color: var(--text-muted);
+  font-size: 8px;
+  font-weight: 600;
+}
+
+.ccm-user-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.ccm-user-controls select {
+  min-width: 118px;
+}
+
 .ccm-empty {
   padding: 24px;
   border: 1px dashed rgba(108, 117, 190, 0.24);
@@ -442,5 +538,22 @@
   .ccm-form-grid,
   .ccm-provider-mini {
     grid-template-columns: 1fr;
+  }
+
+  .ccm-section-row {
+    flex-direction: column;
+  }
+
+  .ccm-user-row {
+    grid-template-columns: 1fr;
+  }
+
+  .ccm-user-controls {
+    justify-content: stretch;
+  }
+
+  .ccm-user-controls select,
+  .ccm-user-controls .btn {
+    flex: 1;
   }
 }

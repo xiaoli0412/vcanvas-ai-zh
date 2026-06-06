@@ -287,6 +287,36 @@ function permissionsForTier(tier) {
   return ['manage-own-works']
 }
 
+function canManageUsers(tier) {
+  return permissionsForTier(tier).includes('manage-users')
+}
+
+function canManageSecrets(tier) {
+  return tier === 'host-admin' || tier === 'admin'
+}
+
+function maskProviderChannels(channels, actorTier, actorId) {
+  return channels.map((channel) => {
+    if (canManageSecrets(actorTier) || !channel.ownerId || channel.ownerId === actorId) return channel
+    return {
+      ...channel,
+      endpoint: channel.endpoint ? '[hidden]' : channel.endpoint,
+      apiKeyMasked: channel.apiKeyMasked ? '********' : channel.apiKeyMasked,
+    }
+  })
+}
+
+function userSummary(data, userId) {
+  const ownedProviders = data.providerChannels.filter((provider) => provider.ownerId === userId)
+  return {
+    works: data.works.filter((work) => work.ownerId === userId).length,
+    workflows: data.workflows.filter((workflow) => workflow.ownerId === userId).length,
+    signIns: data.signInRecords.filter((record) => record.userId === userId).length,
+    providerChannels: ownedProviders.length,
+    maskedKeys: ownedProviders.filter((provider) => provider.apiKeyMasked).length,
+  }
+}
+
 function getActor(data, req) {
   const now = Date.now()
   const sessionId = typeof req.headers['x-vcanvas-session-id'] === 'string' ? req.headers['x-vcanvas-session-id'] : ''
@@ -665,8 +695,74 @@ async function handleApi(req, res, url) {
     return true
   }
 
+  if (url.pathname === '/api/users' && method === 'GET') {
+    const actor = getActor(data, req)
+    if (!canManageUsers(actor.tier)) {
+      sendJson(res, 403, { ok: false, error: 'Only host-admin/admin can manage inscanvas users.' })
+      return true
+    }
+    const users = data.users.map((user) => ({
+      ...user,
+      summary: userSummary(data, user.id),
+      providerKeyVisibility: user.id === actor.id || actor.tier === 'host-admin' ? 'masked-own-or-host-admin' : 'masked-admin-view',
+    }))
+    sendJson(res, 200, {
+      ok: true,
+      users,
+      actor: { id: actor.id, tier: actor.tier },
+      note: 'Provider keys are never returned in clear text from this local/mock user-management surface.',
+    })
+    return true
+  }
+
+  const userMatch = url.pathname.match(/^\/api\/users\/([^/]+)$/)
+  if (userMatch && method === 'PATCH') {
+    const actor = getActor(data, req)
+    if (!canManageUsers(actor.tier)) {
+      sendJson(res, 403, { ok: false, error: 'Only host-admin/admin can manage inscanvas users.' })
+      return true
+    }
+    const id = decodeURIComponent(userMatch[1])
+    const index = data.users.findIndex((user) => user.id === id)
+    if (index < 0) {
+      sendJson(res, 404, { ok: false, error: 'User not found.' })
+      return true
+    }
+    const body = await readJsonBody(req)
+    const current = data.users[index]
+    const tier = body.tier ? normalizeTier(body.tier) : current.tier
+    const now = new Date().toISOString()
+    const next = {
+      ...current,
+      tier,
+      enabled: body.enabled ?? current.enabled,
+      profile: {
+        ...current.profile,
+        displayName: body.displayName ?? current.profile.displayName,
+        motto: body.motto ?? current.profile.motto,
+        qq: body.qq ?? current.profile.qq,
+        avatarUrl: body.avatarUrl ?? current.profile.avatarUrl,
+      },
+      updatedAt: now,
+    }
+    data.users[index] = next
+    const ledger = data.quotaLedgers.find((item) => item.userId === id)
+    if (ledger) ledger.tier = tier
+    data.sessions = data.sessions.map((session) => session.userId === id ? { ...session, tier } : session)
+    withAudit(data, req, 'users.update', actor.id, actor.tier, { userId: id, tier, enabled: next.enabled })
+    writeData(data)
+    sendJson(res, 200, { ok: true, user: next })
+    return true
+  }
+
   if (url.pathname === '/api/providers' && method === 'GET') {
-    sendJson(res, 200, { ok: true, channels: data.providerChannels, note: 'Model rows are persisted locally and should be verified before becoming built-ins.' })
+    const actor = getActor(data, req)
+    sendJson(res, 200, {
+      ok: true,
+      channels: maskProviderChannels(data.providerChannels, actor.tier, actor.id),
+      actor: { id: actor.id, tier: actor.tier },
+      note: 'Model rows are persisted locally and should be verified before becoming built-ins.',
+    })
     return true
   }
 

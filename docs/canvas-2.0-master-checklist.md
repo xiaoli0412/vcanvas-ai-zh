@@ -13,6 +13,7 @@
 - Local/mock public-server v1 now persists users, quota ledgers, redeem codes, blocked IPs, rate-limit events, sign-in records, share links, and gallery entries.
 - A secondary `Works Center` modal is now wired from the compact canvas toolbar, covering current HTML save, HTML import, work metadata edits, share links, gallery submission, export, and delete without adding persistent canvas chrome.
 - A secondary `inscanvas Control Center` modal is now wired from the header, covering mock login/register/guest session state, personal quota/profile entry, admin site settings, notices/warnings, gallery front desk, and ops cleanup without adding a persistent sidebar.
+- Control Center v2 now adds admin-only user management, app-level forced warning popups, and a Works Center over-limit deletion chooser while keeping all controls in secondary modals.
 - Frontend, server typecheck, build, service smoke tests, and desktop/mobile browser screenshots passed on 2026-06-06.
 
 ## Completion Matrix
@@ -24,6 +25,7 @@
 - `done` guest temporary login + right-top login notice payload
 - `done` local/mock persisted users, sign-in records, permissions, and quota ledgers
 - `done` Control Center v1 exposes mock login, local/mock register, guest session, session-left, login IP/UA/time, profile fields, sign-in, and redeem entry
+- `done` admin-only user management UI and `/api/users` local/mock route with tier/enabled edits and IP/activity summaries
 - `todo` QQ avatar sync
 - `todo` wallet/payment area split with stronger protection
 
@@ -34,6 +36,7 @@
 - `in_progress` long/short disclaimer system
 - `in_progress` export/share comment injection with IP/time metadata
 - `in_progress` admin-only site/security controls are visible in Control Center; production key encryption and security review model remain deferred
+- `done` app-level forced warning overlay consumes persisted `warning/realtime/force` notices and supports dismissible vs session acknowledgement behavior
 
 ### 3. Performance
 - `todo` multi-user concurrency path and async work distribution
@@ -72,6 +75,7 @@
 - `in_progress` personal settings IA
 - `done` Control Center v1 gives users one secondary entry for personal center, site settings, notices, gallery, quotas, and ops
 - `in_progress` notice / warning / announcement systems with persisted `force`, `dismissible`, markdown/image metadata, and admin creation UI
+- `done` forced warning notices now surface in the main app rather than only inside Control Center
 - `in_progress` site settings now include site profile, share policy, notice policy, security mode, update policy, migration policy, and ops public switch
 - `in_progress` ops status and cleanup endpoints for local-json deployment health
 
@@ -79,6 +83,7 @@
 - `done` HTML export from preview
 - `in_progress` persistent work save/list/manage on server through local JSON store, `/api/works`, and the secondary Works Center modal
 - `done` import HTML through `/api/works/import-html` with the 10-work owner limit
+- `done` Works Center shows an in-modal deletion chooser when the work limit is reached, so users can free space without leaving the canvas
 - `done` share links through `/api/works/:id/share`
 - `in_progress` gallery / 鉴赏厅 with mock review status and tier quotas
 - `done` Control Center v1 includes a read-only gallery front desk preview without adding a route-level public gallery yet
@@ -93,6 +98,7 @@
 - `done` public-server skeleton and first API placeholders
 - `done` phase-1 session, providers, notices, settings, works, assets, remix, and workflow route contracts
 - `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve `/health`, `/_vcanvas_proxy`, `/api/session/*`, `/api/providers`, `/api/notices`, `/api/settings/*`, `/api/works/*`, `/api/gallery`, `/api/quotas/*`, `/api/ops/status`, `/api/maintenance/cleanup`, `/api/remix/fetch`, and workflow enqueue routes
+- `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve `/api/users` with admin-only local/mock user management and masked provider-key summaries
 - `done` local JSON persistence adapter for site settings, personal settings, notices, providers, works, workflow runs, sessions, users, quotas, shares, gallery entries, rate-limit events, blocked IPs, and audit events
 - `in_progress` 24h workflow run retention with compressed context payloads
 - `todo` bridge `newapi`, `subapi`, `octopus`
@@ -107,6 +113,7 @@
 - Fastify smoke test passed for health, proxy, index, session register/login/me, providers, site settings patch, notices create, quotas sign-in/redeem, works CRUD/share/gallery-submit/delete, gallery, workflow generate/refine/plan, remix fetch, ops status, and cleanup.
 - Lightweight deployment server smoke test passed for the same endpoint set, including parity cleanup of share/gallery metadata when deleting a work.
 - Browser/CDP screenshots reviewed at `1440x960` and `390x844`; Control Center opens as a secondary modal and leaves `.workspace` dimensions unchanged on both viewports.
+- Follow-up smoke test passed for `/api/users`, forced warning notice payloads, and work-limit delete/re-save behavior on both Fastify and lightweight deployment services.
 
 ### 10. Sign-in / Quota
 - `in_progress` login-as-signin flow through local/mock records

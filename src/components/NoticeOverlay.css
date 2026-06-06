@@ -1,0 +1,124 @@
+.notice-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 560;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background:
+    radial-gradient(circle at 50% 10%, rgba(200, 155, 74, 0.16), transparent 30%),
+    radial-gradient(circle at 12% 12%, rgba(113, 121, 214, 0.18), transparent 28%),
+    rgba(4, 6, 14, 0.74);
+  backdrop-filter: blur(11px);
+}
+
+.notice-card {
+  position: relative;
+  width: min(580px, calc(100vw - 28px));
+  overflow: hidden;
+  border: 1px solid rgba(200, 155, 74, 0.3);
+  border-radius: 20px;
+  background:
+    linear-gradient(145deg, rgba(16, 18, 31, 0.98), rgba(9, 12, 23, 0.98)),
+    rgba(9, 12, 23, 0.98);
+  box-shadow: 0 34px 100px rgba(0, 0, 0, 0.56), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.notice-beam {
+  height: 4px;
+  background: linear-gradient(90deg, #9aa8ff, #e0bc70, #4a9e8e);
+  opacity: 0.9;
+}
+
+.notice-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px 0;
+}
+
+.notice-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #e0bc70;
+}
+
+.notice-card h2 {
+  margin-top: 6px;
+  color: var(--text-primary);
+  font-size: 18px;
+}
+
+.notice-close {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.notice-image {
+  display: block;
+  width: calc(100% - 40px);
+  max-height: 210px;
+  object-fit: cover;
+  margin: 14px 20px 0;
+  border: 1px solid rgba(108, 117, 190, 0.2);
+  border-radius: 14px;
+}
+
+.notice-body {
+  margin: 14px 20px 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.notice-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 20px 0;
+}
+
+.notice-meta span {
+  padding: 5px 8px;
+  border: 1px solid rgba(108, 117, 190, 0.2);
+  border-radius: 999px;
+  background: rgba(8, 10, 18, 0.62);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
+
+.notice-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  padding: 18px 20px 20px;
+}
+
+@media (max-width: 520px) {
+  .notice-overlay {
+    align-items: flex-end;
+    padding: 10px;
+  }
+
+  .notice-card {
+    width: 100%;
+  }
+
+  .notice-actions {
+    flex-direction: column;
+  }
+}

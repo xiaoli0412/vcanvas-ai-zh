@@ -14,7 +14,7 @@ import type {
 import type { Translate } from '../lib/i18n'
 import './ControlCenterModal.css'
 
-type ControlTab = 'overview' | 'personal' | 'site' | 'notices' | 'gallery' | 'ops'
+type ControlTab = 'overview' | 'personal' | 'users' | 'site' | 'notices' | 'gallery' | 'ops'
 
 interface SessionUser {
   id: string
@@ -25,6 +25,32 @@ interface SessionUser {
 
 interface GalleryEntryWithWork extends GalleryEntry {
   work?: WorkRecord | null
+}
+
+interface ManagedUser {
+  id: string
+  username: string
+  email?: string | null
+  tier: UserTier
+  enabled: boolean
+  profile: {
+    displayName: string
+    avatarUrl?: string | null
+    motto?: string
+    qq?: string | null
+  }
+  createdAt: string
+  updatedAt: string
+  lastLoginAt?: string | null
+  lastLoginIp?: string | null
+  summary?: {
+    works: number
+    workflows: number
+    signIns: number
+    providerChannels: number
+    maskedKeys: number
+  }
+  providerKeyVisibility?: string
 }
 
 interface Props {
@@ -93,6 +119,7 @@ export function ControlCenterModal({
   const [quota, setQuota] = useState<QuotaLedger | null>(null)
   const [siteSettings, setSiteSettings] = useState<(SiteSettings & Record<string, any>) | null>(null)
   const [notices, setNotices] = useState<NoticeMessage[]>([])
+  const [managedUsers, setManagedUsers] = useState<ManagedUser[]>([])
   const [providers, setProviders] = useState<ProviderChannel[]>([])
   const [gallery, setGallery] = useState<GalleryEntryWithWork[]>([])
   const [ops, setOps] = useState<OpsSnapshot | null>(null)
@@ -139,6 +166,12 @@ export function ControlCenterModal({
     setProviders(providerPayload.channels || [])
     setOps(opsPayload.snapshot)
     setGallery(galleryPayload.entries || galleryPayload.items || [])
+    if (canManageSite(sessionPayload.user)) {
+      const usersPayload = await fetch('/api/users').then((response) => readJson<{ users: ManagedUser[] }>(response))
+      setManagedUsers(usersPayload.users || [])
+    } else {
+      setManagedUsers([])
+    }
     setProfileDraft({
       displayName: sessionPayload.user.displayName || '',
       motto: '',
@@ -250,11 +283,23 @@ export function ControlCenterModal({
   const tabs: Array<{ id: ControlTab; label: string; admin?: boolean }> = [
     { id: 'overview', label: t('control.tab.overview') },
     { id: 'personal', label: t('control.tab.personal') },
+    { id: 'users', label: t('control.tab.users'), admin: true },
     { id: 'site', label: t('control.tab.site'), admin: true },
     { id: 'notices', label: t('control.tab.notices') },
     { id: 'gallery', label: t('control.tab.gallery') },
     { id: 'ops', label: t('control.tab.ops'), admin: true },
   ]
+
+  const updateManagedUser = (managedUser: ManagedUser, patch: Partial<Pick<ManagedUser, 'tier' | 'enabled'>>) => run(async () => {
+    await fetch(`/api/users/${encodeURIComponent(managedUser.id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tier: patch.tier ?? managedUser.tier,
+        enabled: patch.enabled ?? managedUser.enabled,
+      }),
+    }).then((response) => readJson(response))
+  })
 
   return (
     <div className="ccm-overlay" onClick={onClose}>
@@ -365,6 +410,56 @@ export function ControlCenterModal({
                   </div>
                 </section>
               </div>
+            )}
+
+            {tab === 'users' && (
+              <section className="ccm-card wide">
+                <div className="ccm-section-row">
+                  <div>
+                    <h3>{t('control.users.title')}</h3>
+                    <p>{t('control.users.note')}</p>
+                  </div>
+                  <span className="ccm-pill">{managedUsers.length} {t('control.users.count')}</span>
+                </div>
+                <div className="ccm-user-table">
+                  {managedUsers.length === 0 && <div className="ccm-empty">{t('control.users.empty')}</div>}
+                  {managedUsers.map((managedUser) => (
+                    <article key={managedUser.id} className={`ccm-user-row ${managedUser.enabled ? '' : 'disabled'}`}>
+                      <div className="ccm-user-main">
+                        <strong>{managedUser.profile.displayName || managedUser.username}</strong>
+                        <span>{managedUser.username} · {managedUser.id}</span>
+                        <small>{t('control.users.lastIp')}: {managedUser.lastLoginIp || '-'}</small>
+                      </div>
+                      <div className="ccm-user-metrics">
+                        <span>{managedUser.summary?.works ?? 0}<small>{t('control.users.works')}</small></span>
+                        <span>{managedUser.summary?.workflows ?? 0}<small>{t('control.users.workflows')}</small></span>
+                        <span>{managedUser.summary?.providerChannels ?? 0}<small>{t('control.users.providers')}</small></span>
+                        <span>{managedUser.summary?.maskedKeys ?? 0}<small>{t('control.users.maskedKeys')}</small></span>
+                      </div>
+                      <div className="ccm-user-controls">
+                        <select
+                          value={managedUser.tier}
+                          onChange={(event) => updateManagedUser(managedUser, { tier: event.target.value as UserTier })}
+                          disabled={busy}
+                        >
+                          <option value="host-admin">host-admin</option>
+                          <option value="admin">admin</option>
+                          <option value="vip">vip</option>
+                          <option value="user">user</option>
+                          <option value="guest">guest</option>
+                        </select>
+                        <button
+                          className={`btn ${managedUser.enabled ? 'btn-ghost danger' : 'btn-secondary'}`}
+                          onClick={() => updateManagedUser(managedUser, { enabled: !managedUser.enabled })}
+                          disabled={busy}
+                        >
+                          {managedUser.enabled ? t('control.users.disable') : t('control.users.enable')}
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
             )}
 
             {tab === 'site' && siteSettings && (

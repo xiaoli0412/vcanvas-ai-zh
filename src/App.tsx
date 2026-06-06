@@ -16,6 +16,7 @@ import { Preview } from './components/Preview'
 import { PreviewAnnotations } from './components/PreviewAnnotations'
 import { WebEmbedPanel } from './components/WebEmbedPanel'
 import { WorkCenterModal } from './components/WorkCenterModal'
+import { NoticeOverlay } from './components/NoticeOverlay'
 import { StreamOverlay } from './components/StreamOverlay'
 import { PlanOverlay } from './components/PlanOverlay'
 import type { PlanPhase } from './components/PlanOverlay'
@@ -89,9 +90,43 @@ import {
   updateWebEmbedUrl,
   type WebEmbedReference,
 } from './lib/webEmbeds'
-import type { WorkflowTurnReference } from '../shared/contracts/publicServer'
+import type { NoticeMessage, WorkflowTurnReference } from '../shared/contracts/publicServer'
 import { getVisionRoutingError, prepareVisionMessages } from './lib/vision'
 import './styles/app.css'
+
+const NOTICE_DISMISSED_STORAGE_KEY = 'vcanvas_dismissed_notices_v1'
+const NOTICE_SESSION_DISMISSED_STORAGE_KEY = 'vcanvas_session_dismissed_notices_v1'
+
+function noticeKey(notice: NoticeMessage) {
+  return `${notice.id}:${notice.updatedAt || notice.createdAt}`
+}
+
+function readNoticeKeys(storage: Storage | undefined, key: string) {
+  if (!storage) return new Set<string>()
+  try {
+    const raw = storage.getItem(key)
+    return new Set<string>(raw ? JSON.parse(raw) : [])
+  } catch {
+    return new Set<string>()
+  }
+}
+
+function writeNoticeKeys(storage: Storage | undefined, key: string, values: Set<string>) {
+  if (!storage) return
+  try {
+    storage.setItem(key, JSON.stringify([...values]))
+  } catch {
+    // Ignore storage failures; notices can still be dismissed for the current render cycle.
+  }
+}
+
+function shouldShowNotice(notice: NoticeMessage, dismissed: Set<string>, sessionDismissed: Set<string>) {
+  if (!notice.enabled) return false
+  if (notice.expiresAt && Date.parse(notice.expiresAt) < Date.now()) return false
+  const key = noticeKey(notice)
+  if (dismissed.has(key) || sessionDismissed.has(key)) return false
+  return notice.force === true || notice.kind === 'warning' || notice.kind === 'realtime'
+}
 
 const SYSTEM_PROMPT = `You are an expert frontend developer. The user will show you a sketch/wireframe/reference and describe what they want. Generate a COMPLETE, self-contained HTML file.
 
@@ -208,6 +243,8 @@ export function App() {
   const [savedPresets, setSavedPresets] = useState<PromptPresetRecord[]>(loadUserPromptPresets)
   const [showModelQuickSwitch, setShowModelQuickSwitch] = useState(false)
   const [showControlCenter, setShowControlCenter] = useState(false)
+  const [siteNotices, setSiteNotices] = useState<NoticeMessage[]>([])
+  const [noticeDismissVersion, setNoticeDismissVersion] = useState(0)
   const [showProviderSettings, setShowProviderSettings] = useState(false)
   const [showPersonalSettings, setShowPersonalSettings] = useState(false)
   const [showPresetLibrary, setShowPresetLibrary] = useState(false)
@@ -304,6 +341,24 @@ export function App() {
     setPreviewAnnotationMode(false)
     setPreviewAnnotations([])
   }, [lastHTML])
+
+  const loadSiteNotices = useCallback(async () => {
+    try {
+      const response = await fetch('/api/notices')
+      const data = await response.json()
+      if (response.ok && data.ok !== false) {
+        setSiteNotices(Array.isArray(data.notices) ? data.notices : [])
+      }
+    } catch {
+      setSiteNotices([])
+    }
+  }, [])
+
+  useEffect(() => {
+    loadSiteNotices()
+    const timer = window.setInterval(loadSiteNotices, 60_000)
+    return () => window.clearInterval(timer)
+  }, [loadSiteNotices])
 
   const persistProviderState = useCallback((newState: ProviderState) => {
     setProviderState(newState)
@@ -1464,11 +1519,43 @@ ${compiledSystemPrompt}`,
     }
   }, [providerState, generating, lastHTML, capturePreview, getSelectedFrameImages, addChip, runPlanPhase, t, promptStudio, promptStudioSummary, makeGazePrompt, makeDreamPrompt, makePlanCreatePrompt, getModeWorkflowContext, appendWorkflowReferenceImages, activeModeId, previewAnnotations, modeDefinition, videoReference, appendVideoKeyframeImages, webEmbeds, videoRoutingNote])
 
+  const dismissedNoticeKeys = useMemo(
+    () => readNoticeKeys(typeof window !== 'undefined' ? window.localStorage : undefined, NOTICE_DISMISSED_STORAGE_KEY),
+    [noticeDismissVersion],
+  )
+  const sessionDismissedNoticeKeys = useMemo(
+    () => readNoticeKeys(typeof window !== 'undefined' ? window.sessionStorage : undefined, NOTICE_SESSION_DISMISSED_STORAGE_KEY),
+    [noticeDismissVersion],
+  )
+  const activeNotice = useMemo(
+    () => siteNotices.find((notice) => shouldShowNotice(notice, dismissedNoticeKeys, sessionDismissedNoticeKeys)) || null,
+    [dismissedNoticeKeys, sessionDismissedNoticeKeys, siteNotices],
+  )
+  const handleDismissNotice = useCallback((notice: NoticeMessage) => {
+    const key = noticeKey(notice)
+    if (notice.dismissible === false) {
+      const values = readNoticeKeys(window.sessionStorage, NOTICE_SESSION_DISMISSED_STORAGE_KEY)
+      values.add(key)
+      writeNoticeKeys(window.sessionStorage, NOTICE_SESSION_DISMISSED_STORAGE_KEY, values)
+    } else {
+      const values = readNoticeKeys(window.localStorage, NOTICE_DISMISSED_STORAGE_KEY)
+      values.add(key)
+      writeNoticeKeys(window.localStorage, NOTICE_DISMISSED_STORAGE_KEY, values)
+    }
+    setNoticeDismissVersion((version) => version + 1)
+  }, [])
+
   const canGenerate = isProviderConfigured(providerState)
   const needsKey = !canGenerate
 
   return (
     <>
+      <NoticeOverlay
+        notice={activeNotice}
+        onDismiss={handleDismissNotice}
+        onOpenControlCenter={() => setShowControlCenter(true)}
+        t={t}
+      />
       <Header
         providerName={provider.name}
         modelLabel={modelLabel}
@@ -1485,7 +1572,10 @@ ${compiledSystemPrompt}`,
       />
       {showControlCenter && (
         <ControlCenterModal
-          onClose={() => setShowControlCenter(false)}
+          onClose={() => {
+            setShowControlCenter(false)
+            loadSiteNotices()
+          }}
           onOpenPersonalSettings={() => {
             setShowControlCenter(false)
             setShowPersonalSettings(true)

@@ -11,6 +11,7 @@ import { registerRemixRoutes } from './routes/remix'
 import { registerSettingsRoutes } from './routes/settings'
 import { registerProviderRoutes } from './routes/providers'
 import { registerNoticeRoutes } from './routes/notices'
+import { registerUserRoutes } from './routes/users'
 import { localDataStore } from './data/localDataStore'
 import { enforceTrafficGuard } from './lib/platformPolicy'
 import { registerQuotaRoutes } from './routes/quotas'
@@ -66,6 +67,7 @@ export async function createServer() {
   await registerSettingsRoutes(app)
   await registerProviderRoutes(app)
   await registerNoticeRoutes(app)
+  await registerUserRoutes(app)
   await registerQuotaRoutes(app)
   await registerOpsRoutes(app)
 

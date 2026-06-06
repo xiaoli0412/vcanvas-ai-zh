@@ -145,6 +145,24 @@
     - `/api/session/register` 落地 Fastify 与轻量服务本地/mock parity
     - `scripts/serve-vcanvas.mjs` 修齐 works delete parity：删除作品时同步清理 shareLinks 与 galleryEntries
     - 服务端设置合并层补齐嵌套策略默认值，兼容旧 `.vcanvas-data` 局部字段迁移
+  - 2026-06-06 继续推进：
+    - 新增应用级 `NoticeOverlay`：
+      - 读取 `/api/notices`
+      - 对 warning / realtime / force notice 弹出二级强提示
+      - dismissible notice 写 localStorage
+      - non-dismissible notice 只允许本次会话确认，避免永久卡住画布
+    - 新增 `/api/users` Fastify + 轻量服务 parity：
+      - 仅 host-admin/admin 可访问
+      - 返回用户、等级、启用状态、IP/登录活动、作品/流程/Provider 数量、遮罩密钥数量
+      - PATCH 支持 tier / enabled 更新
+      - 不返回任何明文 API key
+    - 控制中心新增 `用户` admin tab：
+      - 展示 local/mock 用户管理
+      - 支持本地等级调整与启用/禁用
+    - Works Center 新增作品上限二级删除选择：
+      - 保存/导入前如果达到 `workLimitPerOwner`
+      - 在弹层内列出旧作品，用户可先删除腾空间
+      - 删除后可继续保存，不需要离开画布
 
 ## 已验证
 - `npm run typecheck` 通过
@@ -154,9 +172,11 @@
 - 当前仍有大 chunk 警告，但没有构建失败
 - Fastify 服务验证通过：
   - health、proxy、index、session register/login/me、providers、settings patch、notices create、quota sign-in/redeem、works CRUD/share/gallery-submit/delete、gallery、workflow generate/refine/plan、remix fetch、ops、cleanup
+  - 追加验证 `/api/users`、强警告 notice payload、作品上限失败、删除释放空间后再保存
 - 轻量部署服务 `node scripts/serve-vcanvas.mjs` 验证通过：
   - 同上核心接口
   - 删除作品后 shareLinks/galleryEntries 无残留
+  - `/api/users`、强警告 notice、作品上限与删除释放空间 parity 通过
 - 浏览器截图审查通过：
   - 桌面 `1440x960`
   - 移动 `390x844`
@@ -173,9 +193,9 @@
    - `npm run typecheck`
    - `npm run build`
 2. 先做控制中心后续项：
-   - 用户管理界面：只允许 host-admin/admin 进入，默认遮罩 API key 与敏感字段
-   - 强警告真实弹出：把 notice force policy 从控制中心配置接到应用级提醒层
-   - 作品超 10 条时的前端删除选择，而不仅是接口 409
+   - 用户管理继续项：搜索、封禁 IP、真实 newapi 用户同步、邮箱/钱包/QQ 头像字段
+   - 强警告继续项：站点设置里配置默认强警告策略、长文免责声明弹层、导出/分享前确认
+   - 作品继续项：公开分享路由、鉴赏厅独立前台、作品超限时支持“删除并自动继续保存”
 3. 然后继续 Canvas 2.0 补充细则高优先级项：
    - 通过官方文档或 live `/models` 核查后再补 ModelScope / Ollama / DMX / 百炼 / MiMo / Step / Nvidia 的模型能力
    - Web Embed v1 的 CSP / X-Frame-Options 受限页面可见兜底继续打磨
