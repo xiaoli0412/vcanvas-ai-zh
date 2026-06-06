@@ -14,6 +14,7 @@
 - A secondary `Works Center` modal is now wired from the compact canvas toolbar, covering current HTML save, HTML import, work metadata edits, share links, gallery submission, export, and delete without adding persistent canvas chrome.
 - A secondary `inscanvas Control Center` modal is now wired from the header, covering mock login/register/guest session state, personal quota/profile entry, admin site settings, notices/warnings, gallery front desk, and ops cleanup without adding a persistent sidebar.
 - Control Center v2 now adds admin-only user management, app-level forced warning popups, and a Works Center over-limit deletion chooser while keeping all controls in secondary modals.
+- Control Center v3 now adds user search plus admin IP block/unblock controls backed by `/api/security/blocked-ips`; self-blocking the current request IP is refused in local/mock mode.
 - Frontend, server typecheck, build, service smoke tests, and desktop/mobile browser screenshots passed on 2026-06-06.
 
 ## Completion Matrix
@@ -26,12 +27,13 @@
 - `done` local/mock persisted users, sign-in records, permissions, and quota ledgers
 - `done` Control Center v1 exposes mock login, local/mock register, guest session, session-left, login IP/UA/time, profile fields, sign-in, and redeem entry
 - `done` admin-only user management UI and `/api/users` local/mock route with tier/enabled edits and IP/activity summaries
+- `done` user-management search and IP block/unblock controls in Control Center
 - `todo` QQ avatar sync
 - `todo` wallet/payment area split with stronger protection
 
 ### 2. Security
 - `todo` Encrypted provider keys for non-guest users
-- `in_progress` IP audit, throttling, blocked IP store, and escalating lockouts on heavy routes
+- `in_progress` IP audit, throttling, blocked IP store, manual admin block/unblock, and escalating lockouts on heavy routes
 - `todo` injection/leak prevention across UI and service routes
 - `in_progress` long/short disclaimer system
 - `in_progress` export/share comment injection with IP/time metadata
@@ -99,6 +101,7 @@
 - `done` phase-1 session, providers, notices, settings, works, assets, remix, and workflow route contracts
 - `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve `/health`, `/_vcanvas_proxy`, `/api/session/*`, `/api/providers`, `/api/notices`, `/api/settings/*`, `/api/works/*`, `/api/gallery`, `/api/quotas/*`, `/api/ops/status`, `/api/maintenance/cleanup`, `/api/remix/fetch`, and workflow enqueue routes
 - `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve `/api/users` with admin-only local/mock user management and masked provider-key summaries
+- `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve `/api/security/blocked-ips` with admin-only list/block/unblock parity
 - `done` local JSON persistence adapter for site settings, personal settings, notices, providers, works, workflow runs, sessions, users, quotas, shares, gallery entries, rate-limit events, blocked IPs, and audit events
 - `in_progress` 24h workflow run retention with compressed context payloads
 - `todo` bridge `newapi`, `subapi`, `octopus`
@@ -114,6 +117,8 @@
 - Lightweight deployment server smoke test passed for the same endpoint set, including parity cleanup of share/gallery metadata when deleting a work.
 - Browser/CDP screenshots reviewed at `1440x960` and `390x844`; Control Center opens as a secondary modal and leaves `.workspace` dimensions unchanged on both viewports.
 - Follow-up smoke test passed for `/api/users`, forced warning notice payloads, and work-limit delete/re-save behavior on both Fastify and lightweight deployment services.
+- Security follow-up smoke test passed for `/api/security/blocked-ips` list/block/self-block rejection/blocked request rejection/unblock on both Fastify and lightweight deployment services.
+- Browser screenshot review passed for user search + blocked IP state and ops blocked-IP list; `.workspace` remained `1440x920` before and after opening Control Center.
 
 ### 10. Sign-in / Quota
 - `in_progress` login-as-signin flow through local/mock records

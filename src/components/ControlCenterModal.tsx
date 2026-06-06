@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import type {
   AuthSession,
+  BlockedIp,
   GalleryEntry,
   NoticeMessage,
   OpsSnapshot,
@@ -120,12 +121,14 @@ export function ControlCenterModal({
   const [siteSettings, setSiteSettings] = useState<(SiteSettings & Record<string, any>) | null>(null)
   const [notices, setNotices] = useState<NoticeMessage[]>([])
   const [managedUsers, setManagedUsers] = useState<ManagedUser[]>([])
+  const [blockedIps, setBlockedIps] = useState<BlockedIp[]>([])
   const [providers, setProviders] = useState<ProviderChannel[]>([])
   const [gallery, setGallery] = useState<GalleryEntryWithWork[]>([])
   const [ops, setOps] = useState<OpsSnapshot | null>(null)
   const [loginDraft, setLoginDraft] = useState({ username: 'local-admin', tier: 'host-admin' as UserTier })
   const [profileDraft, setProfileDraft] = useState({ displayName: '', motto: '', qq: '', avatarUrl: '' })
   const [noticeDraft, setNoticeDraft] = useState({ kind: 'announcement' as NoticeMessage['kind'], title: '', body: '', force: false })
+  const [userSearch, setUserSearch] = useState('')
   const [redeemCode, setRedeemCode] = useState('')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
@@ -135,6 +138,23 @@ export function ControlCenterModal({
   const warningNotices = notices.filter((notice) => notice.kind === 'warning')
   const realtimeNotices = notices.filter((notice) => notice.kind === 'realtime')
   const favoriteProviders = useMemo(() => providers.filter((provider) => provider.favorite || provider.enabled).slice(0, 8), [providers])
+  const activeBlockedIps = useMemo(
+    () => blockedIps.filter((item) => !item.expiresAt || Date.parse(item.expiresAt) > Date.now()),
+    [blockedIps],
+  )
+  const blockedIpSet = useMemo(() => new Set(activeBlockedIps.map((item) => item.ip)), [activeBlockedIps])
+  const filteredManagedUsers = useMemo(() => {
+    const query = userSearch.trim().toLowerCase()
+    if (!query) return managedUsers
+    return managedUsers.filter((managedUser) => [
+      managedUser.id,
+      managedUser.username,
+      managedUser.email || '',
+      managedUser.profile.displayName,
+      managedUser.lastLoginIp || '',
+      managedUser.tier,
+    ].some((value) => value.toLowerCase().includes(query)))
+  }, [managedUsers, userSearch])
   const sharePolicy = { ...defaultSharePolicy, ...(siteSettings?.sharePolicy || {}) }
   const noticePolicy = { ...defaultNoticePolicy, ...(siteSettings?.noticePolicy || {}) }
   const updatePolicy = { ...defaultUpdatePolicy, ...(siteSettings?.updatePolicy || {}) }
@@ -167,10 +187,15 @@ export function ControlCenterModal({
     setOps(opsPayload.snapshot)
     setGallery(galleryPayload.entries || galleryPayload.items || [])
     if (canManageSite(sessionPayload.user)) {
-      const usersPayload = await fetch('/api/users').then((response) => readJson<{ users: ManagedUser[] }>(response))
+      const [usersPayload, securityPayload] = await Promise.all([
+        fetch('/api/users').then((response) => readJson<{ users: ManagedUser[] }>(response)),
+        fetch('/api/security/blocked-ips').then((response) => readJson<{ blockedIps: BlockedIp[] }>(response)),
+      ])
       setManagedUsers(usersPayload.users || [])
+      setBlockedIps(securityPayload.blockedIps || [])
     } else {
       setManagedUsers([])
+      setBlockedIps([])
     }
     setProfileDraft({
       displayName: sessionPayload.user.displayName || '',
@@ -301,6 +326,25 @@ export function ControlCenterModal({
     }).then((response) => readJson(response))
   })
 
+  const blockUserIp = (managedUser: ManagedUser) => run(async () => {
+    if (!managedUser.lastLoginIp) return
+    await fetch('/api/security/blocked-ips', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ip: managedUser.lastLoginIp,
+        reason: `Manual block from user guardrail: ${managedUser.username}`,
+      }),
+    }).then((response) => readJson(response))
+    return t('control.notice.ipBlocked')
+  })
+
+  const unblockIp = (ip: string) => run(async () => {
+    await fetch(`/api/security/blocked-ips/${encodeURIComponent(ip)}`, { method: 'DELETE' })
+      .then((response) => readJson(response))
+    return t('control.notice.ipUnblocked')
+  })
+
   return (
     <div className="ccm-overlay" onClick={onClose}>
       <div className="ccm-modal" onClick={(event) => event.stopPropagation()}>
@@ -419,16 +463,33 @@ export function ControlCenterModal({
                     <h3>{t('control.users.title')}</h3>
                     <p>{t('control.users.note')}</p>
                   </div>
-                  <span className="ccm-pill">{managedUsers.length} {t('control.users.count')}</span>
+                  <div className="ccm-section-actions">
+                    <span className="ccm-pill">{filteredManagedUsers.length}/{managedUsers.length} {t('control.users.count')}</span>
+                    <span className="ccm-pill">{activeBlockedIps.length} {t('control.users.blockedIps')}</span>
+                  </div>
+                </div>
+                <div className="ccm-user-toolbar">
+                  <input
+                    value={userSearch}
+                    onChange={(event) => setUserSearch(event.target.value)}
+                    placeholder={t('control.users.search')}
+                  />
                 </div>
                 <div className="ccm-user-table">
-                  {managedUsers.length === 0 && <div className="ccm-empty">{t('control.users.empty')}</div>}
-                  {managedUsers.map((managedUser) => (
+                  {filteredManagedUsers.length === 0 && <div className="ccm-empty">{t('control.users.empty')}</div>}
+                  {filteredManagedUsers.map((managedUser) => {
+                    const ipBlocked = Boolean(managedUser.lastLoginIp && blockedIpSet.has(managedUser.lastLoginIp))
+                    const currentIp = Boolean(managedUser.lastLoginIp && managedUser.lastLoginIp === loginNotice?.ip)
+                    return (
                     <article key={managedUser.id} className={`ccm-user-row ${managedUser.enabled ? '' : 'disabled'}`}>
                       <div className="ccm-user-main">
                         <strong>{managedUser.profile.displayName || managedUser.username}</strong>
                         <span>{managedUser.username} · {managedUser.id}</span>
-                        <small>{t('control.users.lastIp')}: {managedUser.lastLoginIp || '-'}</small>
+                        <small>
+                          {t('control.users.lastIp')}: {managedUser.lastLoginIp || '-'}
+                          {ipBlocked ? ` · ${t('control.users.ipBlocked')}` : ''}
+                          {currentIp ? ` · ${t('control.users.currentIp')}` : ''}
+                        </small>
                       </div>
                       <div className="ccm-user-metrics">
                         <span>{managedUser.summary?.works ?? 0}<small>{t('control.users.works')}</small></span>
@@ -455,9 +516,22 @@ export function ControlCenterModal({
                         >
                           {managedUser.enabled ? t('control.users.disable') : t('control.users.enable')}
                         </button>
+                        {ipBlocked && managedUser.lastLoginIp ? (
+                          <button className="btn btn-secondary" onClick={() => unblockIp(managedUser.lastLoginIp || '')} disabled={busy}>
+                            {t('control.users.unblockIp')}
+                          </button>
+                        ) : (
+                          <button
+                            className="btn btn-ghost danger"
+                            onClick={() => blockUserIp(managedUser)}
+                            disabled={busy || !managedUser.lastLoginIp || currentIp}
+                          >
+                            {t('control.users.blockIp')}
+                          </button>
+                        )}
                       </div>
                     </article>
-                  ))}
+                  )})}
                 </div>
               </section>
             )}
@@ -550,6 +624,23 @@ export function ControlCenterModal({
                   <div className="ccm-kv"><span>{t('control.exec')}</span><strong>{ops?.hostingPolicy.defaultExecutionMode || '-'}</strong></div>
                   <div className="ccm-kv"><span>{t('control.heavy')}</span><strong>{ops?.hostingPolicy.resourceHeavyModeDefault || '-'}</strong></div>
                   <div className="ccm-kv"><span>{t('control.fallback')}</span><strong>{ops?.hostingPolicy.fallbackReason || '-'}</strong></div>
+                </section>
+                <section className="ccm-card wide">
+                  <h3>{t('control.ops.blockedIps')}</h3>
+                  <div className="ccm-blocked-list">
+                    {activeBlockedIps.length === 0 && <div className="ccm-empty compact">{t('control.ops.noBlockedIps')}</div>}
+                    {activeBlockedIps.map((item) => (
+                      <article key={item.ip} className="ccm-blocked-item">
+                        <div>
+                          <strong>{item.ip}</strong>
+                          <span>{item.reason} · {formatDate(item.blockedAt)}</span>
+                        </div>
+                        <button className="btn btn-secondary" onClick={() => unblockIp(item.ip)} disabled={busy}>
+                          {t('control.users.unblockIp')}
+                        </button>
+                      </article>
+                    ))}
+                  </div>
                 </section>
               </div>
             )}

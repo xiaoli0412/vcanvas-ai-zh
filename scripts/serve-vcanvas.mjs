@@ -291,6 +291,15 @@ function canManageUsers(tier) {
   return permissionsForTier(tier).includes('manage-users')
 }
 
+function canManageSecurity(tier) {
+  const permissions = permissionsForTier(tier)
+  return permissions.includes('manage-users') || permissions.includes('manage-site')
+}
+
+function normalizeIp(value) {
+  return typeof value === 'string' ? value.trim().slice(0, 128) : ''
+}
+
 function canManageSecrets(tier) {
   return tier === 'host-admin' || tier === 'admin'
 }
@@ -752,6 +761,68 @@ async function handleApi(req, res, url) {
     withAudit(data, req, 'users.update', actor.id, actor.tier, { userId: id, tier, enabled: next.enabled })
     writeData(data)
     sendJson(res, 200, { ok: true, user: next })
+    return true
+  }
+
+  if (url.pathname === '/api/security/blocked-ips' && method === 'GET') {
+    const actor = getActor(data, req)
+    if (!canManageSecurity(actor.tier)) {
+      sendJson(res, 403, { ok: false, error: 'Only host-admin/admin can manage inscanvas security controls.' })
+      return true
+    }
+    sendJson(res, 200, { ok: true, blockedIps: data.blockedIps, actor: { id: actor.id, tier: actor.tier } })
+    return true
+  }
+
+  if (url.pathname === '/api/security/blocked-ips' && method === 'POST') {
+    const actor = getActor(data, req)
+    if (!canManageSecurity(actor.tier)) {
+      sendJson(res, 403, { ok: false, error: 'Only host-admin/admin can manage inscanvas security controls.' })
+      return true
+    }
+    const body = await readJsonBody(req)
+    const ip = normalizeIp(body.ip)
+    if (!ip) {
+      sendJson(res, 400, { ok: false, error: 'IP is required.' })
+      return true
+    }
+    const requestIp = clientIp(req)
+    if (requestIp && ip === requestIp) {
+      sendJson(res, 400, { ok: false, error: 'Refusing to block the current request IP in local/mock mode.' })
+      return true
+    }
+    const now = Date.now()
+    const expiresAt = typeof body.expiresInHours === 'number' && body.expiresInHours > 0
+      ? new Date(now + body.expiresInHours * 60 * 60 * 1000).toISOString()
+      : null
+    const blockedIp = {
+      ip,
+      reason: String(body.reason || 'manual admin block').trim().slice(0, 240),
+      blockedAt: new Date(now).toISOString(),
+      expiresAt,
+      createdBy: actor.id,
+    }
+    data.blockedIps = [...data.blockedIps.filter((item) => item.ip !== ip), blockedIp]
+    withAudit(data, req, 'security.ip.block', actor.id, actor.tier, { ip, reason: blockedIp.reason, expiresAt })
+    writeData(data)
+    sendJson(res, 200, { ok: true, blockedIp })
+    return true
+  }
+
+  const blockedIpMatch = url.pathname.match(/^\/api\/security\/blocked-ips\/([^/]+)$/)
+  if (blockedIpMatch && method === 'DELETE') {
+    const actor = getActor(data, req)
+    if (!canManageSecurity(actor.tier)) {
+      sendJson(res, 403, { ok: false, error: 'Only host-admin/admin can manage inscanvas security controls.' })
+      return true
+    }
+    const ip = normalizeIp(decodeURIComponent(blockedIpMatch[1]))
+    const before = data.blockedIps.length
+    data.blockedIps = data.blockedIps.filter((item) => item.ip !== ip)
+    const removed = before - data.blockedIps.length
+    withAudit(data, req, 'security.ip.unblock', actor.id, actor.tier, { ip, removed })
+    writeData(data)
+    sendJson(res, 200, { ok: true, removed })
     return true
   }
 

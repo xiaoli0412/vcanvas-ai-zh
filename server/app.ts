@@ -12,6 +12,7 @@ import { registerSettingsRoutes } from './routes/settings'
 import { registerProviderRoutes } from './routes/providers'
 import { registerNoticeRoutes } from './routes/notices'
 import { registerUserRoutes } from './routes/users'
+import { registerSecurityRoutes } from './routes/security'
 import { localDataStore } from './data/localDataStore'
 import { enforceTrafficGuard } from './lib/platformPolicy'
 import { registerQuotaRoutes } from './routes/quotas'
@@ -68,6 +69,7 @@ export async function createServer() {
   await registerProviderRoutes(app)
   await registerNoticeRoutes(app)
   await registerUserRoutes(app)
+  await registerSecurityRoutes(app)
   await registerQuotaRoutes(app)
   await registerOpsRoutes(app)
 

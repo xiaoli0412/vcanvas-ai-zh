@@ -163,6 +163,17 @@
       - 保存/导入前如果达到 `workLimitPerOwner`
       - 在弹层内列出旧作品，用户可先删除腾空间
       - 删除后可继续保存，不需要离开画布
+  - 2026-06-06 继续推进安全骨架：
+    - 新增 `/api/security/blocked-ips` Fastify + 轻量服务 parity：
+      - host-admin/admin 可列出、手动封禁、解封 IP
+      - 写入 `blockedIps` 与 `auditEvents`
+      - 本地/mock 模式拒绝封禁当前请求 IP，避免管理员自锁
+    - 控制中心 `用户` tab 新增搜索：
+      - 可按用户 ID、用户名、邮箱、等级、最近 IP 搜索
+    - 控制中心 `用户` tab 新增 IP 封禁/解封：
+      - 用户最近 IP 已封禁时显示状态与解封按钮
+      - 当前请求 IP 不允许从 UI 直接封禁
+    - 控制中心 `运维` tab 新增生效中封禁 IP 列表
 
 ## 已验证
 - `npm run typecheck` 通过
@@ -172,15 +183,16 @@
 - 当前仍有大 chunk 警告，但没有构建失败
 - Fastify 服务验证通过：
   - health、proxy、index、session register/login/me、providers、settings patch、notices create、quota sign-in/redeem、works CRUD/share/gallery-submit/delete、gallery、workflow generate/refine/plan、remix fetch、ops、cleanup
-  - 追加验证 `/api/users`、强警告 notice payload、作品上限失败、删除释放空间后再保存
+  - 追加验证 `/api/users`、`/api/security/blocked-ips`、强警告 notice payload、作品上限失败、删除释放空间后再保存
 - 轻量部署服务 `node scripts/serve-vcanvas.mjs` 验证通过：
   - 同上核心接口
   - 删除作品后 shareLinks/galleryEntries 无残留
-  - `/api/users`、强警告 notice、作品上限与删除释放空间 parity 通过
+  - `/api/users`、`/api/security/blocked-ips`、强警告 notice、作品上限与删除释放空间 parity 通过
 - 浏览器截图审查通过：
   - 桌面 `1440x960`
   - 移动 `390x844`
   - 重点确认控制中心打开前后 `.workspace` 尺寸不变，桌面 `1440x920`，移动 `390x804`
+  - 追加安全切片截图：用户搜索 + IP 封禁状态、运维封禁列表；控制中心打开前后 `.workspace` 均为 `1440x920`
 
 ## 当前工作树状态
 - 本轮计划提交信息：`feat: harden canvas 2.0 public server foundation`
@@ -193,7 +205,7 @@
    - `npm run typecheck`
    - `npm run build`
 2. 先做控制中心后续项：
-   - 用户管理继续项：搜索、封禁 IP、真实 newapi 用户同步、邮箱/钱包/QQ 头像字段
+   - 用户管理继续项：真实 newapi 用户同步、邮箱/钱包/QQ 头像字段
    - 强警告继续项：站点设置里配置默认强警告策略、长文免责声明弹层、导出/分享前确认
    - 作品继续项：公开分享路由、鉴赏厅独立前台、作品超限时支持“删除并自动继续保存”
 3. 然后继续 Canvas 2.0 补充细则高优先级项：
