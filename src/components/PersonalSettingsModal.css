@@ -177,6 +177,70 @@
   color: var(--text-muted);
 }
 
+.psm-custody {
+  display: grid;
+  gap: 9px;
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid rgba(130, 143, 210, 0.18);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.psm-custody-status {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.psm-custody-status strong {
+  color: var(--text-primary);
+  font-size: 11px;
+}
+
+.psm-custody-status small {
+  min-width: 0;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.psm-custody-pill {
+  padding: 3px 7px;
+  border: 1px solid rgba(130, 143, 210, 0.28);
+  border-radius: 999px;
+  color: var(--brand-blue-text);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.04em;
+}
+
+.psm-custody-pill.encrypted-local {
+  border-color: rgba(74, 158, 142, 0.36);
+  color: var(--accent);
+}
+
+.psm-custody-form {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.2fr) minmax(150px, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.psm-custody-form input {
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(5, 7, 16, 0.5);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  outline: none;
+}
+
 .psm-search {
   width: 210px;
   padding: 7px 9px;
@@ -388,6 +452,7 @@
 
   .psm-section-head,
   .psm-model,
+  .psm-custody-form,
   .psm-hosting {
     grid-template-columns: 1fr;
     flex-direction: column;

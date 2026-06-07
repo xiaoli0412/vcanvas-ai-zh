@@ -1,6 +1,7 @@
 import http from 'node:http'
 import { createReadStream, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
+import { createCipheriv, createHash, randomBytes } from 'node:crypto'
 
 const port = Number(process.env.VCANVAS_PORT || 18087)
 const host = process.env.VCANVAS_HOST || '0.0.0.0'
@@ -326,6 +327,10 @@ function canManageUsers(tier) {
   return permissionsForTier(tier).includes('manage-users')
 }
 
+function canManageModels(tier) {
+  return permissionsForTier(tier).includes('manage-models')
+}
+
 function resolveOwnedTargetId(actor, requestedOwnerId) {
   const ownerId = typeof requestedOwnerId === 'string' ? requestedOwnerId.trim() : ''
   if (ownerId && canManageUsers(actor.tier)) {
@@ -351,13 +356,78 @@ function canManageSecrets(tier) {
   return tier === 'host-admin' || tier === 'admin'
 }
 
+function providerKeyMaterial() {
+  const configured = process.env.VCANVAS_KEY_SECRET || process.env.VCANVAS_PROVIDER_KEY_SECRET || ''
+  const source = configured || 'inscanvas-local-json-provider-key-v1'
+  return {
+    key: createHash('sha256').update(source).digest(),
+    hint: configured ? 'env:VCANVAS_KEY_SECRET' : 'local-dev-fallback',
+  }
+}
+
+function maskSecret(value) {
+  const trimmed = typeof value === 'string' ? value.trim() : ''
+  if (!trimmed) return null
+  if (trimmed.length <= 8) return `${trimmed.slice(0, 2)}****`
+  return `${trimmed.slice(0, 4)}****${trimmed.slice(-4)}`
+}
+
+function encryptProviderApiKey(apiKey) {
+  const trimmed = typeof apiKey === 'string' ? apiKey.trim() : ''
+  if (!trimmed) return null
+  const { key, hint } = providerKeyMaterial()
+  const iv = randomBytes(12)
+  const cipher = createCipheriv('aes-256-gcm', key, iv)
+  const ciphertext = Buffer.concat([cipher.update(trimmed, 'utf8'), cipher.final()])
+  return {
+    algorithm: 'aes-256-gcm',
+    ciphertext: ciphertext.toString('base64'),
+    iv: iv.toString('base64'),
+    authTag: cipher.getAuthTag().toString('base64'),
+    keyHint: hint,
+    createdAt: new Date().toISOString(),
+  }
+}
+
+function providerKeyCustody(channel) {
+  if (channel.apiKeyEncrypted) {
+    return {
+      status: 'encrypted-local',
+      encrypted: true,
+      keyHint: channel.apiKeyEncrypted.keyHint,
+      updatedAt: channel.apiKeyEncrypted.createdAt,
+      note: channel.apiKeyEncrypted.keyHint === 'local-dev-fallback'
+        ? 'Local AES-GCM fallback is active. Set VCANVAS_KEY_SECRET before production use.'
+        : 'Provider key is encrypted before local-json persistence. This is not a production KMS/key-vault adapter yet.',
+    }
+  }
+  if (channel.apiKeyMasked) {
+    return { status: 'masked-only', encrypted: false, keyHint: null, updatedAt: null, note: 'Legacy masked-only key marker exists without encrypted custody.' }
+  }
+  return { status: 'none', encrypted: false, keyHint: null, updatedAt: null, note: null }
+}
+
+function stripProviderSecret(channel) {
+  const { apiKeyEncrypted, ...safe } = channel
+  void apiKeyEncrypted
+  return {
+    ...safe,
+    apiKeyMasked: channel.apiKeyMasked || null,
+    keyCustody: providerKeyCustody(channel),
+  }
+}
+
 function maskProviderChannels(channels, actorTier, actorId) {
   return channels.map((channel) => {
-    if (canManageSecrets(actorTier) || !channel.ownerId || channel.ownerId === actorId) return channel
+    const safe = stripProviderSecret(channel)
+    if (canManageSecrets(actorTier) || !channel.ownerId || channel.ownerId === actorId) return safe
     return {
-      ...channel,
+      ...safe,
       endpoint: channel.endpoint ? '[hidden]' : channel.endpoint,
-      apiKeyMasked: channel.apiKeyMasked ? '********' : channel.apiKeyMasked,
+      apiKeyMasked: channel.apiKeyMasked ? '********' : null,
+      keyCustody: channel.apiKeyEncrypted || channel.apiKeyMasked
+        ? { status: channel.apiKeyEncrypted ? 'encrypted-local' : 'masked-only', encrypted: Boolean(channel.apiKeyEncrypted), keyHint: null, updatedAt: null, note: 'Hidden from this user.' }
+        : safe.keyCustody,
     }
   })
 }
@@ -371,6 +441,11 @@ function userSummary(data, userId) {
     providerChannels: ownedProviders.length,
     maskedKeys: ownedProviders.filter((provider) => provider.apiKeyMasked).length,
   }
+}
+
+function canEditProviderChannel(actor, channel) {
+  if (canManageModels(actor.tier)) return true
+  return Boolean(channel?.ownerId && channel.ownerId === actor.id)
 }
 
 function getActor(data, req) {
@@ -675,10 +750,10 @@ function platformReadinessSnapshot(data) {
       domain: 'security',
       title: 'security and secret guardrails',
       maturity: 'local-mock',
-      summary: 'Traffic guard, blocked IPs, and secret masking exist; encrypted provider-key custody is not production-ready yet.',
-      implemented: ['basic rate-limit policies', 'manual IP block/unblock', 'admin-only user guardrail view', 'share/export disclaimer comments'],
-      gaps: ['encrypted provider key vault', 'HTML safety review model', 'injection/leak audit pass', 'tier downgrade and emergency lock UI'],
-      nextStep: 'Introduce a server-side key vault interface before allowing I-IV server-managed provider secrets.',
+      summary: 'Traffic guard, blocked IPs, secret masking, and local AES-GCM provider-key custody exist; production key vault/KMS custody is still pending.',
+      implemented: ['basic rate-limit policies', 'manual IP block/unblock', 'admin-only user guardrail view', 'share/export disclaimer comments', 'local provider key encryption before JSON persistence', 'provider channel write permissions for owners/admins'],
+      gaps: ['production key vault or KMS adapter', 'HTML safety review model', 'injection/leak audit pass', 'tier downgrade and emergency lock UI'],
+      nextStep: 'Replace local fallback key material with a production key vault adapter before enabling server-managed provider execution by default.',
     }),
     capabilityStatus({
       id: 'model-governance',
@@ -1414,7 +1489,20 @@ async function handleApi(req, res, url) {
 
   if (url.pathname === '/api/providers' && method === 'POST') {
     const body = await readJsonBody(req)
+    const actor = getActor(data, req)
+    if (actor.tier === 'guest') {
+      sendJson(res, 403, { ok: false, error: 'Guest users cannot save server-side provider channels. Use browser-local BYOK instead.' })
+      return true
+    }
     if (Array.isArray(body.batchCapabilities)) {
+      const denied = body.batchCapabilities.find((patch) => {
+        const channel = data.providerChannels.find((item) => item.id === patch.providerId)
+        return !channel || !canEditProviderChannel(actor, channel)
+      })
+      if (denied) {
+        sendJson(res, 403, { ok: false, error: 'Only channel owners or host-admin/admin can edit provider model capabilities.' })
+        return true
+      }
       for (const patch of body.batchCapabilities) {
         const channel = data.providerChannels.find((item) => item.id === patch.providerId)
         if (!channel) continue
@@ -1437,32 +1525,52 @@ async function handleApi(req, res, url) {
           ? [...new Set([...(channel.favoriteModelIds || []), next.id])]
           : (channel.favoriteModelIds || []).filter((id) => id !== next.id)
       }
-      withAudit(data, req, 'provider.batchCapabilities.update', 'local-user', 'user', { count: body.batchCapabilities.length })
+      withAudit(data, req, 'provider.batchCapabilities.update', actor.id, actor.tier, { count: body.batchCapabilities.length })
       writeData(data)
-      sendJson(res, 200, { ok: true, channels: data.providerChannels })
+      sendJson(res, 200, { ok: true, channels: maskProviderChannels(data.providerChannels, actor.tier, actor.id) })
       return true
     }
     const id = body.id || createId('provider')
     const existing = data.providerChannels.find((item) => item.id === id)
+    if (existing && !canEditProviderChannel(actor, existing)) {
+      sendJson(res, 403, { ok: false, error: 'Only channel owners or host-admin/admin can edit this provider channel.' })
+      return true
+    }
+    const ownerResolution = resolveOwnedTargetId(actor, body.ownerId)
+    const ownerId = existing
+      ? body.ownerId !== undefined
+        ? ownerResolution.ownerId
+        : existing.ownerId ?? null
+      : ownerResolution.ownerId
+    const encryptedKey = typeof body.apiKey === 'string' ? encryptProviderApiKey(body.apiKey) : undefined
     const channel = {
       id,
       label: body.label || existing?.label || id,
       endpoint: body.endpoint || existing?.endpoint,
       apiType: body.apiType || existing?.apiType || 'openai-compatible',
       models: body.models || existing?.models || [],
-      ownerId: body.ownerId ?? existing?.ownerId ?? getActor(data, req).id,
-      apiKeyMasked: body.apiKeyMasked ?? existing?.apiKeyMasked ?? null,
+      ownerId,
+      apiKeyMasked: body.clearApiKey ? null : encryptedKey ? maskSecret(body.apiKey) : existing?.apiKeyMasked ?? null,
+      apiKeyEncrypted: body.clearApiKey ? null : encryptedKey ?? existing?.apiKeyEncrypted ?? null,
       verifiedAt: body.verifiedAt ?? existing?.verifiedAt ?? null,
       verifiedSourceUrl: body.verifiedSourceUrl ?? existing?.verifiedSourceUrl ?? null,
       verificationMethod: body.verificationMethod ?? existing?.verificationMethod ?? null,
+      verificationNotes: body.verificationNotes ?? existing?.verificationNotes ?? null,
+      capabilityDetectionConfidence: body.capabilityDetectionConfidence ?? existing?.capabilityDetectionConfidence ?? 'unknown',
+      lastModelFetchAt: body.lastModelFetchAt ?? existing?.lastModelFetchAt ?? null,
       favoriteModelIds: body.favoriteModelIds ?? existing?.favoriteModelIds ?? [],
       favorite: body.favorite ?? existing?.favorite ?? false,
       enabled: body.enabled ?? existing?.enabled ?? true,
     }
     data.providerChannels = [...data.providerChannels.filter((item) => item.id !== id), channel]
-    withAudit(data, req, existing ? 'provider.update' : 'provider.create', 'local-admin', 'host-admin', { providerId: id })
+    withAudit(data, req, existing ? 'provider.update' : 'provider.create', actor.id, actor.tier, {
+      providerId: id,
+      ownerId: channel.ownerId,
+      ownerResolution,
+      keyCustody: channel.apiKeyEncrypted ? 'encrypted-local' : channel.apiKeyMasked ? 'masked-only' : 'none',
+    })
     writeData(data)
-    sendJson(res, 200, { ok: true, channel })
+    sendJson(res, 200, { ok: true, channel: maskProviderChannels([channel], actor.tier, actor.id)[0] })
     return true
   }
 

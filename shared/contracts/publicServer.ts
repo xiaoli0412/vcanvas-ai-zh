@@ -52,6 +52,8 @@ export interface ProviderChannel {
   models: ModelCapability[]
   ownerId?: string | null
   apiKeyMasked?: string | null
+  apiKeyEncrypted?: ProviderEncryptedSecret | null
+  keyCustody?: ProviderKeyCustody | null
   verifiedAt?: string | null
   verifiedSourceUrl?: string | null
   verificationMethod?: 'official-doc' | 'live-models' | 'manual' | null
@@ -61,6 +63,23 @@ export interface ProviderChannel {
   favoriteModelIds?: string[]
   favorite?: boolean
   enabled?: boolean
+}
+
+export interface ProviderEncryptedSecret {
+  algorithm: 'aes-256-gcm'
+  ciphertext: string
+  iv: string
+  authTag: string
+  keyHint: string
+  createdAt: string
+}
+
+export interface ProviderKeyCustody {
+  status: 'none' | 'encrypted-local' | 'masked-only'
+  encrypted: boolean
+  keyHint?: string | null
+  updatedAt?: string | null
+  note?: string | null
 }
 
 export interface UserProfile {

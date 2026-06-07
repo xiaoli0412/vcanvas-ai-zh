@@ -13,6 +13,7 @@ import type {
   UserTier,
 } from '../../shared/contracts/publicServer'
 import { createId, getClientIp, type PublicServerData } from '../data/localDataStore'
+import { stripProviderSecret } from './providerKeyVault'
 
 export const SESSION_TTL_MS = 8 * 60 * 60 * 1000
 export const WORKFLOW_TTL_MS = 24 * 60 * 60 * 1000
@@ -40,6 +41,10 @@ export function getTierPermissions(tier: UserTier): UserPermission[] {
 
 export function canManageSecrets(tier: UserTier) {
   return tier === 'host-admin' || tier === 'admin'
+}
+
+export function canManageModels(tier: UserTier) {
+  return getTierPermissions(tier).includes('manage-models')
 }
 
 export function canManageUsers(tier: UserTier) {
@@ -185,11 +190,15 @@ export function ensureQuotaLedger(data: PublicServerData, userId: string, tier: 
 
 export function maskProviderChannels(channels: ProviderChannel[], actorTier: UserTier, actorId: string) {
   return channels.map((channel) => {
-    if (canManageSecrets(actorTier) || !channel.ownerId || channel.ownerId === actorId) return channel
+    const safe = stripProviderSecret(channel)
+    if (canManageSecrets(actorTier) || !channel.ownerId || channel.ownerId === actorId) return safe
     return {
-      ...channel,
+      ...safe,
       endpoint: channel.endpoint ? '[hidden]' : channel.endpoint,
-      apiKeyMasked: channel.apiKeyMasked ? '********' : channel.apiKeyMasked,
+      apiKeyMasked: channel.apiKeyMasked ? '********' : null,
+      keyCustody: channel.apiKeyEncrypted || channel.apiKeyMasked
+        ? { status: channel.apiKeyEncrypted ? 'encrypted-local' : 'masked-only', encrypted: Boolean(channel.apiKeyEncrypted), keyHint: null, updatedAt: null, note: 'Hidden from this user.' }
+        : safe.keyCustody,
     }
   })
 }

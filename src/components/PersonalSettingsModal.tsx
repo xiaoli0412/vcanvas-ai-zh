@@ -43,6 +43,7 @@ export function PersonalSettingsModal({ onClose, onOpenConnectionSettings, t }: 
   const [selectedModelIds, setSelectedModelIds] = useState<Set<string>>(new Set())
   const [draftModel, setDraftModel] = useState<ModelCapability>(EMPTY_MODEL)
   const [batch, setBatch] = useState({ vision: true, video: false, toolCalling: false, contextWindow: 128000 })
+  const [channelDraft, setChannelDraft] = useState({ endpoint: '', apiKey: '' })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -62,6 +63,10 @@ export function PersonalSettingsModal({ onClose, onOpenConnectionSettings, t }: 
   }, [])
 
   const selectedChannel = channels.find((channel) => channel.id === selectedChannelId) || channels[0]
+  useEffect(() => {
+    setChannelDraft({ endpoint: selectedChannel?.endpoint && selectedChannel.endpoint !== '[hidden]' ? selectedChannel.endpoint : '', apiKey: '' })
+  }, [selectedChannel?.id, selectedChannel?.endpoint])
+
   const visibleModels = useMemo(() => {
     const models = selectedChannel?.models || []
     const keyword = query.trim().toLowerCase()
@@ -126,6 +131,17 @@ export function PersonalSettingsModal({ onClose, onOpenConnectionSettings, t }: 
       })),
     })
     setSelectedModelIds(new Set())
+  }
+
+  const saveChannelConnection = async (clearApiKey = false) => {
+    if (!selectedChannel) return
+    await postProvider({
+      id: selectedChannel.id,
+      endpoint: channelDraft.endpoint.trim() || selectedChannel.endpoint,
+      apiKey: clearApiKey ? undefined : channelDraft.apiKey,
+      clearApiKey,
+    })
+    setChannelDraft((value) => ({ ...value, apiKey: '' }))
   }
 
   const toggleModelSelection = (modelId: string) => {
@@ -197,6 +213,39 @@ export function PersonalSettingsModal({ onClose, onOpenConnectionSettings, t }: 
                   </button>
                 ))}
               </div>
+
+              {selectedChannel && (
+                <div className="psm-custody">
+                  <div className="psm-custody-status">
+                    <strong>{t('personalSettings.custodyTitle')}</strong>
+                    <span className={`psm-custody-pill ${selectedChannel.keyCustody?.status || 'none'}`}>
+                      {selectedChannel.keyCustody?.status || 'none'}
+                    </span>
+                    <small>{selectedChannel.keyCustody?.note || t('personalSettings.custodyEmpty')}</small>
+                  </div>
+                  <div className="psm-custody-form">
+                    <input
+                      value={channelDraft.endpoint}
+                      onChange={(event) => setChannelDraft((value) => ({ ...value, endpoint: event.target.value }))}
+                      placeholder={t('personalSettings.endpointPlaceholder')}
+                      spellCheck={false}
+                    />
+                    <input
+                      value={channelDraft.apiKey}
+                      onChange={(event) => setChannelDraft((value) => ({ ...value, apiKey: event.target.value }))}
+                      placeholder={selectedChannel.apiKeyMasked || t('personalSettings.apiKeyPlaceholder')}
+                      type="password"
+                      spellCheck={false}
+                    />
+                    <button className="btn btn-primary" onClick={() => saveChannelConnection(false)} disabled={saving} type="button">
+                      {t('personalSettings.saveCustody')}
+                    </button>
+                    <button className="btn btn-secondary" onClick={() => saveChannelConnection(true)} disabled={saving} type="button">
+                      {t('personalSettings.clearKey')}
+                    </button>
+                  </div>
+                </div>
+              )}
             </section>
 
             <section className="psm-section">

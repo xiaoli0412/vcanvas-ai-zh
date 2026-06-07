@@ -55,6 +55,8 @@
 - `server/services/workflowService.ts` is the first real service boundary for Generate/Refine/Plan records. It owns 24h retention, local context compression, hosting-policy selection, `executionPlan` metadata, and hosted-run quota debit while route files stay as HTTP adapters.
 - `/api/assets/import` now has Fastify/lightweight parity as metadata-only asset intake with audit records. It intentionally does not store binary image/video files in local JSON.
 - `scripts/serve-vcanvas.mjs` remains a compatibility deployment shim with mirrored workflow/asset logic; every workflow/security change must be smoke-tested against both Fastify and the lightweight service until the deployment path can load the TypeScript service bundle directly.
+- `1.11.5` adds local provider-key custody for public-server channels. `apiKey` request bodies are encrypted with AES-256-GCM before JSON persistence, responses strip ciphertext, and `keyCustody` reports `none`, `masked-only`, or `encrypted-local`. This is still a local adapter; production deployments should set `VCANVAS_KEY_SECRET` and later replace it with KMS/key-vault custody.
+- `/api/providers` write permissions are now explicit: guests cannot persist server-side channels, regular users can only edit owned channels, and site/built-in channels plus cross-owner edits require host-admin/admin. Fastify and the lightweight deployment service share the same behavior.
 
 ## 2026-06-06 Verification Snapshot
 - `npm run typecheck`

@@ -26,6 +26,7 @@
 - `1.11.4` also hardens logout semantics: anonymous/no-header requests cannot clear all sessions, users can only logout their own sessions, and admin session removal remains explicit.
 - `1.11.4` hardens owner assignment for workflow and asset intake: non-admin requests cannot forge `ownerId`, and audit events record the real actor separately from target owner metadata.
 - `1.11.4` extracts workflow run creation into a server `WorkflowService` boundary and upgrades `/api/assets/import` into metadata-only asset intake with audit records in both Fastify and the lightweight deployment server.
+- `1.11.5` adds local AES-GCM provider-key custody and provider write permissions: guests cannot save server channels, regular users can only edit owned channels, and host-admin/admin owns site-level provider governance.
 - Frontend, server typecheck, build, service smoke tests, and desktop/mobile browser screenshots passed on 2026-06-06.
 
 ## Completion Matrix
@@ -48,12 +49,13 @@
 - `todo` wallet/payment area split with stronger protection
 
 ### 2. Security
-- `todo` Encrypted provider keys for non-guest users
+- `in_progress` Encrypted provider keys for non-guest users: local AES-GCM custody exists, production KMS/key-vault adapter remains todo
 - `in_progress` IP audit, throttling, blocked IP store, manual admin block/unblock, and escalating lockouts on heavy routes
 - `todo` injection/leak prevention across UI and service routes
 - `in_progress` long/short disclaimer system
 - `in_progress` export/share comment injection with IP/time metadata
 - `in_progress` admin-only site/security controls are visible in Control Center; production key encryption and security review model remain deferred
+- `done` provider write guardrails: guest POST is blocked, owned channels are user-editable, site/built-in channels require host-admin/admin
 - `done` app-level forced warning overlay consumes persisted `warning/realtime/force` notices and supports dismissible vs session acknowledgement behavior
 - `done` Control Center readiness map names the key-vault/security-review gaps instead of implying provider-key custody is production-safe
 
@@ -92,6 +94,7 @@
 - `in_progress` saved/favorited models and richer per-model capability badges
 - `done` move provider management to personal settings and leave quick switch in header
 - `in_progress` batch capability editing for provider channel models through `/api/providers`
+- `done` provider key custody metadata surfaces encrypted-local vs masked-only status without returning ciphertext
 
 ### 6. Settings
 - `in_progress` site settings IA
@@ -162,6 +165,7 @@
 - Fastify smoke test passed for explicit session auth, user-id-only spoof rejection, anonymous logout no-op, cross-user logout rejection, self logout, workflow `executionPlan`, and metadata-only asset import.
 - Lightweight `scripts/serve-vcanvas.mjs` smoke test passed for the same session/logout/workflow/assets scenarios, confirming deployment-service parity.
 - Owner-spoof smoke test passed on both services: non-admin workflow/assets requests with `ownerId=local-admin` are pinned back to the caller, while host-admin delegated ownership remains allowed.
+- `1.11.5` provider custody smoke test passed on both services: anonymous provider writes are rejected, regular users can save encrypted owned channels, plaintext API keys do not persist to JSON, other users receive masked/hidden provider views, and only host-admin/admin can edit built-in channel capabilities.
 
 ### 10. Sign-in / Quota
 - `in_progress` login-as-signin flow through local/mock records

@@ -1,6 +1,6 @@
 {
   "name": "vcanvas",
-  "version": "1.11.4",
+  "version": "1.11.5",
   "description": "inscanvas is a visual creative workspace for vision-language models. Draw, describe, generate.",
   "private": true,
   "main": "electron/main.cjs",

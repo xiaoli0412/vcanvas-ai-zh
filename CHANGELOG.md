@@ -1,3 +1,14 @@
+## 1.11.5 - 2026-06-07
+
+### Highlights
+- Added local AES-256-GCM provider-key custody for server-side provider channels; plaintext API keys are encrypted before local JSON persistence and stripped from API responses.
+- Hardened `/api/providers` write access: guests cannot save server-side channels, regular users can only edit their own channels, and site/built-in channels require host-admin/admin.
+- Added provider key custody metadata so the UI can distinguish `none`, `masked-only`, and `encrypted-local` without exposing ciphertext.
+- Kept Fastify and `scripts/serve-vcanvas.mjs` behavior aligned for provider permissions, encrypted local key storage, and masked provider responses.
+
+### Notes
+- This is still local/mock custody, not a production KMS. Set `VCANVAS_KEY_SECRET` before real deployment and replace the fallback key material with a production vault adapter before server-managed provider execution is enabled by default.
+
 ## 1.11.4 - 2026-06-07
 
 ### Highlights
