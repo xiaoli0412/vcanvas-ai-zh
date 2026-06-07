@@ -45,6 +45,9 @@
 - `1.10.11` typography now embeds local OFL fonts: Noto Serif SC / Source Han Serif style for high-quality Songti display titles and Fusion Pixel 10px Monospaced SC for short playful titles/brand accents, while dense controls keep HarmonyOS/system sans fallbacks. Font notices are tracked in `docs/third-party-fonts.md`.
 - `/gallery` now uses a lighter Xiaohongshu-style masonry feed in both Fastify and `scripts/serve-vcanvas.mjs`: optional snapshot covers first, compact metadata, shorter notices, and simple gradient placeholders when no preview image exists.
 - `/api/dispatch/status` and `/api/dispatch/route` now expose a planned-only distributed dispatch contract with weighted candidate selection, current-load awareness, and explicit fallback reasons; no real cross-server queue execution is implied in this phase.
+- `1.11.3` adds `/api/platform/readiness` to both Fastify and `scripts/serve-vcanvas.mjs`. It reports Canvas 2.0 public-server maturity by domain (`production`, `local-mock`, `contract-only`, `missing`) and lists blockers for newapi auth, key vault custody, server-managed workflow execution, verified model registry, production persistence, and update/migration.
+- `src/components/ControlCenterModal.tsx` now opens to the readiness map by default, keeping public-server gaps visible while preserving the canvas-first rule because the control center remains a secondary modal.
+- Local/mock `/api/session/login` and `/api/session/register` now ignore client-supplied `tier`. New accounts default to `user`, existing local users keep their stored tier, and only the reserved local bootstrap identity `local-admin` resolves to `host-admin` until a real bridge owns roles.
 
 ## 2026-06-06 Verification Snapshot
 - `npm run typecheck`
@@ -61,9 +64,11 @@
 - Public-page browser screenshot review passed for `/gallery` desktop `1440x960`, `/gallery` mobile `390x844`, and direct `/share/:slug` desktop `1440x960`.
 - `1.10.11` final verification passed for embedded font loading, default Chinese, Header language toggle desktop/mobile, compact PromptBar/FramePicker/MessageStrip typography, public `/gallery` screenshots at `1440x960` and `390x844`, and `/api/dispatch/*` parity.
 - Fastify static serving now streams real files from `VCANVAS_STATIC_DIR` before SPA fallback, so `/assets/*.js`, `/assets/*.css`, and `/fonts/*` no longer fall through to `index.html`.
+- `1.11.3` validation adds `/api/platform/readiness` to the required Fastify/lightweight smoke set and includes a negative privilege test: posting `tier: "host-admin"` for an arbitrary user must still return `tier: "user"`.
 
 ## Deferred Beyond This Commit
 - Real auth on top of latest `newapi`, production key encryption, payment-grade quotas, PostgreSQL/Redis persistence, and external `newapi/subapi/octopus` bridges.
 - Production-grade native Excalidraw embeddable element integration, deeper iframe-block detection, and persisted web-embed previews.
 - Queue-backed screenshots, Redis, PostgreSQL, and worker orchestration.
 - Verified official model catalogs and Asterbot-style model capability auto-detection across every provider channel.
+- Real production readiness requires service extraction around `AuthService`, `WorkflowService`, `ModelRegistry`, `KeyVault`, `QuotaPolicy`, and durable store/queue adapters; the current local JSON stack is intentionally a zero-config development baseline, not the final 250-online architecture.

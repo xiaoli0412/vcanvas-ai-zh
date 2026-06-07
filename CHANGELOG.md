@@ -1,3 +1,13 @@
+## 1.11.3 - 2026-06-07
+
+### Highlights
+- Added a Canvas 2.0 platform readiness endpoint and Control Center tab that clearly separates production-ready work from local/mock, contract-only, and missing public-server capabilities.
+- Hardened local/mock session flows so browser requests can no longer self-assign admin tiers during login or registration.
+- Kept Fastify and the lightweight deployment server aligned by exposing `/api/platform/readiness` in both runtimes.
+
+### Notes
+- This release is an architecture-boundary pass, not a claim that `newapi` auth, encrypted key custody, server-managed model execution, PostgreSQL/Redis persistence, or worker queues are complete.
+
 ## 1.11.2 - 2026-06-06
 
 ### Fixes

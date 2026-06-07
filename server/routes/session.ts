@@ -5,7 +5,8 @@ import {
   getSessionFromRequest,
   getTierPermissions,
   makeSession,
-  normalizeTier,
+  resolveLocalLoginTier,
+  resolveLocalRegisterTier,
   SESSION_TTL_MS,
   upsertUser,
 } from '../lib/platformPolicy'
@@ -57,19 +58,19 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       tier?: UserTier
       displayName?: string
     }
-    const tier = normalizeTier(body.tier)
     const userId = body.userId?.trim() || body.username?.trim() || 'mock-user'
     const ip = getClientIp(request)
     const userAgent = String(request.headers['user-agent'] || '')
-    const session = makeSession({
-      userId,
-      tier,
-      executionMode: 'server-managed',
-      ip,
-      userAgent,
-    })
 
     const result = await localDataStore.update((data) => {
+      const tier = resolveLocalLoginTier(data, userId)
+      const session = makeSession({
+        userId,
+        tier,
+        executionMode: 'server-managed',
+        ip,
+        userAgent,
+      })
       const user = upsertUser(data, {
         id: userId,
         username: body.username || userId,
@@ -97,22 +98,23 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       })
       return {
         user,
+        session,
         quota: data.quotaLedgers.find((ledger) => ledger.userId === userId) || null,
       }
     })
 
     return {
       ok: true,
-      executionMode: session.executionMode,
+      executionMode: result.session.executionMode,
       user: {
-        id: session.userId,
-        tier: session.tier,
+        id: result.session.userId,
+        tier: result.session.tier,
         displayName: result.user.profile.displayName,
-        permissions: getTierPermissions(session.tier),
+        permissions: getTierPermissions(result.session.tier),
       },
-      session,
+      session: result.session,
       quota: result.quota,
-      note: 'Local/mock inscanvas login is active until the newapi/subapi bridge is attached.',
+      note: 'Local/mock inscanvas login ignores client-supplied tier; real roles must come from the newapi/subapi bridge.',
     }
   })
 
@@ -130,19 +132,19 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       return
     }
 
-    const tier = normalizeTier(body.tier || 'user')
     const userId = body.userId?.trim() || body.username?.trim() || `user-${Date.now()}`
     const ip = getClientIp(request)
     const userAgent = String(request.headers['user-agent'] || '')
-    const session = makeSession({
-      userId,
-      tier,
-      executionMode: tier === 'guest' ? 'browser-local' : 'server-managed',
-      ip,
-      userAgent,
-    })
 
     const result = await localDataStore.update((current) => {
+      const tier = resolveLocalRegisterTier(current, userId)
+      const session = makeSession({
+        userId,
+        tier,
+        executionMode: tier === 'guest' ? 'browser-local' : 'server-managed',
+        ip,
+        userAgent,
+      })
       const user = upsertUser(current, {
         id: userId,
         username: body.username || userId,
@@ -170,22 +172,23 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       })
       return {
         user,
+        session,
         quota: current.quotaLedgers.find((ledger) => ledger.userId === userId) || null,
       }
     })
 
     return {
       ok: true,
-      executionMode: session.executionMode,
+      executionMode: result.session.executionMode,
       user: {
-        id: session.userId,
-        tier: session.tier,
+        id: result.session.userId,
+        tier: result.session.tier,
         displayName: result.user.profile.displayName,
-        permissions: getTierPermissions(session.tier),
+        permissions: getTierPermissions(result.session.tier),
       },
-      session,
+      session: result.session,
       quota: result.quota,
-      note: 'Local/mock inscanvas registration is active until the newapi bridge is attached.',
+      note: 'Local/mock inscanvas registration creates user-tier accounts unless an existing user already has a managed tier.',
     }
   })
 

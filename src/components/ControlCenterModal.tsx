@@ -5,6 +5,8 @@ import type {
   GalleryEntry,
   NoticeMessage,
   OpsSnapshot,
+  PlatformCapabilityMaturity,
+  PlatformReadinessSnapshot,
   ProviderChannel,
   QuotaLedger,
   SiteSettings,
@@ -15,7 +17,7 @@ import type {
 import type { Translate } from '../lib/i18n'
 import './ControlCenterModal.css'
 
-type ControlTab = 'overview' | 'personal' | 'users' | 'site' | 'notices' | 'gallery' | 'ops'
+type ControlTab = 'readiness' | 'overview' | 'personal' | 'users' | 'site' | 'notices' | 'gallery' | 'ops'
 
 interface SessionUser {
   id: string
@@ -113,7 +115,7 @@ export function ControlCenterModal({
   onOpenWorkCenter,
   t,
 }: Props) {
-  const [tab, setTab] = useState<ControlTab>('overview')
+  const [tab, setTab] = useState<ControlTab>('readiness')
   const [user, setUser] = useState<SessionUser | null>(null)
   const [session, setSession] = useState<AuthSession | null>(null)
   const [loginNotice, setLoginNotice] = useState<{ ip?: string | null; time?: string; userAgent?: string | null } | null>(null)
@@ -125,7 +127,8 @@ export function ControlCenterModal({
   const [providers, setProviders] = useState<ProviderChannel[]>([])
   const [gallery, setGallery] = useState<GalleryEntryWithWork[]>([])
   const [ops, setOps] = useState<OpsSnapshot | null>(null)
-  const [loginDraft, setLoginDraft] = useState({ username: 'local-admin', tier: 'host-admin' as UserTier })
+  const [readiness, setReadiness] = useState<PlatformReadinessSnapshot | null>(null)
+  const [loginDraft, setLoginDraft] = useState({ username: 'local-admin' })
   const [profileDraft, setProfileDraft] = useState({ displayName: '', motto: '', qq: '', avatarUrl: '' })
   const [noticeDraft, setNoticeDraft] = useState({ kind: 'announcement' as NoticeMessage['kind'], title: '', body: '', force: false })
   const [userSearch, setUserSearch] = useState('')
@@ -158,10 +161,20 @@ export function ControlCenterModal({
   const sharePolicy = { ...defaultSharePolicy, ...(siteSettings?.sharePolicy || {}) }
   const noticePolicy = { ...defaultNoticePolicy, ...(siteSettings?.noticePolicy || {}) }
   const updatePolicy = { ...defaultUpdatePolicy, ...(siteSettings?.updatePolicy || {}) }
+  const maturityTotals = useMemo(() => {
+    const totals: Record<PlatformCapabilityMaturity, number> = {
+      production: 0,
+      'local-mock': 0,
+      'contract-only': 0,
+      missing: 0,
+    }
+    for (const capability of readiness?.capabilities || []) totals[capability.maturity] += 1
+    return totals
+  }, [readiness])
 
   const load = async () => {
     setError(null)
-    const [sessionPayload, settingsPayload, noticePayload, providerPayload, quotaPayload, redeemPayload, opsPayload, galleryPayload] = await Promise.all([
+    const [sessionPayload, settingsPayload, noticePayload, providerPayload, quotaPayload, redeemPayload, opsPayload, galleryPayload, readinessPayload] = await Promise.all([
       fetch('/api/session/me').then((response) => readJson<{
         user: SessionUser
         session: AuthSession | null
@@ -175,6 +188,7 @@ export function ControlCenterModal({
       fetch('/api/quotas/redeem').then((response) => readJson<{ ledger: QuotaLedger | null }>(response)),
       fetch('/api/ops/status').then((response) => readJson<{ snapshot: OpsSnapshot }>(response)),
       fetch('/api/gallery').then((response) => readJson<{ entries?: GalleryEntryWithWork[]; items?: GalleryEntryWithWork[] }>(response)),
+      fetch('/api/platform/readiness').then((response) => readJson<PlatformReadinessSnapshot>(response)),
     ])
 
     setUser(sessionPayload.user)
@@ -186,6 +200,7 @@ export function ControlCenterModal({
     setProviders(providerPayload.channels || [])
     setOps(opsPayload.snapshot)
     setGallery(galleryPayload.entries || galleryPayload.items || [])
+    setReadiness(readinessPayload)
     if (canManageSite(sessionPayload.user)) {
       const [usersPayload, securityPayload] = await Promise.all([
         fetch('/api/users').then((response) => readJson<{ users: ManagedUser[] }>(response)),
@@ -232,11 +247,10 @@ export function ControlCenterModal({
       body: JSON.stringify({
         username: loginDraft.username.trim() || 'local-admin',
         userId: loginDraft.username.trim() || 'local-admin',
-        tier: loginDraft.tier,
         displayName: loginDraft.username.trim() || 'inscanvas user',
       }),
     }).then((response) => readJson(response))
-    return register ? t('control.notice.registered') : t('control.notice.loggedIn')
+    return register ? t('control.notice.registeredSafe') : t('control.notice.loggedInSafe')
   })
 
   const guestLogin = () => run(async () => {
@@ -318,6 +332,7 @@ export function ControlCenterModal({
   })
 
   const tabs: Array<{ id: ControlTab; label: string; admin?: boolean }> = [
+    { id: 'readiness', label: t('control.tab.readiness') },
     { id: 'overview', label: t('control.tab.overview') },
     { id: 'personal', label: t('control.tab.personal') },
     { id: 'users', label: t('control.tab.users'), admin: true },
@@ -406,12 +421,7 @@ export function ControlCenterModal({
                   <p>{t('control.overview.identityNote')}</p>
                   <div className="ccm-login-row">
                     <input value={loginDraft.username} onChange={(event) => setLoginDraft((value) => ({ ...value, username: event.target.value }))} />
-                    <select value={loginDraft.tier} onChange={(event) => setLoginDraft((value) => ({ ...value, tier: event.target.value as UserTier }))}>
-                      <option value="host-admin">host-admin</option>
-                      <option value="admin">admin</option>
-                      <option value="vip">vip</option>
-                      <option value="user">user</option>
-                    </select>
+                    <span className="ccm-login-rule">{t('control.overview.tierRule')}</span>
                   </div>
                   <div className="ccm-actions">
                     <button className="btn btn-primary" onClick={() => login(false)} disabled={busy}>{t('control.action.mockLogin')}</button>
@@ -440,6 +450,57 @@ export function ControlCenterModal({
                     <button className="btn btn-secondary" onClick={onOpenPersonalSettings}>{t('control.action.modelSettings')}</button>
                     <button className="btn btn-secondary" onClick={onOpenProviderSettings}>{t('control.action.connectionSettings')}</button>
                     <button className="btn btn-secondary" onClick={onOpenWorkCenter}>{t('works.title')}</button>
+                  </div>
+                </section>
+              </div>
+            )}
+
+            {tab === 'readiness' && (
+              <div className="ccm-grid">
+                <section className="ccm-card hero readiness">
+                  <div className="ccm-readiness-score">
+                    <strong>{readiness?.overall.score ?? '-'}</strong>
+                    <span>{t('control.readiness.score')}</span>
+                  </div>
+                  <div>
+                    <h3>{t('control.readiness.title')}</h3>
+                    <p>{t('control.readiness.note')}</p>
+                    <div className="ccm-readiness-pills">
+                      <span>{t('control.readiness.production')}: {maturityTotals.production}</span>
+                      <span>{t('control.readiness.localMock')}: {maturityTotals['local-mock']}</span>
+                      <span>{t('control.readiness.contractOnly')}: {maturityTotals['contract-only']}</span>
+                      <span>{t('control.readiness.missing')}: {maturityTotals.missing}</span>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="ccm-card wide">
+                  <h3>{t('control.readiness.blockers')}</h3>
+                  <div className="ccm-readiness-list compact">
+                    {(readiness?.blockers || []).map((item) => <span key={item}>{item}</span>)}
+                  </div>
+                </section>
+
+                <section className="ccm-card wide">
+                  <h3>{t('control.readiness.capabilities')}</h3>
+                  <div className="ccm-capability-list">
+                    {(readiness?.capabilities || []).map((capability) => (
+                      <article key={capability.id} className={`ccm-capability ${capability.maturity}`}>
+                        <div>
+                          <strong>{capability.title}</strong>
+                          <span>{capability.domain} · {capability.maturity}</span>
+                        </div>
+                        <p>{capability.summary}</p>
+                        <small>{capability.nextStep}</small>
+                      </article>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="ccm-card wide">
+                  <h3>{t('control.readiness.recommendations')}</h3>
+                  <div className="ccm-readiness-list">
+                    {(readiness?.recommendations || []).map((item) => <span key={item}>{item}</span>)}
                   </div>
                 </section>
               </div>

@@ -302,6 +302,19 @@ function normalizeTier(value) {
   return ['host-admin', 'admin', 'vip', 'user', 'guest'].includes(value) ? value : 'user'
 }
 
+function resolveLocalLoginTier(data, userId) {
+  const existing = data.users.find((user) => user.id === userId)
+  if (existing) return existing.tier
+  if (userId === 'local-admin') return 'host-admin'
+  return 'user'
+}
+
+function resolveLocalRegisterTier(data, userId) {
+  const existing = data.users.find((user) => user.id === userId)
+  if (existing) return existing.tier
+  return userId === 'local-admin' ? 'host-admin' : 'user'
+}
+
 function permissionsForTier(tier) {
   if (tier === 'host-admin') return ['manage-site', 'manage-users', 'manage-models', 'manage-gallery', 'use-server-execution', 'publish-gallery', 'manage-own-works']
   if (tier === 'admin') return ['manage-users', 'manage-models', 'manage-gallery', 'use-server-execution', 'publish-gallery', 'manage-own-works']
@@ -624,6 +637,132 @@ function dispatchSnapshot(data) {
   }
 }
 
+function capabilityStatus(input) {
+  return input
+}
+
+function maturityScore(maturity) {
+  if (maturity === 'production') return 1
+  if (maturity === 'local-mock') return 0.55
+  if (maturity === 'contract-only') return 0.25
+  return 0
+}
+
+function platformReadinessSnapshot(data) {
+  const capabilities = [
+    capabilityStatus({
+      id: 'auth-newapi-bridge',
+      domain: 'auth',
+      title: 'newapi account bridge',
+      maturity: 'local-mock',
+      summary: 'Five-tier identities exist locally, but production login, email, wallet, and role source still need the newapi bridge.',
+      implemented: ['host-admin/admin/vip/user/guest contracts', '8h local session expiry', 'guest browser-local session', 'IP and user-agent audit payloads'],
+      gaps: ['real newapi registration/login/email', 'signed session token or cookie', 'QQ avatar sync', 'wallet and payment security zone'],
+      nextStep: 'Attach a NewApiBridge adapter and remove all local/mock role assignment from production mode.',
+    }),
+    capabilityStatus({
+      id: 'security-guardrails',
+      domain: 'security',
+      title: 'security and secret guardrails',
+      maturity: 'local-mock',
+      summary: 'Traffic guard, blocked IPs, and secret masking exist; encrypted provider-key custody is not production-ready yet.',
+      implemented: ['basic rate-limit policies', 'manual IP block/unblock', 'admin-only user guardrail view', 'share/export disclaimer comments'],
+      gaps: ['encrypted provider key vault', 'HTML safety review model', 'injection/leak audit pass', 'tier downgrade and emergency lock UI'],
+      nextStep: 'Introduce a server-side key vault interface before allowing I-IV server-managed provider secrets.',
+    }),
+    capabilityStatus({
+      id: 'model-governance',
+      domain: 'models',
+      title: 'model and provider governance',
+      maturity: data.providerChannels.some((channel) => channel.models.length > 0) ? 'local-mock' : 'contract-only',
+      summary: 'Provider channels are modeled, searchable, and editable, but latest model capability data is not yet verified automatically.',
+      implemented: ['Compatible OpenAI first', 'ChatGPT/Kimi/provider channel entries', 'manual model capability badges', 'batch capability editing'],
+      gaps: ['official/latest model registry', 'Asterbot-style capability detection', 'capability confidence refresh schedule', 'site-level model pool'],
+      nextStep: 'Create a ModelRegistry service that combines official-doc verification, live /models fetches, and manual overrides.',
+    }),
+    capabilityStatus({
+      id: 'workflow-server-managed',
+      domain: 'workflows',
+      title: 'server-managed workflow execution',
+      maturity: 'contract-only',
+      summary: 'Workflow records and hosting policy exist, but model execution still runs from the browser path for most generation flows.',
+      implemented: ['generate/refine/plan workflow run records', '24h retention metadata', 'hosting policy calculation', 'video/web-copy high-resource gate'],
+      gaps: ['server-side model execution worker', 'background queue and recovery', 'quota deduction per model', 'context compression worker'],
+      nextStep: 'Move Generate/Refine/Plan through a WorkflowService that can execute or delegate model calls server-side.',
+    }),
+    capabilityStatus({
+      id: 'works-gallery-share',
+      domain: 'works',
+      title: 'works, sharing, and gallery',
+      maturity: 'local-mock',
+      summary: 'Works can be saved, imported, shared, and submitted to the gallery; review and safety are still local/mock.',
+      implemented: ['works CRUD and 10-work limit', 'HTML import/export', 'share links and /share/:slug', 'Xiaohongshu-style /gallery feed shell'],
+      gaps: ['safety review model before publishing', 'admin gallery review workflow', 'flow-map export', '24h task resume UI'],
+      nextStep: 'Add a GalleryReviewService and make public publishing depend on safety-review state.',
+    }),
+    capabilityStatus({
+      id: 'notice-system',
+      domain: 'notices',
+      title: 'announcement, realtime notice, and warning system',
+      maturity: 'local-mock',
+      summary: 'Notice storage and forced warning overlays exist, but permissions and rich-content sanitization need hardening.',
+      implemented: ['announcement/realtime/warning types', 'force and dismissible flags', 'main app overlay', 'admin creation UI'],
+      gaps: ['markdown/image sanitization', 'per-user warning targets', 'subapi-style location/device enrichment'],
+      nextStep: 'Add a NoticePolicy service with sanitized markdown rendering and targeted warning delivery.',
+    }),
+    capabilityStatus({
+      id: 'ops-dispatch',
+      domain: 'ops',
+      title: 'ops, cleanup, and dispatch',
+      maturity: 'contract-only',
+      summary: 'Local ops counts and planned-only dispatch are visible; real resource telemetry and distributed queueing are not active.',
+      implemented: ['ops snapshot', 'cleanup endpoint', 'planned weighted dispatch preview', 'high-load fallback metadata'],
+      gaps: ['CPU/memory/disk/bandwidth telemetry', 'email alerts', 'restart automation', 'multi-node job execution'],
+      nextStep: 'Attach a HostMetrics adapter and keep dispatch planned-only until a queue backend exists.',
+    }),
+    capabilityStatus({
+      id: 'update-migration',
+      domain: 'migration',
+      title: 'update and migration',
+      maturity: 'missing',
+      summary: 'Settings fields describe update and migration intent, but no executable migration or GitHub update flow exists yet.',
+      implemented: ['GitHub repo setting', 'migration policy fields'],
+      gaps: ['GitHub release check', 'low-traffic update scheduling', 'data export/import manifest', 'encrypted migration verification'],
+      nextStep: 'Implement read-only GitHub release checking first, then add export/import manifests for local-json data.',
+    }),
+  ]
+  const completed = capabilities.filter((item) => item.maturity === 'production').length
+  const missing = capabilities.filter((item) => item.maturity === 'missing').length
+  const partial = capabilities.length - completed - missing
+  const score = Math.round((capabilities.reduce((sum, item) => sum + maturityScore(item.maturity), 0) / capabilities.length) * 100)
+  return {
+    ok: true,
+    generatedAt: new Date().toISOString(),
+    branchGoal: 'canvas-2-public-server',
+    mode: 'local-json-public-server',
+    productName: 'inscanvas',
+    overall: { productionReady: false, completed, partial, missing, score },
+    principles: {
+      canvasFirst: true,
+      defaultLocale: 'zh-CN',
+      promptLanguage: 'en',
+      compatibleRuntimeNames: ['vcanvas_* localStorage', 'VCANVAS_* env', '/_vcanvas_proxy', '/opt/vcanvas', 'vcanvas.service'],
+    },
+    capabilities,
+    blockers: [
+      'Production auth must come from newapi/subapi bridge, not local/mock self-reported tiers.',
+      'Server-managed generation needs a real WorkflowService worker before I-IV background execution can be claimed.',
+      'Provider API keys require encrypted server-side custody before non-guest production use.',
+      'Local JSON storage is acceptable for zero-config development, not for 250-online public operation.',
+    ],
+    recommendations: [
+      'Keep all platform controls in the secondary Control Center so the drawing surface stays first.',
+      'Attach newapi, queue, and database adapters behind service interfaces.',
+      'Route models through a registry with verification metadata instead of hardcoding unverified latest models.',
+    ],
+  }
+}
+
 function cleanupData(data) {
   const now = Date.now()
   const before = {
@@ -849,8 +988,8 @@ async function handleApi(req, res, url) {
   if ((url.pathname === '/api/session/login' || url.pathname === '/api/session/guest') && method === 'POST') {
     const body = await readJsonBody(req)
     const isGuest = url.pathname.endsWith('/guest')
-    const tier = isGuest ? 'guest' : normalizeTier(body.tier)
     const userId = isGuest ? 'guest-local' : (body.userId || body.username || 'mock-user')
+    const tier = isGuest ? 'guest' : resolveLocalLoginTier(data, userId)
     const session = makeSession({
       userId,
       tier,
@@ -869,6 +1008,7 @@ async function handleApi(req, res, url) {
       user: { id: session.userId, tier: session.tier, displayName: user?.profile?.displayName || 'Guest', permissions: permissionsForTier(session.tier) },
       session,
       quota: data.quotaLedgers.find((ledger) => ledger.userId === session.userId) || null,
+      note: isGuest ? undefined : 'Local/mock inscanvas login ignores client-supplied tier; real roles must come from the newapi/subapi bridge.',
     })
     return true
   }
@@ -879,8 +1019,8 @@ async function handleApi(req, res, url) {
       return true
     }
     const body = await readJsonBody(req)
-    const tier = normalizeTier(body.tier || 'user')
     const userId = body.userId || body.username || `user-${Date.now()}`
+    const tier = resolveLocalRegisterTier(data, userId)
     const session = makeSession({ userId, tier, executionMode: tier === 'guest' ? 'browser-local' : 'server-managed', req })
     const user = upsertUser(data, { id: userId, username: body.username || userId, email: body.email || null, tier, displayName: body.displayName || 'inscanvas user', ip: clientIp(req) })
     data.sessions = [...data.sessions.filter((item) => item.userId !== session.userId), session]
@@ -893,7 +1033,7 @@ async function handleApi(req, res, url) {
       user: { id: userId, tier, displayName: user.profile.displayName, permissions: permissionsForTier(tier) },
       session,
       quota: data.quotaLedgers.find((ledger) => ledger.userId === userId) || null,
-      note: 'Local/mock inscanvas registration is active until the newapi bridge is attached.',
+      note: 'Local/mock inscanvas registration creates user-tier accounts unless an existing user already has a managed tier.',
     })
     return true
   }
@@ -1447,6 +1587,11 @@ async function handleApi(req, res, url) {
 
   if (url.pathname === '/api/ops/status' && method === 'GET') {
     sendJson(res, 200, { ok: true, snapshot: opsSnapshot(data) })
+    return true
+  }
+
+  if (url.pathname === '/api/platform/readiness' && method === 'GET') {
+    sendJson(res, 200, platformReadinessSnapshot(data))
     return true
   }
 

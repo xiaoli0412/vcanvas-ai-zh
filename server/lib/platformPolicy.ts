@@ -47,6 +47,19 @@ export function normalizeTier(value?: string): UserTier {
   return 'user'
 }
 
+export function resolveLocalLoginTier(data: PublicServerData, userId: string): UserTier {
+  const existing = data.users.find((user) => user.id === userId)
+  if (existing) return existing.tier
+  if (userId === 'local-admin') return 'host-admin'
+  return 'user'
+}
+
+export function resolveLocalRegisterTier(data: PublicServerData, userId: string): UserTier {
+  const existing = data.users.find((user) => user.id === userId)
+  if (existing) return existing.tier
+  return userId === 'local-admin' ? 'host-admin' : 'user'
+}
+
 export function makeSession(input: {
   userId: string
   tier: UserTier

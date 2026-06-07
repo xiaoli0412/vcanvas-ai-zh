@@ -385,6 +385,53 @@ export interface DispatchSnapshot {
   fallbackReason?: string | null
 }
 
+export type PlatformCapabilityDomain =
+  | 'auth'
+  | 'security'
+  | 'models'
+  | 'workflows'
+  | 'works'
+  | 'notices'
+  | 'ops'
+  | 'migration'
+
+export type PlatformCapabilityMaturity = 'production' | 'local-mock' | 'contract-only' | 'missing'
+
+export interface PlatformCapabilityStatus {
+  id: string
+  domain: PlatformCapabilityDomain
+  title: string
+  maturity: PlatformCapabilityMaturity
+  summary: string
+  implemented: string[]
+  gaps: string[]
+  nextStep: string
+}
+
+export interface PlatformReadinessSnapshot {
+  ok: boolean
+  generatedAt: string
+  branchGoal: 'canvas-2-public-server'
+  mode: 'local-json-public-server'
+  productName: 'inscanvas'
+  overall: {
+    productionReady: boolean
+    completed: number
+    partial: number
+    missing: number
+    score: number
+  }
+  principles: {
+    canvasFirst: boolean
+    defaultLocale: 'zh-CN'
+    promptLanguage: 'en'
+    compatibleRuntimeNames: string[]
+  }
+  capabilities: PlatformCapabilityStatus[]
+  blockers: string[]
+  recommendations: string[]
+}
+
 export interface OpsSnapshot {
   takenAt: string
   counts: {

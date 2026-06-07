@@ -20,6 +20,8 @@
 - `1.10.11` now embeds local OFL display fonts: Noto Serif SC for premium Songti-style titles and Fusion Pixel 10px Monospaced SC for short playful title/brand accents; no external font CDN is required.
 - `/gallery` is being simplified into a lighter Xiaohongshu-style masonry feed with optional snapshot covers, compact metadata, shorter notices, and matching Fastify/lightweight server templates.
 - `/api/dispatch/status` and `/api/dispatch/route` now expose a planned-only distributed dispatch opening with weighted candidate selection and explicit fallback reasons.
+- `1.11.3` adds a first-class platform readiness boundary: `/api/platform/readiness` reports production/local-mock/contract-only/missing maturity, and Control Center opens to that map by default so incomplete public-server pieces are visible instead of hidden behind optimistic UI.
+- Local/mock login and registration no longer trust browser-submitted user tiers; roles now come from an existing local user record, the reserved `local-admin` bootstrap account, or the future `newapi/subapi` bridge.
 - Frontend, server typecheck, build, service smoke tests, and desktop/mobile browser screenshots passed on 2026-06-06.
 
 ## Completion Matrix
@@ -33,6 +35,8 @@
 - `done` Control Center v1 exposes mock login, local/mock register, guest session, session-left, login IP/UA/time, profile fields, sign-in, and redeem entry
 - `done` admin-only user management UI and `/api/users` local/mock route with tier/enabled edits and IP/activity summaries
 - `done` user-management search and IP block/unblock controls in Control Center
+- `done` local/mock login/register hardening: client-supplied `tier` is ignored for new sessions; arbitrary users cannot self-promote to admin through `/api/session/login`
+- `in_progress` platform readiness endpoint exposes the real auth gap and keeps the future `newapi/subapi` role source explicit
 - `todo` QQ avatar sync
 - `todo` wallet/payment area split with stronger protection
 
@@ -44,12 +48,14 @@
 - `in_progress` export/share comment injection with IP/time metadata
 - `in_progress` admin-only site/security controls are visible in Control Center; production key encryption and security review model remain deferred
 - `done` app-level forced warning overlay consumes persisted `warning/realtime/force` notices and supports dismissible vs session acknowledgement behavior
+- `done` Control Center readiness map names the key-vault/security-review gaps instead of implying provider-key custody is production-safe
 
 ### 3. Performance
 - `todo` multi-user concurrency path and async work distribution
 - `in_progress` cleanup endpoint for expired workflows, sessions, rate-limit events, and blocked IPs
 - `in_progress` dynamic server/client execution fallback metadata
 - `in_progress` planned-only distributed dispatch contract through `/api/dispatch/status` and `/api/dispatch/route`
+- `in_progress` platform readiness endpoint marks dispatch as `contract-only` until CPU/memory/disk/bandwidth telemetry and a queue backend exist
 - `done` server-hosted high-resource toggle for video/web copy in personal settings and workflow policy
 - `done` Control Center v1 surfaces ops status and manual cleanup as secondary controls
 
@@ -82,6 +88,7 @@
 - `in_progress` site settings IA
 - `in_progress` personal settings IA
 - `done` Control Center v1 gives users one secondary entry for personal center, site settings, notices, gallery, quotas, and ops
+- `done` Control Center now defaults to a maturity/readiness tab that separates production, local/mock, contract-only, and missing capabilities
 - `in_progress` notice / warning / announcement systems with persisted `force`, `dismissible`, markdown/image metadata, and admin creation UI
 - `done` forced warning notices now surface in the main app rather than only inside Control Center
 - `in_progress` site settings now include site profile, share policy, notice policy, security mode, update policy, migration policy, and ops public switch
@@ -114,6 +121,7 @@
 - `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve `/api/users` with admin-only local/mock user management and masked provider-key summaries
 - `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve `/api/security/blocked-ips` with admin-only list/block/unblock parity
 - `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve public HTML routes `/share/:slug` and `/gallery`
+- `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve `/api/platform/readiness` with the same public-server maturity report
 - `done` local JSON persistence adapter for site settings, personal settings, notices, providers, works, workflow runs, sessions, users, quotas, shares, gallery entries, rate-limit events, blocked IPs, and audit events
 - `in_progress` 24h workflow run retention with compressed context payloads
 - `todo` bridge `newapi`, `subapi`, `octopus`
