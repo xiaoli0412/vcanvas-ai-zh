@@ -28,6 +28,7 @@ export function makePlatformReadinessSnapshot(data: PublicServerData): PlatformR
         'host-admin/admin/vip/user/guest contracts',
         '8h local session expiry',
         'guest browser-local session',
+        'explicit session header contract without ambient latest-session fallback',
         'IP and user-agent audit payloads',
       ],
       gaps: [
@@ -86,9 +87,11 @@ export function makePlatformReadinessSnapshot(data: PublicServerData): PlatformR
       summary: 'Workflow records and hosting policy exist, but model execution still runs from the browser path for most generation flows.',
       implemented: [
         'generate/refine/plan workflow run records',
+        'WorkflowService boundary for retention, hosting policy, context compression, and execution plan',
         '24h retention metadata',
         'hosting policy calculation',
         'video/web-copy high-resource gate',
+        'metadata-only asset import route for image/video/html intake audits',
       ],
       gaps: [
         'server-side model execution worker',

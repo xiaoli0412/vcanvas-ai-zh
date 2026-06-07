@@ -29,7 +29,7 @@ const contentTypes = {
 function writeCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-vcanvas-session-id, x-vcanvas-user-id')
 }
 
 function sendJson(res, statusCode, payload) {
@@ -326,6 +326,18 @@ function canManageUsers(tier) {
   return permissionsForTier(tier).includes('manage-users')
 }
 
+function resolveOwnedTargetId(actor, requestedOwnerId) {
+  const ownerId = typeof requestedOwnerId === 'string' ? requestedOwnerId.trim() : ''
+  if (ownerId && canManageUsers(actor.tier)) {
+    return { ownerId, requestedOwnerId: ownerId, ownerOverrideAccepted: true }
+  }
+  return {
+    ownerId: actor.id,
+    requestedOwnerId: ownerId || null,
+    ownerOverrideAccepted: false,
+  }
+}
+
 function canManageSecurity(tier) {
   const permissions = permissionsForTier(tier)
   return permissions.includes('manage-users') || permissions.includes('manage-site')
@@ -368,10 +380,8 @@ function getActor(data, req) {
   const sessions = (data.sessions || [])
     .filter((item) => Date.parse(item.expiresAt) > now)
     .sort((a, b) => Date.parse(b.lastActiveAt) - Date.parse(a.lastActiveAt))
-  const session = sessions.find((item) => item.id === sessionId)
-    || sessions.find((item) => userId && item.userId === userId)
-    || sessions[0]
-    || null
+  const session = sessionId ? (sessions.find((item) => item.id === sessionId) || null) : null
+  if (session && userId && session.userId !== userId) return { id: 'guest-local', tier: 'guest', displayName: 'Guest', session: null }
   if (!session) return { id: 'guest-local', tier: 'guest', displayName: 'Guest', session: null }
   const user = (data.users || []).find((item) => item.id === session.userId)
   return { id: session.userId, tier: session.tier, displayName: user?.profile?.displayName || 'inscanvas user', session }
@@ -656,7 +666,7 @@ function platformReadinessSnapshot(data) {
       title: 'newapi account bridge',
       maturity: 'local-mock',
       summary: 'Five-tier identities exist locally, but production login, email, wallet, and role source still need the newapi bridge.',
-      implemented: ['host-admin/admin/vip/user/guest contracts', '8h local session expiry', 'guest browser-local session', 'IP and user-agent audit payloads'],
+      implemented: ['host-admin/admin/vip/user/guest contracts', '8h local session expiry', 'guest browser-local session', 'explicit session header contract without ambient latest-session fallback', 'IP and user-agent audit payloads'],
       gaps: ['real newapi registration/login/email', 'signed session token or cookie', 'QQ avatar sync', 'wallet and payment security zone'],
       nextStep: 'Attach a NewApiBridge adapter and remove all local/mock role assignment from production mode.',
     }),
@@ -686,7 +696,7 @@ function platformReadinessSnapshot(data) {
       title: 'server-managed workflow execution',
       maturity: 'contract-only',
       summary: 'Workflow records and hosting policy exist, but model execution still runs from the browser path for most generation flows.',
-      implemented: ['generate/refine/plan workflow run records', '24h retention metadata', 'hosting policy calculation', 'video/web-copy high-resource gate'],
+      implemented: ['generate/refine/plan workflow run records', 'WorkflowService boundary for retention, hosting policy, context compression, and execution plan', '24h retention metadata', 'hosting policy calculation', 'video/web-copy high-resource gate', 'metadata-only asset import route for image/video/html intake audits'],
       gaps: ['server-side model execution worker', 'background queue and recovery', 'quota deduction per model', 'context compression worker'],
       nextStep: 'Move Generate/Refine/Plan through a WorkflowService that can execute or delegate model calls server-side.',
     }),
@@ -807,6 +817,187 @@ function opsSnapshot(data) {
     highLoadMode: data.siteSettings.securityMode === 'limited',
     dispatch: dispatchSnapshot(data),
   }
+}
+
+function compressTextWithFlag(value, maxLength) {
+  if (typeof value !== 'string') return { value, applied: false }
+  if (value.length <= maxLength) return { value, applied: false }
+  return {
+    value: `${value.slice(0, maxLength)}\n...[compressed by inscanvas context v1]`,
+    applied: true,
+  }
+}
+
+function compressWorkflowContext(context) {
+  if (!context) return { context, applied: false }
+  let applied = false
+  const currentOutputHtml = compressTextWithFlag(context.currentOutputHtml, 12000)
+  const previousHtml = compressTextWithFlag(context.previousTurn?.html, 12000)
+  const websiteHtml = compressTextWithFlag(context.websiteReference?.html, 16000)
+  const rebasedHtml = compressTextWithFlag(context.websiteReference?.rebasedHtml, 16000)
+  const stylesheetSnippets = context.websiteReference?.stylesheetSnippets?.map((snippet) => {
+    const compressed = compressTextWithFlag(snippet, 4000)
+    applied = applied || compressed.applied
+    return compressed.value
+  })
+  applied = applied || currentOutputHtml.applied || previousHtml.applied || websiteHtml.applied || rebasedHtml.applied
+  return {
+    context: {
+      ...context,
+      currentOutputHtml: currentOutputHtml.value,
+      previousTurn: context.previousTurn ? { ...context.previousTurn, html: previousHtml.value } : context.previousTurn,
+      websiteReference: context.websiteReference ? {
+        ...context.websiteReference,
+        html: websiteHtml.value,
+        rebasedHtml: rebasedHtml.value,
+        stylesheetSnippets: stylesheetSnippets || [],
+      } : context.websiteReference,
+    },
+    applied,
+  }
+}
+
+function defaultWorkflowContext(body, modeId) {
+  return {
+    modeId,
+    prompt: body.prompt || '',
+    carryPolicy: 'last-turn',
+    currentCanvasLabels: [],
+    includePreviousPrompt: true,
+    includePreviousOutput: true,
+    includePreviousScreenshot: false,
+  }
+}
+
+function isHeavyMode(modeId) {
+  return modeId === 'video' || modeId === 'web-copy'
+}
+
+function hostingPolicyFor(data, actor, ownerId, modeId) {
+  const ledger = ensureQuotaLedger(data, ownerId, actor.tier)
+  const personalEnabled = data.personalSettings.experimental?.serverHighResourceHosting === true
+  const canUseServer = actor.tier !== 'guest' && permissionsForTier(actor.tier).includes('use-server-execution')
+  const heavy = isHeavyMode(modeId)
+  const highLoadMode = data.siteSettings.securityMode === 'limited'
+  if (!canUseServer) {
+    return {
+      ledger,
+      hostingPolicy: {
+        defaultExecutionMode: 'browser-local',
+        resourceHeavyModeDefault: 'browser-local',
+        serverHighResourceHostingEnabled: false,
+        dailyHostedLimit: 0,
+        fallbackReason: 'guest-browser-local',
+      },
+    }
+  }
+  if (heavy && (!personalEnabled || (ledger.hostedRunsRemaining || 0) <= 0)) {
+    return {
+      ledger,
+      hostingPolicy: {
+        defaultExecutionMode: 'server-managed',
+        resourceHeavyModeDefault: 'browser-local',
+        serverHighResourceHostingEnabled: personalEnabled,
+        dailyHostedLimit: ledger.hostedRunsRemaining || 0,
+        fallbackReason: personalEnabled ? 'hosted-quota-exhausted' : 'high-resource-hosting-disabled',
+      },
+    }
+  }
+  return {
+    ledger,
+    hostingPolicy: {
+      defaultExecutionMode: highLoadMode ? 'browser-local' : 'server-managed',
+      resourceHeavyModeDefault: 'server-managed',
+      serverHighResourceHostingEnabled: personalEnabled,
+      dailyHostedLimit: ledger.hostedRunsRemaining || 0,
+      fallbackReason: highLoadMode ? 'server-high-load-degrade-after-current-task' : null,
+    },
+  }
+}
+
+function createWorkflowRun(data, req, route, body) {
+  const actor = getActor(data, req)
+  const ownerResolution = resolveOwnedTargetId(actor, body.ownerId)
+  const ownerId = ownerResolution.ownerId
+  const modeId = body.modeId || body.context?.modeId || 'custom'
+  const { ledger, hostingPolicy } = hostingPolicyFor(data, actor, ownerId, modeId)
+  const executionMode = body.executionMode || (isHeavyMode(modeId) ? hostingPolicy.resourceHeavyModeDefault : hostingPolicy.defaultExecutionMode)
+  const compressed = compressWorkflowContext(body.context)
+  const now = new Date()
+  const run = {
+    id: createId(`workflow-${route}`),
+    ownerId,
+    modeId,
+    executionMode,
+    prompt: body.prompt || body.context?.prompt || '',
+    context: compressed.context || defaultWorkflowContext(body, modeId),
+    status: 'queued',
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+    expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+  }
+  let hostedRunsDebited = 0
+  if (isHeavyMode(modeId) && executionMode === 'server-managed' && typeof ledger.hostedRunsRemaining === 'number') {
+    ledger.hostedRunsRemaining = Math.max(0, ledger.hostedRunsRemaining - 1)
+    hostedRunsDebited = 1
+  }
+  data.workflows = data.workflows.filter((item) => !item.expiresAt || Date.parse(item.expiresAt) > Date.now())
+  data.workflows.push(run)
+  const executionPlan = {
+    action: route,
+    executor: executionMode,
+    plannedOnly: executionMode === 'server-managed',
+    reason: executionMode === 'server-managed'
+      ? 'Workflow is queued in the server-managed contract; real model execution worker is the next adapter.'
+      : 'Workflow metadata is retained while model execution remains browser-local.',
+    contextCompression: {
+      applied: compressed.applied,
+      strategy: compressed.applied ? 'local-summary-v1' : 'none',
+    },
+    quota: {
+      hostedRunsDebited,
+      hostedRunsRemaining: ledger.hostedRunsRemaining,
+    },
+  }
+  return { actor, run, hostingPolicy, executionPlan, ownerResolution }
+}
+
+function normalizeAssetKind(value) {
+  return ['image', 'video', 'html', 'web-embed'].includes(value) ? value : 'other'
+}
+
+function normalizeByteLength(value) {
+  const numeric = Number(value)
+  return Number.isFinite(numeric) && numeric >= 0 ? Math.round(numeric) : null
+}
+
+function createAssetImport(data, req, body) {
+  const actor = getActor(data, req)
+  const kind = normalizeAssetKind(body.kind)
+  const ownerResolution = resolveOwnedTargetId(actor, body.ownerId)
+  const ownerId = ownerResolution.ownerId
+  const modeId = body.modeId || (kind === 'video' ? 'video' : 'custom')
+  const { hostingPolicy } = hostingPolicyFor(data, actor, ownerId, modeId)
+  const heavy = kind === 'video'
+  const executionMode = heavy ? hostingPolicy.resourceHeavyModeDefault : hostingPolicy.defaultExecutionMode
+  const now = new Date().toISOString()
+  const asset = {
+    id: createId('asset'),
+    kind,
+    fileName: body.fileName ? String(body.fileName).slice(0, 180) : null,
+    mimeType: body.mimeType ? String(body.mimeType).slice(0, 120) : null,
+    byteLength: normalizeByteLength(body.byteLength ?? body.size),
+    ownerId,
+    executionMode,
+    storage: 'metadata-only',
+    accepted: true,
+    reason: heavy && executionMode === 'browser-local'
+      ? 'video assets stay client-side unless high-resource hosting and quota allow server-managed handling'
+      : 'asset metadata accepted; binary storage is not enabled in local-json mode',
+    createdAt: now,
+  }
+  withAudit(data, req, 'asset.import', actor.id, actor.tier, { ownerId, ownerResolution, asset })
+  return asset
 }
 
 function isMeteredRoute(method, route) {
@@ -956,26 +1147,25 @@ async function handleApi(req, res, url) {
 
   if (url.pathname === '/api/session/me' && method === 'GET') {
     const now = Date.now()
-    const session = data.sessions
-      .filter((item) => Date.parse(item.expiresAt) > now)
-      .sort((a, b) => Date.parse(b.lastActiveAt) - Date.parse(a.lastActiveAt))[0] || null
+    const actor = getActor(data, req)
+    const session = actor.session
     if (session) {
       session.lastActiveAt = new Date().toISOString()
       session.expiresAt = new Date(now + 8 * 60 * 60 * 1000).toISOString()
       writeData(data)
     }
-    const user = session ? data.users.find((item) => item.id === session.userId) : null
+    const user = session ? data.users.find((item) => item.id === actor.id) : null
     sendJson(res, 200, {
       ok: true,
       executionMode: session?.executionMode || 'browser-local',
       user: {
-        id: session?.userId || 'guest-local',
-        tier: session?.tier || 'guest',
-        displayName: user?.profile?.displayName || 'Guest',
-        permissions: permissionsForTier(session?.tier || 'guest'),
+        id: actor.id,
+        tier: actor.tier,
+        displayName: user?.profile?.displayName || actor.displayName,
+        permissions: permissionsForTier(actor.tier),
       },
       session,
-      quota: data.quotaLedgers.find((ledger) => ledger.userId === (session?.userId || 'guest-local')) || null,
+      quota: data.quotaLedgers.find((ledger) => ledger.userId === actor.id) || null,
       loginNotice: {
         ip: clientIp(req),
         time: new Date().toISOString(),
@@ -1021,7 +1211,13 @@ async function handleApi(req, res, url) {
     const body = await readJsonBody(req)
     const userId = body.userId || body.username || `user-${Date.now()}`
     const tier = resolveLocalRegisterTier(data, userId)
-    const session = makeSession({ userId, tier, executionMode: tier === 'guest' ? 'browser-local' : 'server-managed', req })
+    const session = makeSession({
+      userId,
+      tier,
+      executionMode: tier === 'guest' ? 'browser-local' : 'server-managed',
+      ip: clientIp(req),
+      userAgent: req.headers['user-agent'] || null,
+    })
     const user = upsertUser(data, { id: userId, username: body.username || userId, email: body.email || null, tier, displayName: body.displayName || 'inscanvas user', ip: clientIp(req) })
     data.sessions = [...data.sessions.filter((item) => item.userId !== session.userId), session]
     data.signInRecords.push({ id: createId('signin'), userId, tier, ip: clientIp(req), userAgent: req.headers['user-agent'] || '', createdAt: new Date().toISOString() })
@@ -1040,10 +1236,46 @@ async function handleApi(req, res, url) {
 
   if (url.pathname === '/api/session/logout' && method === 'POST') {
     const body = await readJsonBody(req)
-    data.sessions = body.userId ? data.sessions.filter((item) => item.userId !== body.userId) : []
-    withAudit(data, req, 'session.logout', body.userId || null, 'guest')
+    const actor = getActor(data, req)
+    const canManageSessions = canManageUsers(actor.tier)
+    const targetSessionId = typeof body.sessionId === 'string' ? body.sessionId.trim() : ''
+    const targetUserId = typeof body.userId === 'string' ? body.userId.trim() : ''
+    let ok = true
+    let removed = 0
+    let reason = 'no active session to logout'
+
+    if ((targetSessionId || targetUserId) && !actor.session) {
+      reason = 'no active session to logout'
+    } else if (targetSessionId) {
+      if (canManageSessions || actor.session?.id === targetSessionId) {
+        const before = data.sessions.length
+        data.sessions = data.sessions.filter((session) => session.id !== targetSessionId)
+        removed = before - data.sessions.length
+        reason = removed > 0 ? 'session logged out' : 'session not found'
+      } else {
+        ok = false
+        reason = 'Cannot logout another user session without admin permission.'
+      }
+    } else if (targetUserId) {
+      if (canManageSessions || actor.session?.userId === targetUserId) {
+        const before = data.sessions.length
+        data.sessions = data.sessions.filter((session) => session.userId !== targetUserId)
+        removed = before - data.sessions.length
+        reason = 'user sessions logged out'
+      } else {
+        ok = false
+        reason = 'Cannot logout another user without admin permission.'
+      }
+    } else if (actor.session) {
+      data.sessions = data.sessions.filter((session) => session.id !== actor.session.id)
+      removed = 1
+      reason = 'current session logged out'
+    }
+
+    data.sessions = data.sessions.filter((session) => Date.parse(session.expiresAt) > Date.now())
+    withAudit(data, req, 'session.logout', actor.id, actor.tier, { targetUserId: targetUserId || null, targetSessionId: targetSessionId || null, removed, ok, reason })
     writeData(data)
-    sendJson(res, 200, { ok: true })
+    sendJson(res, ok ? 200 : 403, ok ? { ok: true, removed, note: reason } : { ok: false, removed, error: reason })
     return true
   }
 
@@ -1497,39 +1729,22 @@ async function handleApi(req, res, url) {
     return true
   }
 
+  if (url.pathname === '/api/assets/import' && method === 'POST') {
+    const body = await readJsonBody(req)
+    const asset = createAssetImport(data, req, body)
+    writeData(data)
+    sendJson(res, 200, { ok: true, route: 'assets/import', asset, phase: 'metadata-only-v1' })
+    return true
+  }
+
   const workflowMatch = url.pathname.match(/^\/api\/workflows\/(generate|refine|plan)$/)
   if (workflowMatch && method === 'POST') {
     const route = workflowMatch[1]
     const body = await readJsonBody(req)
-    const now = new Date()
-    const actor = getActor(data, req)
-    const ownerId = body.ownerId || actor.id
-    const modeId = body.modeId || body.context?.modeId || 'custom'
-    const heavy = modeId === 'video' || modeId === 'web-copy'
-    const ledger = ensureQuotaLedger(data, ownerId, actor.tier)
-    const heavyHosted = data.personalSettings.experimental?.serverHighResourceHosting === true && (ledger.hostedRunsRemaining || 0) > 0
-    const executionMode = body.executionMode || (actor.tier === 'guest' ? 'browser-local' : (heavy && !heavyHosted ? 'browser-local' : (data.siteSettings.securityMode === 'limited' ? 'browser-local' : 'server-managed')))
-    if (heavy && executionMode === 'server-managed' && typeof ledger.hostedRunsRemaining === 'number') {
-      ledger.hostedRunsRemaining = Math.max(0, ledger.hostedRunsRemaining - 1)
-    }
-    const run = {
-      id: createId(`workflow-${route}`),
-      ownerId,
-      modeId,
-      executionMode,
-      prompt: body.prompt || body.context?.prompt || '',
-      context: body.context || { modeId: body.modeId || 'custom', prompt: body.prompt || '', carryPolicy: 'last-turn', currentCanvasLabels: [], includePreviousPrompt: true, includePreviousOutput: true, includePreviousScreenshot: false },
-      status: 'queued',
-      createdAt: now.toISOString(),
-      updatedAt: now.toISOString(),
-      expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(),
-    }
-    data.workflows = data.workflows.filter((item) => !item.expiresAt || Date.parse(item.expiresAt) > Date.now())
-    data.workflows.push(run)
-    const hostingPolicy = { defaultExecutionMode: executionMode, resourceHeavyModeDefault: heavy ? executionMode : 'server-managed', serverHighResourceHostingEnabled: data.personalSettings.experimental?.serverHighResourceHosting === true, dailyHostedLimit: ledger.hostedRunsRemaining || 0, fallbackReason: executionMode === 'browser-local' && heavy ? 'high-resource-hosting-disabled-or-quota-exhausted' : null }
-    withAudit(data, req, `workflow.${route}`, ownerId, actor.tier, { workflowRunId: run.id, hostingPolicy })
+    const { actor, run, hostingPolicy, executionPlan, ownerResolution } = createWorkflowRun(data, req, route, body)
+    withAudit(data, req, `workflow.${route}`, actor.id, actor.tier, { ownerId: run.ownerId, ownerResolution, workflowRunId: run.id, hostingPolicy, executionPlan })
     writeData(data)
-    sendJson(res, 200, { ok: true, route, run, hostingPolicy })
+    sendJson(res, 200, { ok: true, route, run, hostingPolicy, executionPlan })
     return true
   }
 

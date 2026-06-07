@@ -15,6 +15,7 @@ import type {
   WorkRecord,
 } from '../../shared/contracts/publicServer'
 import type { Translate } from '../lib/i18n'
+import { clearPublicSession, mergeSessionHeaders, savePublicSession } from '../lib/sessionClient'
 import './ControlCenterModal.css'
 
 type ControlTab = 'readiness' | 'overview' | 'personal' | 'users' | 'site' | 'notices' | 'gallery' | 'ops'
@@ -175,18 +176,18 @@ export function ControlCenterModal({
   const load = async () => {
     setError(null)
     const [sessionPayload, settingsPayload, noticePayload, providerPayload, quotaPayload, redeemPayload, opsPayload, galleryPayload, readinessPayload] = await Promise.all([
-      fetch('/api/session/me').then((response) => readJson<{
+      fetch('/api/session/me', { headers: mergeSessionHeaders() }).then((response) => readJson<{
         user: SessionUser
         session: AuthSession | null
         quota: QuotaLedger | null
         loginNotice: { ip?: string | null; time?: string; userAgent?: string | null }
       }>(response)),
-      fetch('/api/settings/site').then((response) => readJson<{ settings: SiteSettings & Record<string, any> }>(response)),
-      fetch('/api/notices').then((response) => readJson<{ notices: NoticeMessage[] }>(response)),
-      fetch('/api/providers').then((response) => readJson<{ channels: ProviderChannel[] }>(response)),
-      fetch('/api/quotas/sign-in').then((response) => readJson<{ ledger: QuotaLedger | null }>(response)),
-      fetch('/api/quotas/redeem').then((response) => readJson<{ ledger: QuotaLedger | null }>(response)),
-      fetch('/api/ops/status').then((response) => readJson<{ snapshot: OpsSnapshot }>(response)),
+      fetch('/api/settings/site', { headers: mergeSessionHeaders() }).then((response) => readJson<{ settings: SiteSettings & Record<string, any> }>(response)),
+      fetch('/api/notices', { headers: mergeSessionHeaders() }).then((response) => readJson<{ notices: NoticeMessage[] }>(response)),
+      fetch('/api/providers', { headers: mergeSessionHeaders() }).then((response) => readJson<{ channels: ProviderChannel[] }>(response)),
+      fetch('/api/quotas/sign-in', { headers: mergeSessionHeaders() }).then((response) => readJson<{ ledger: QuotaLedger | null }>(response)),
+      fetch('/api/quotas/redeem', { headers: mergeSessionHeaders() }).then((response) => readJson<{ ledger: QuotaLedger | null }>(response)),
+      fetch('/api/ops/status', { headers: mergeSessionHeaders() }).then((response) => readJson<{ snapshot: OpsSnapshot }>(response)),
       fetch('/api/gallery').then((response) => readJson<{ entries?: GalleryEntryWithWork[]; items?: GalleryEntryWithWork[] }>(response)),
       fetch('/api/platform/readiness').then((response) => readJson<PlatformReadinessSnapshot>(response)),
     ])
@@ -203,8 +204,8 @@ export function ControlCenterModal({
     setReadiness(readinessPayload)
     if (canManageSite(sessionPayload.user)) {
       const [usersPayload, securityPayload] = await Promise.all([
-        fetch('/api/users').then((response) => readJson<{ users: ManagedUser[] }>(response)),
-        fetch('/api/security/blocked-ips').then((response) => readJson<{ blockedIps: BlockedIp[] }>(response)),
+        fetch('/api/users', { headers: mergeSessionHeaders() }).then((response) => readJson<{ users: ManagedUser[] }>(response)),
+        fetch('/api/security/blocked-ips', { headers: mergeSessionHeaders() }).then((response) => readJson<{ blockedIps: BlockedIp[] }>(response)),
       ])
       setManagedUsers(usersPayload.users || [])
       setBlockedIps(securityPayload.blockedIps || [])
@@ -241,31 +242,34 @@ export function ControlCenterModal({
 
   const login = (register = false) => run(async () => {
     const endpoint = register ? '/api/session/register' : '/api/session/login'
-    await fetch(endpoint, {
+    const payload = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: mergeSessionHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         username: loginDraft.username.trim() || 'local-admin',
         userId: loginDraft.username.trim() || 'local-admin',
         displayName: loginDraft.username.trim() || 'inscanvas user',
       }),
-    }).then((response) => readJson(response))
+    }).then((response) => readJson<{ session?: AuthSession | null }>(response))
+    savePublicSession(payload.session)
     return register ? t('control.notice.registeredSafe') : t('control.notice.loggedInSafe')
   })
 
   const guestLogin = () => run(async () => {
-    await fetch('/api/session/guest', {
+    const payload = await fetch('/api/session/guest', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: mergeSessionHeaders({ 'Content-Type': 'application/json' }),
       body: '{}',
-    }).then((response) => readJson(response))
+    }).then((response) => readJson<{ session?: AuthSession | null }>(response))
+    clearPublicSession()
+    savePublicSession(payload.session)
     return t('control.notice.guest')
   })
 
   const saveProfile = () => run(async () => {
     await fetch('/api/settings/personal', {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: mergeSessionHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         displayName: profileDraft.displayName || user?.displayName || 'inscanvas user',
         motto: profileDraft.motto.slice(0, 20),
@@ -278,7 +282,7 @@ export function ControlCenterModal({
   const signIn = () => run(async () => {
     await fetch('/api/quotas/sign-in', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: mergeSessionHeaders({ 'Content-Type': 'application/json' }),
       body: '{}',
     }).then((response) => readJson(response))
     return t('control.notice.signIn')
@@ -287,7 +291,7 @@ export function ControlCenterModal({
   const redeem = () => run(async () => {
     await fetch('/api/quotas/redeem', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: mergeSessionHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ code: redeemCode }),
     }).then((response) => readJson(response))
     setRedeemCode('')
@@ -298,7 +302,7 @@ export function ControlCenterModal({
     if (!siteSettings) return
     await fetch('/api/settings/site', {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: mergeSessionHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(siteSettings),
     }).then((response) => readJson(response))
   })
@@ -306,7 +310,7 @@ export function ControlCenterModal({
   const createNotice = () => run(async () => {
     await fetch('/api/notices', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: mergeSessionHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         kind: noticeDraft.kind,
         title: noticeDraft.title || 'inscanvas notice',
@@ -325,7 +329,7 @@ export function ControlCenterModal({
   const cleanup = () => run(async () => {
     await fetch('/api/maintenance/cleanup', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: mergeSessionHeaders({ 'Content-Type': 'application/json' }),
       body: '{}',
     }).then((response) => readJson(response))
     return t('control.notice.cleanup')
@@ -345,7 +349,7 @@ export function ControlCenterModal({
   const updateManagedUser = (managedUser: ManagedUser, patch: Partial<Pick<ManagedUser, 'tier' | 'enabled'>>) => run(async () => {
     await fetch(`/api/users/${encodeURIComponent(managedUser.id)}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: mergeSessionHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         tier: patch.tier ?? managedUser.tier,
         enabled: patch.enabled ?? managedUser.enabled,
@@ -357,7 +361,7 @@ export function ControlCenterModal({
     if (!managedUser.lastLoginIp) return
     await fetch('/api/security/blocked-ips', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: mergeSessionHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         ip: managedUser.lastLoginIp,
         reason: `Manual block from user guardrail: ${managedUser.username}`,
@@ -367,7 +371,7 @@ export function ControlCenterModal({
   })
 
   const unblockIp = (ip: string) => run(async () => {
-    await fetch(`/api/security/blocked-ips/${encodeURIComponent(ip)}`, { method: 'DELETE' })
+    await fetch(`/api/security/blocked-ips/${encodeURIComponent(ip)}`, { method: 'DELETE', headers: mergeSessionHeaders() })
       .then((response) => readJson(response))
     return t('control.notice.ipUnblocked')
   })

@@ -42,6 +42,22 @@ export function canManageSecrets(tier: UserTier) {
   return tier === 'host-admin' || tier === 'admin'
 }
 
+export function canManageUsers(tier: UserTier) {
+  return getTierPermissions(tier).includes('manage-users')
+}
+
+export function resolveOwnedTargetId(actor: { id: string; tier: UserTier }, requestedOwnerId?: string | null) {
+  const ownerId = requestedOwnerId?.trim()
+  if (ownerId && canManageUsers(actor.tier)) {
+    return { ownerId, requestedOwnerId: ownerId, ownerOverrideAccepted: true }
+  }
+  return {
+    ownerId: actor.id,
+    requestedOwnerId: ownerId || null,
+    ownerOverrideAccepted: false,
+  }
+}
+
 export function normalizeTier(value?: string): UserTier {
   if (value === 'host-admin' || value === 'admin' || value === 'vip' || value === 'user' || value === 'guest') return value
   return 'user'
@@ -88,10 +104,11 @@ export function getSessionFromRequest(data: PublicServerData, request: FastifyRe
     .filter((session) => Date.parse(session.expiresAt) > now)
     .sort((a, b) => Date.parse(b.lastActiveAt) - Date.parse(a.lastActiveAt))
 
-  return activeSessions.find((session) => session.id === sessionId)
-    || activeSessions.find((session) => userId && session.userId === userId)
-    || activeSessions[0]
-    || null
+  if (!sessionId) return null
+  const session = activeSessions.find((item) => item.id === sessionId) || null
+  if (!session) return null
+  if (userId && session.userId !== userId) return null
+  return session
 }
 
 export function getActor(data: PublicServerData, request: FastifyRequest) {

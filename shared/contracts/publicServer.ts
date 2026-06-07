@@ -187,6 +187,49 @@ export interface WorkflowRun {
   expiresAt?: string | null
 }
 
+export type WorkflowAction = 'generate' | 'refine' | 'plan'
+
+export interface WorkflowExecutionPlan {
+  action: WorkflowAction
+  executor: ExecutionMode
+  plannedOnly: boolean
+  reason: string
+  contextCompression: {
+    applied: boolean
+    strategy: 'none' | 'local-summary-v1'
+  }
+  quota: {
+    hostedRunsDebited: number
+    hostedRunsRemaining?: number
+  }
+}
+
+export interface WorkflowServiceResult {
+  run: WorkflowRun
+  hostingPolicy: HostingPolicy
+  executionPlan: WorkflowExecutionPlan
+  ownerResolution: {
+    requestedOwnerId?: string | null
+    ownerOverrideAccepted: boolean
+  }
+}
+
+export type AssetImportKind = 'image' | 'video' | 'html' | 'web-embed' | 'other'
+
+export interface AssetImportResult {
+  id: string
+  kind: AssetImportKind
+  fileName?: string | null
+  mimeType?: string | null
+  byteLength?: number | null
+  ownerId: string
+  executionMode: ExecutionMode
+  storage: 'metadata-only'
+  accepted: boolean
+  reason?: string | null
+  createdAt: string
+}
+
 export interface WorkSnapshot {
   id: string
   workId: string

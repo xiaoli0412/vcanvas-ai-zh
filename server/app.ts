@@ -31,7 +31,7 @@ export async function createServer() {
   app.addHook('onSend', async (_request, reply) => {
     reply.header('Access-Control-Allow-Origin', '*')
     reply.header('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS')
-    reply.header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    reply.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-vcanvas-session-id, x-vcanvas-user-id')
   })
 
   app.options('/proxy', async (_request, reply) => reply.code(204).send())

@@ -192,24 +192,65 @@ export async function registerSessionRoutes(app: FastifyInstance) {
     }
   })
 
-  app.post('/api/session/logout', async (request) => {
+  app.post('/api/session/logout', async (request, reply) => {
     const body = (request.body || {}) as { userId?: string; sessionId?: string }
-    await localDataStore.update((data) => {
+    const result = await localDataStore.update((data) => {
+      const currentSession = getSessionFromRequest(data, request)
+      const actor = getActor(data, request)
+      const canManageSessions = getTierPermissions(actor.tier).includes('manage-users')
+      const targetSessionId = body.sessionId?.trim()
+      const targetUserId = body.userId?.trim()
+      let ok = true
+      let removed = 0
+      let reason = 'no active session to logout'
+
+      if ((targetSessionId || targetUserId) && !currentSession) {
+        reason = 'no active session to logout'
+      } else if (targetSessionId) {
+        if (canManageSessions || currentSession?.id === targetSessionId) {
+          const before = data.sessions.length
+          data.sessions = data.sessions.filter((session) => session.id !== targetSessionId)
+          removed = before - data.sessions.length
+          reason = removed > 0 ? 'session logged out' : 'session not found'
+        } else {
+          ok = false
+          reason = 'Cannot logout another user session without admin permission.'
+        }
+      } else if (targetUserId) {
+        if (canManageSessions || currentSession?.userId === targetUserId) {
+          const before = data.sessions.length
+          data.sessions = data.sessions.filter((session) => session.userId !== targetUserId)
+          removed = before - data.sessions.length
+          reason = 'user sessions logged out'
+        } else {
+          ok = false
+          reason = 'Cannot logout another user without admin permission.'
+        }
+      } else if (currentSession) {
+        data.sessions = data.sessions.filter((session) => session.id !== currentSession.id)
+        removed = 1
+        reason = 'current session logged out'
+      }
+
       data.sessions = data.sessions.filter((session) => {
-        if (body.sessionId) return session.id !== body.sessionId
-        if (body.userId) return session.userId !== body.userId
-        return false
+        return Date.parse(session.expiresAt) > Date.now()
       })
       data.auditEvents.push({
         id: createId('audit'),
-        actorId: body.userId || null,
-        actorTier: 'guest',
+        actorId: actor.id,
+        actorTier: actor.tier,
         action: 'session.logout',
         ip: getClientIp(request),
         createdAt: new Date().toISOString(),
+        metadata: { targetUserId: targetUserId || null, targetSessionId: targetSessionId || null, removed, ok, reason },
       })
+      return { ok, removed, reason }
     })
-    return { ok: true }
+    if (!result.ok) {
+      reply.code(403)
+      return { ok: false, removed: result.removed, error: result.reason }
+    }
+    return { ok: true, removed: result.removed, note: result.reason }
   })
 
   app.post('/api/session/guest', async (request) => {

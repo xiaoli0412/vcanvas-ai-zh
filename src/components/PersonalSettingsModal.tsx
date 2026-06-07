@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import type { ModelCapability, PersonalSettings, ProviderChannel } from '../../shared/contracts/publicServer'
 import type { Translate } from '../lib/i18n'
+import { mergeSessionHeaders } from '../lib/sessionClient'
 import './PersonalSettingsModal.css'
 
 interface Props {
@@ -48,8 +49,8 @@ export function PersonalSettingsModal({ onClose, onOpenConnectionSettings, t }: 
   const load = async () => {
     setError(null)
     const [providerResponse, settingsResponse] = await Promise.all([
-      fetch('/api/providers').then((res) => res.json()),
-      fetch('/api/settings/personal').then((res) => res.json()),
+      fetch('/api/providers', { headers: mergeSessionHeaders() }).then((res) => res.json()),
+      fetch('/api/settings/personal', { headers: mergeSessionHeaders() }).then((res) => res.json()),
     ])
     setChannels(providerResponse.channels || [])
     setSettings(settingsResponse.settings || settingsResponse)
@@ -75,7 +76,7 @@ export function PersonalSettingsModal({ onClose, onOpenConnectionSettings, t }: 
     try {
       const response = await fetch('/api/providers', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: mergeSessionHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(payload),
       })
       const data = await response.json()
@@ -93,7 +94,7 @@ export function PersonalSettingsModal({ onClose, onOpenConnectionSettings, t }: 
     setSettings(nextSettings)
     await fetch('/api/settings/personal', {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: mergeSessionHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(nextSettings),
     })
   }

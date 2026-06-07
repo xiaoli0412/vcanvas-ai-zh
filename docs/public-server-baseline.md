@@ -48,6 +48,13 @@
 - `1.11.3` adds `/api/platform/readiness` to both Fastify and `scripts/serve-vcanvas.mjs`. It reports Canvas 2.0 public-server maturity by domain (`production`, `local-mock`, `contract-only`, `missing`) and lists blockers for newapi auth, key vault custody, server-managed workflow execution, verified model registry, production persistence, and update/migration.
 - `src/components/ControlCenterModal.tsx` now opens to the readiness map by default, keeping public-server gaps visible while preserving the canvas-first rule because the control center remains a secondary modal.
 - Local/mock `/api/session/login` and `/api/session/register` now ignore client-supplied `tier`. New accounts default to `user`, existing local users keep their stored tier, and only the reserved local bootstrap identity `local-admin` resolves to `host-admin` until a real bridge owns roles.
+- `1.11.4` removes ambient latest-session fallback from the local/mock server skeleton. Browser calls must carry `x-vcanvas-session-id`; `x-vcanvas-user-id` is only a consistency guard, not a credential.
+- `/api/session/logout` now follows the same explicit-session rule: no-header logout is a no-op, normal users can only remove their own active session/user sessions, and host-admin/admin can remove explicit target sessions.
+- Workflow and asset import ownership now use a shared local/mock rule: only host-admin/admin can honor a requested `ownerId`; other callers are pinned to their authenticated actor id, while audit events always record the real actor.
+- `src/lib/sessionClient.ts` stores the current local/mock session and attaches it to Control Center, Personal Settings, and Works Center requests without changing existing `vcanvas_*` canvas/provider storage keys.
+- `server/services/workflowService.ts` is the first real service boundary for Generate/Refine/Plan records. It owns 24h retention, local context compression, hosting-policy selection, `executionPlan` metadata, and hosted-run quota debit while route files stay as HTTP adapters.
+- `/api/assets/import` now has Fastify/lightweight parity as metadata-only asset intake with audit records. It intentionally does not store binary image/video files in local JSON.
+- `scripts/serve-vcanvas.mjs` remains a compatibility deployment shim with mirrored workflow/asset logic; every workflow/security change must be smoke-tested against both Fastify and the lightweight service until the deployment path can load the TypeScript service bundle directly.
 
 ## 2026-06-06 Verification Snapshot
 - `npm run typecheck`
@@ -65,6 +72,7 @@
 - `1.10.11` final verification passed for embedded font loading, default Chinese, Header language toggle desktop/mobile, compact PromptBar/FramePicker/MessageStrip typography, public `/gallery` screenshots at `1440x960` and `390x844`, and `/api/dispatch/*` parity.
 - Fastify static serving now streams real files from `VCANVAS_STATIC_DIR` before SPA fallback, so `/assets/*.js`, `/assets/*.css`, and `/fonts/*` no longer fall through to `index.html`.
 - `1.11.3` validation adds `/api/platform/readiness` to the required Fastify/lightweight smoke set and includes a negative privilege test: posting `tier: "host-admin"` for an arbitrary user must still return `tier: "user"`.
+- `1.11.4` validation adds explicit-session smoke tests: requests without a session header resolve to guest, requests with the saved login session resolve to that user, and user-id-only headers cannot authenticate.
 
 ## Deferred Beyond This Commit
 - Real auth on top of latest `newapi`, production key encryption, payment-grade quotas, PostgreSQL/Redis persistence, and external `newapi/subapi/octopus` bridges.

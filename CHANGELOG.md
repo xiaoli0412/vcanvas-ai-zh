@@ -1,3 +1,16 @@
+## 1.11.4 - 2026-06-07
+
+### Highlights
+- Removed ambient latest-session fallback from the public-server skeleton; authenticated platform routes now require an explicit inscanvas session header.
+- Hardened `/api/session/logout` so anonymous/no-header calls can no longer clear every local/mock session; users can only logout themselves unless an admin session is present.
+- Hardened workflow and asset ownership so non-admin callers cannot forge `ownerId`; audits now record the real actor and keep requested ownership as metadata.
+- Added a frontend session helper so Control Center, Personal Settings, and Works Center send the current session without touching legacy canvas/provider storage keys.
+- Extracted workflow run creation into a server-side `WorkflowService` boundary covering retention, hosting policy, context compression, execution plan metadata, and hosted-run quota debit.
+- Upgraded `/api/assets/import` from a placeholder to metadata-only asset intake with audit records and Fastify/lightweight server parity.
+
+### Notes
+- Server-managed model execution is still a queued contract, not a real worker yet. This release makes the boundary cleaner so the next adapter can attach without further route sprawl.
+
 ## 1.11.3 - 2026-06-07
 
 ### Highlights

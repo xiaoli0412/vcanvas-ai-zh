@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import type { CanvasModeId, GalleryEntry, ShareLink, UserTier, WorkRecord } from '../../shared/contracts/publicServer'
 import type { Translate } from '../lib/i18n'
+import { mergeSessionHeaders } from '../lib/sessionClient'
 import './WorkCenterModal.css'
 
 interface SessionUser {
@@ -75,11 +76,11 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
 
   const load = async () => {
     setError(null)
-    const session = await fetch('/api/session/me').then((response) => readJson<{
+    const session = await fetch('/api/session/me', { headers: mergeSessionHeaders() }).then((response) => readJson<{
       user: SessionUser
     }>(response))
     const [workPayload, galleryPayload] = await Promise.all([
-      fetch(`/api/works?ownerId=${encodeURIComponent(session.user.id)}`).then((response) => readJson<{
+      fetch(`/api/works?ownerId=${encodeURIComponent(session.user.id)}`, { headers: mergeSessionHeaders() }).then((response) => readJson<{
         items: WorkRecord[]
         limit: number
         shareLinks: ShareLink[]
@@ -131,7 +132,7 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
     }
     const response = await fetch('/api/works', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: mergeSessionHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         ownerId: user?.id,
         title: title.trim() || makeDefaultTitle(promptDraft, t('canvas.untitled')),
@@ -150,7 +151,7 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
     if (!selectedWork) return
     const response = await fetch(`/api/works/${encodeURIComponent(selectedWork.id)}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: mergeSessionHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         title: title.trim() || selectedWork.title,
         description: description.trim(),
@@ -163,7 +164,7 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
     if (!selectedWork) return
     const response = await fetch(`/api/works/${encodeURIComponent(selectedWork.id)}/share`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: mergeSessionHeaders({ 'Content-Type': 'application/json' }),
       body: '{}',
     })
     const data = await readJson<{ link: ShareLink }>(response)
@@ -180,7 +181,7 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
     if (!selectedWork) return
     const response = await fetch(`/api/works/${encodeURIComponent(selectedWork.id)}/gallery-submit`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: mergeSessionHeaders({ 'Content-Type': 'application/json' }),
       body: '{}',
     })
     await readJson(response)
@@ -188,13 +189,13 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
 
   const deleteSelected = () => runAction(async () => {
     if (!selectedWork) return
-    const response = await fetch(`/api/works/${encodeURIComponent(selectedWork.id)}`, { method: 'DELETE' })
+    const response = await fetch(`/api/works/${encodeURIComponent(selectedWork.id)}`, { method: 'DELETE', headers: mergeSessionHeaders() })
     await readJson(response)
     setSelectedId('')
   }, t('works.notice.deleted'))
 
   const deleteForSpace = (workId: string) => runAction(async () => {
-    const response = await fetch(`/api/works/${encodeURIComponent(workId)}`, { method: 'DELETE' })
+    const response = await fetch(`/api/works/${encodeURIComponent(workId)}`, { method: 'DELETE', headers: mergeSessionHeaders() })
     await readJson(response)
     if (selectedId === workId) setSelectedId('')
     return t('works.notice.deletedForSpace')
@@ -216,7 +217,7 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
       }
       const response = await fetch('/api/works/import-html', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: mergeSessionHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           ownerId: user?.id,
           title: file.name.replace(/\.(html?|HTML?)$/, '') || t('works.importedTitle'),

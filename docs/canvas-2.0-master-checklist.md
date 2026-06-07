@@ -22,6 +22,10 @@
 - `/api/dispatch/status` and `/api/dispatch/route` now expose a planned-only distributed dispatch opening with weighted candidate selection and explicit fallback reasons.
 - `1.11.3` adds a first-class platform readiness boundary: `/api/platform/readiness` reports production/local-mock/contract-only/missing maturity, and Control Center opens to that map by default so incomplete public-server pieces are visible instead of hidden behind optimistic UI.
 - Local/mock login and registration no longer trust browser-submitted user tiers; roles now come from an existing local user record, the reserved `local-admin` bootstrap account, or the future `newapi/subapi` bridge.
+- `1.11.4` removes the unsafe ambient latest-session fallback. Control Center, Personal Settings, and Works Center now carry explicit `x-vcanvas-session-id` headers from a small frontend session helper.
+- `1.11.4` also hardens logout semantics: anonymous/no-header requests cannot clear all sessions, users can only logout their own sessions, and admin session removal remains explicit.
+- `1.11.4` hardens owner assignment for workflow and asset intake: non-admin requests cannot forge `ownerId`, and audit events record the real actor separately from target owner metadata.
+- `1.11.4` extracts workflow run creation into a server `WorkflowService` boundary and upgrades `/api/assets/import` into metadata-only asset intake with audit records in both Fastify and the lightweight deployment server.
 - Frontend, server typecheck, build, service smoke tests, and desktop/mobile browser screenshots passed on 2026-06-06.
 
 ## Completion Matrix
@@ -36,6 +40,9 @@
 - `done` admin-only user management UI and `/api/users` local/mock route with tier/enabled edits and IP/activity summaries
 - `done` user-management search and IP block/unblock controls in Control Center
 - `done` local/mock login/register hardening: client-supplied `tier` is ignored for new sessions; arbitrary users cannot self-promote to admin through `/api/session/login`
+- `done` explicit session contract: user identity no longer falls back to the most recent active session when headers are missing
+- `done` logout safety contract: no ambient session wipe; cross-user logout requires host-admin/admin
+- `done` workflow/asset ownership contract: requested `ownerId` is ignored for non-admin callers and kept only as metadata
 - `in_progress` platform readiness endpoint exposes the real auth gap and keeps the future `newapi/subapi` role source explicit
 - `todo` QQ avatar sync
 - `todo` wallet/payment area split with stronger protection
@@ -56,6 +63,7 @@
 - `in_progress` dynamic server/client execution fallback metadata
 - `in_progress` planned-only distributed dispatch contract through `/api/dispatch/status` and `/api/dispatch/route`
 - `in_progress` platform readiness endpoint marks dispatch as `contract-only` until CPU/memory/disk/bandwidth telemetry and a queue backend exist
+- `in_progress` workflow service boundary now centralizes hosting policy, 24h retention, context compression, execution plan metadata, and hosted-run quota debit
 - `done` server-hosted high-resource toggle for video/web copy in personal settings and workflow policy
 - `done` Control Center v1 surfaces ops status and manual cleanup as secondary controls
 
@@ -70,6 +78,7 @@
 - `done` dedicated video-mode keyframe refinement path through extracted keyframe anchors
 - `done` precise right-side annotation editing mode for preview-based refine context
 - `done` Web Embed URL placeholder, edit/replace/remove controls, iframe preview, failure fallback, and prompt metadata
+- `in_progress` `/api/assets/import` now records image/video/html import metadata and audit events without pretending binary storage is enabled
 - `todo` tool-calling / MCP / skill gated execution model
 - `in_progress` auto context compression v1 for workflow payloads
 
@@ -122,6 +131,7 @@
 - `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve `/api/security/blocked-ips` with admin-only list/block/unblock parity
 - `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve public HTML routes `/share/:slug` and `/gallery`
 - `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve `/api/platform/readiness` with the same public-server maturity report
+- `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve `/api/assets/import` metadata-only v1 and return workflow `executionPlan` metadata from `/api/workflows/generate|refine|plan`
 - `done` local JSON persistence adapter for site settings, personal settings, notices, providers, works, workflow runs, sessions, users, quotas, shares, gallery entries, rate-limit events, blocked IPs, and audit events
 - `in_progress` 24h workflow run retention with compressed context payloads
 - `todo` bridge `newapi`, `subapi`, `octopus`
@@ -143,6 +153,15 @@
 - Browser screenshot review passed for `/gallery` at `1440x960` and `390x844`, plus `/share/:slug` at `1440x960`; public pages remain standalone and do not add canvas chrome.
 - Language/theme follow-up verification passed for `1.10.11`: default Chinese fallback, embedded Noto Serif SC + Fusion Pixel font loading, mobile Header language toggle visibility, simplified public `/gallery` and `/share/:slug` fallback parity, planned-only `/api/dispatch/*` parity, and no obvious text overlap at `1440x960` / `390x844`.
 - Fastify static resource fallback was fixed so production JS/CSS/font assets stream from `VCANVAS_STATIC_DIR` before the SPA `index.html` fallback.
+
+## 2026-06-07 Validation
+- `npm run typecheck` passed.
+- `npm run typecheck:server` passed.
+- `node --check scripts/serve-vcanvas.mjs` passed.
+- `npm run build` passed with the existing large chunk warnings only.
+- Fastify smoke test passed for explicit session auth, user-id-only spoof rejection, anonymous logout no-op, cross-user logout rejection, self logout, workflow `executionPlan`, and metadata-only asset import.
+- Lightweight `scripts/serve-vcanvas.mjs` smoke test passed for the same session/logout/workflow/assets scenarios, confirming deployment-service parity.
+- Owner-spoof smoke test passed on both services: non-admin workflow/assets requests with `ownerId=local-admin` are pinned back to the caller, while host-admin delegated ownership remains allowed.
 
 ### 10. Sign-in / Quota
 - `in_progress` login-as-signin flow through local/mock records
