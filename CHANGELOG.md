@@ -1,3 +1,11 @@
+## 1.11.10 - 2026-06-08
+
+### Fixes
+- Hardened GitHub Actions dependency installation for desktop and Pages workflows with Electron download mirrors and retry loops, after the `v1.11.9` Linux tag build hit repeated Electron download `HTTP 504` failures during `npm ci`.
+
+### Notes
+- No runtime product behavior changed beyond the already released read-only update checks from `1.11.9`.
+
 ## 1.11.9 - 2026-06-08
 
 ### Highlights

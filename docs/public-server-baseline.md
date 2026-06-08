@@ -60,6 +60,7 @@
 - `1.11.7` exposes the planned-only dispatch layer inside the secondary Control Center: Site Settings can edit weighted dispatch nodes as JSON, Ops previews selected/fallback routing state, and the Fastify/lightweight settings paths both preserve nested `dispatchPolicy` updates. This remains a contract-only opening until real queues and cross-server workers exist.
 - `1.11.8` adds local-json-v1 data portability to Fastify and `scripts/serve-vcanvas.mjs`: host-admin/admin can fetch manifest counts, download a full local JSON bundle, dry-run pasted imports, and apply imports only after the configured confirmation phrase. Control Center exposes this through an admin-only Data tab without adding persistent canvas chrome.
 - `1.11.9` adds read-only GitHub latest Release checks to Fastify and `scripts/serve-vcanvas.mjs`: host-admin/admin can inspect current/latest version status from the Control Center Data tab, and deployments can provide `GITHUB_TOKEN` or `GH_TOKEN` to avoid anonymous GitHub API rate limits. This is notice-only, not auto-update or rollback automation.
+- `1.11.10` hardens release workflows after repeated Linux tag-build `npm ci` failures caused by Electron download `HTTP 504`: desktop and Pages workflows now use Electron mirror variables and retry dependency installation before failing.
 
 ## 2026-06-06 Verification Snapshot
 - `npm run typecheck`

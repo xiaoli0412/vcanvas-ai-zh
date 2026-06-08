@@ -11,6 +11,8 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+  ELECTRON_BUILDER_BINARIES_MIRROR: https://npmmirror.com/mirrors/electron-builder-binaries/
 
 concurrency:
   group: pages
@@ -30,7 +32,17 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            npm ci && exit 0
+            if [ "$attempt" = "3" ]; then
+              exit 1
+            fi
+            delay=$((attempt * 15))
+            echo "npm ci failed; retrying in ${delay}s..."
+            sleep "$delay"
+          done
 
       - name: Build site
         run: npm run build:gh

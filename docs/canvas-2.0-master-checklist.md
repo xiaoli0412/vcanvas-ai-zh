@@ -30,6 +30,7 @@
 - `1.11.7` makes the planned-only dispatch opening operationally visible: admins can edit weighted candidate nodes in Site Settings, Ops shows selected/fallback dispatch status, and both Fastify/lightweight services preserve nested dispatch policy updates.
 - `1.11.8` adds admin-only local JSON data portability v1: `/api/data/export|import` work in both Fastify and the lightweight deployment service, Control Center exposes a secondary Data tab, imports dry-run by default, and applied imports require an explicit confirmation phrase.
 - `1.11.9` adds admin-only read-only GitHub Release checks: `/api/updates/check` works in both Fastify and the lightweight deployment service, optionally uses `GITHUB_TOKEN`/`GH_TOKEN`, and Control Center shows current/latest version status inside the existing Data tab.
+- `1.11.10` hardens GitHub Actions release builds after a tag-only Linux Electron download `HTTP 504`: desktop and Pages workflows now use Electron mirror env vars plus retrying `npm ci`.
 - Frontend, server typecheck, build, service smoke tests, and desktop/mobile browser screenshots passed on 2026-06-06.
 
 ## Completion Matrix
