@@ -1,3 +1,11 @@
+## 1.11.11 - 2026-06-08
+
+### Fixes
+- Removed the global electron-builder binary mirror from GitHub Actions so macOS DMG packaging can fetch `dmg-builder` from its expected upstream instead of the broken mirror path that returned `404`.
+
+### Notes
+- Kept the Electron runtime mirror and `npm ci` retry loops from `1.11.10`, preserving the Linux install hardening without redirecting macOS packaging helpers.
+
 ## 1.11.10 - 2026-06-08
 
 ### Fixes

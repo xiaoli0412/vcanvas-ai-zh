@@ -12,7 +12,6 @@ permissions:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
-  ELECTRON_BUILDER_BINARIES_MIRROR: https://npmmirror.com/mirrors/electron-builder-binaries/
 
 concurrency:
   group: pages
