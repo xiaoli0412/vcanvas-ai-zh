@@ -514,6 +514,7 @@
 .ccm-gallery-list,
 .ccm-notice-list,
 .ccm-data-summary,
+.ccm-redeem-list,
 .ccm-dispatch-list {
   display: grid;
   gap: 8px;
@@ -651,6 +652,54 @@
   flex-shrink: 0;
   color: var(--brand-blue-text);
   font-size: 10px;
+}
+
+.ccm-redeem-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid rgba(42, 52, 72, 0.78);
+  border-radius: 12px;
+  background: rgba(8, 10, 18, 0.58);
+}
+
+.ccm-redeem-row.off {
+  opacity: 0.56;
+}
+
+.ccm-redeem-row div {
+  min-width: 0;
+}
+
+.ccm-redeem-row strong,
+.ccm-redeem-row span,
+.ccm-redeem-row small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ccm-redeem-row strong {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.ccm-redeem-row span {
+  margin-top: 4px;
+  color: var(--brand-blue-text);
+  font-size: 10px;
+}
+
+.ccm-redeem-row small {
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 9px;
 }
 
 .ccm-notice,
@@ -909,6 +958,11 @@
   }
 
   .ccm-dispatch-item {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ccm-redeem-row {
     align-items: stretch;
     flex-direction: column;
   }

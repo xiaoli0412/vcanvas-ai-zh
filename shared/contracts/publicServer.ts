@@ -323,11 +323,17 @@ export interface RedeemCode {
   code: string
   tierUpgrade?: UserTier
   premiumCredits?: number
+  baseCallCredits?: number
+  hostedRunCredits?: number
   expiresAt: string
   maxRedemptions: number
   redeemedCount: number
   redeemedBy?: string[]
   enabled?: boolean
+  note?: string | null
+  createdBy?: string | null
+  createdAt?: string
+  updatedAt?: string
 }
 
 export interface SiteSettings {

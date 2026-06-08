@@ -34,6 +34,7 @@
 - `1.11.15` completes the desktop CI hardening loop: Electron runtime downloads use `electronDownload.mirror`, Linux/Windows helper binaries use scoped mirrors, macOS pre-warms the `dmg-builder` helper cache, and the `v1.11.15` tag release uploaded Windows/macOS/Linux artifacts successfully.
 - `1.11.16` tightens embedded display font loading: the SPA now resolves Noto Serif SC and Fusion Pixel styles from the Vite base URL against `document.baseURI`, preserving web, GitHub Pages, and Electron `file://` compatibility while removing desktop-build font resolution noise.
 - `1.11.17` advances the quota foundation: local/mock ledgers now refresh on server-local natural days, daily check-in is idempotent, logged-in metered calls consume base quota, guest caps use an IP natural-day window, and lightweight `/api/remix/fetch` no longer bypasses the traffic guard.
+- `1.11.18` adds local/mock redeem-code management: host-admin/admin users can create and disable quota goods for premium credits, base calls, hosted runs, and tier upgrades, while ordinary users only redeem codes from the secondary Control Center wallet.
 - Frontend, server typecheck, build, service smoke tests, and desktop/mobile browser screenshots passed on 2026-06-06.
 
 ## Completion Matrix
@@ -187,6 +188,7 @@
 - `1.11.15` GitHub Actions validation passed for `publish/main` Pages, `publish/main` Desktop, and `v1.11.15` tag Desktop release; release assets include Windows setup, macOS arm64 DMG, Linux AppImage/deb, blockmaps, and latest YAML metadata.
 - `1.11.16` validation passed for embedded font stylesheet loading: normal build, GitHub Pages build, desktop build, full Windows desktop package, and lightweight static serving all kept `/fonts/*` available without unresolved `./fonts/...` warnings.
 - `1.11.17` validation must cover natural-day quota refresh, same-day sign-in idempotence, daily base quota exhaustion, requested `server-managed` downgrade when hosting is not allowed, and lightweight remix fetch passing through the traffic guard.
+- `1.11.18` validation passed for admin-only redeem-code CRUD, non-admin list hiding, tier-upgrade session refresh, and Fastify/lightweight parity for redeem-code rewards.
 
 ### 10. Sign-in / Quota
 - `done` login/register/guest records are separated from daily check-in records through `SignInRecord.source`
@@ -195,9 +197,10 @@
 - `in_progress` guest daily/IP caps on heavy routes now use a natural-day IP window; deeper route weighting remains deferred
 
 ### 11. Redeem
-- `in_progress` local/mock redeem endpoint and ledger application
+- `done` local/mock redeem endpoint and ledger application
+- `done` host-admin/admin redeem-code management for generated codes, enabled state, expiry, max redemptions, notes, premium credits, base calls, hosted runs, and tier upgrades
 - `todo` redeem code generation on top of `newapi`
-- `todo` redeemable goods: tier, concurrency, quota, space
+- `in_progress` redeemable goods: tier and quota goods exist locally; concurrency, storage space, and payment-grade goods remain bridge/adapter tasks
 
 ### 12. Updates / Migration
 - `in_progress` GitHub update notice flow: read-only latest Release check exists, but auto-update scheduling is intentionally not implemented

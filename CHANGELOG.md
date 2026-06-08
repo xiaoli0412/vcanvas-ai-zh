@@ -1,3 +1,13 @@
+## 1.11.18 - 2026-06-08
+
+### Features
+- Added local/mock redeem-code management for host-admin/admin users, including generated codes, enabled/disabled state, expiry, max uses, notes, tier upgrades, premium credits, base calls, and hosted-run rewards.
+- Surfaced redeem-code creation and status in the secondary Control Center Data area, keeping ordinary user redemption in the Personal wallet area without adding persistent canvas chrome.
+
+### Fixes
+- Redeeming a tier-upgrade code now refreshes the user's active local/mock sessions as well as the stored user and quota ledger, so upgraded permissions apply without requiring a fresh login.
+- Non-admin quota reads no longer expose the site redeem-code list.
+
 ## 1.11.17 - 2026-06-08
 
 ### Features

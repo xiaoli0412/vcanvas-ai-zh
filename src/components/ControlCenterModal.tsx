@@ -10,6 +10,7 @@ import type {
   PlatformReadinessSnapshot,
   ProviderChannel,
   QuotaLedger,
+  RedeemCode,
   SiteSettings,
   UserPermission,
   UserTier,
@@ -139,9 +140,20 @@ export function ControlCenterModal({
   const [dataVerificationText, setDataVerificationText] = useState('')
   const [dataConfirmText, setDataConfirmText] = useState('')
   const [updateCheck, setUpdateCheck] = useState<UpdateCheckResult | null>(null)
+  const [redeemCodes, setRedeemCodes] = useState<RedeemCode[]>([])
   const [loginDraft, setLoginDraft] = useState({ username: 'local-admin' })
   const [profileDraft, setProfileDraft] = useState({ displayName: '', motto: '', qq: '', avatarUrl: '' })
   const [noticeDraft, setNoticeDraft] = useState({ kind: 'announcement' as NoticeMessage['kind'], title: '', body: '', force: false })
+  const [redeemDraft, setRedeemDraft] = useState({
+    code: '',
+    tierUpgrade: '',
+    premiumCredits: '100',
+    baseCallCredits: '20',
+    hostedRunCredits: '2',
+    maxRedemptions: '1',
+    days: '30',
+    note: '',
+  })
   const [dispatchNodesText, setDispatchNodesText] = useState('[]')
   const [userSearch, setUserSearch] = useState('')
   const [redeemCode, setRedeemCode] = useState('')
@@ -217,12 +229,14 @@ export function ControlCenterModal({
     setGallery(galleryPayload.entries || galleryPayload.items || [])
     setReadiness(readinessPayload)
     if (canManageSite(sessionPayload.user)) {
-      const [usersPayload, securityPayload] = await Promise.all([
+      const [usersPayload, securityPayload, redeemCodesPayload] = await Promise.all([
         fetch('/api/users', { headers: mergeSessionHeaders() }).then((response) => readJson<{ users: ManagedUser[] }>(response)),
         fetch('/api/security/blocked-ips', { headers: mergeSessionHeaders() }).then((response) => readJson<{ blockedIps: BlockedIp[] }>(response)),
+        fetch('/api/quotas/redeem-codes', { headers: mergeSessionHeaders() }).then((response) => readJson<{ redeemCodes: RedeemCode[] }>(response)),
       ])
       setManagedUsers(usersPayload.users || [])
       setBlockedIps(securityPayload.blockedIps || [])
+      setRedeemCodes(redeemCodesPayload.redeemCodes || [])
       fetch('/api/data/export', { headers: mergeSessionHeaders() })
         .then((response) => readJson<{ manifest: DataExportManifest; verificationText?: string }>(response))
         .then((payload) => {
@@ -237,6 +251,7 @@ export function ControlCenterModal({
     } else {
       setManagedUsers([])
       setBlockedIps([])
+      setRedeemCodes([])
       setDataManifest(null)
       setUpdateCheck(null)
     }
@@ -323,6 +338,36 @@ export function ControlCenterModal({
     }).then((response) => readJson(response))
     setRedeemCode('')
     return t('control.notice.redeemed')
+  })
+
+  const createRedeemCode = () => run(async () => {
+    const days = Math.max(1, Number(redeemDraft.days) || 30)
+    const payload = {
+      code: redeemDraft.code.trim() || undefined,
+      tierUpgrade: redeemDraft.tierUpgrade || undefined,
+      premiumCredits: Number(redeemDraft.premiumCredits) || 0,
+      baseCallCredits: Number(redeemDraft.baseCallCredits) || 0,
+      hostedRunCredits: Number(redeemDraft.hostedRunCredits) || 0,
+      maxRedemptions: Number(redeemDraft.maxRedemptions) || 1,
+      expiresAt: new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString(),
+      note: redeemDraft.note,
+    }
+    const response = await fetch('/api/quotas/redeem-codes', {
+      method: 'POST',
+      headers: mergeSessionHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload),
+    }).then((item) => readJson<{ redeemCode?: RedeemCode }>(item))
+    setRedeemDraft((value) => ({ ...value, code: '', note: '' }))
+    return response.redeemCode?.code ? `${t('control.notice.redeemCodeCreated')}: ${response.redeemCode.code}` : t('control.notice.redeemCodeCreated')
+  })
+
+  const toggleRedeemCode = (code: RedeemCode) => run(async () => {
+    await fetch(`/api/quotas/redeem-codes/${encodeURIComponent(code.id)}`, {
+      method: 'PATCH',
+      headers: mergeSessionHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ enabled: !(code.enabled ?? true) }),
+    }).then((response) => readJson(response))
+    return t('control.notice.redeemCodeUpdated')
   })
 
   const saveSite = () => run(async () => {
@@ -829,6 +874,45 @@ export function ControlCenterModal({
                       <span key={key}><strong>{value}</strong>{key}</span>
                     ))}
                     {!dataManifest && <div className="ccm-empty compact">{t('control.data.noManifest')}</div>}
+                  </div>
+                </section>
+
+                <section className="ccm-card wide">
+                  <div className="ccm-section-row">
+                    <div>
+                      <h3>{t('control.redeem.manageTitle')}</h3>
+                      <p>{t('control.redeem.manageNote')}</p>
+                    </div>
+                    <span className="ccm-pill">{redeemCodes.length} {t('control.redeem.codes')}</span>
+                  </div>
+                  <div className="ccm-form-grid">
+                    <label>{t('control.redeem.code')}<input value={redeemDraft.code} onChange={(event) => setRedeemDraft((value) => ({ ...value, code: event.target.value }))} placeholder="INSC-XXXX-XXXX" /></label>
+                    <label>{t('control.redeem.tier')}<select value={redeemDraft.tierUpgrade} onChange={(event) => setRedeemDraft((value) => ({ ...value, tierUpgrade: event.target.value }))}><option value="">{t('control.redeem.noTier')}</option><option value="vip">vip</option><option value="admin">admin</option><option value="host-admin">host-admin</option></select></label>
+                    <label>{t('control.redeem.premium')}<input type="number" min="0" value={redeemDraft.premiumCredits} onChange={(event) => setRedeemDraft((value) => ({ ...value, premiumCredits: event.target.value }))} /></label>
+                    <label>{t('control.redeem.base')}<input type="number" min="0" value={redeemDraft.baseCallCredits} onChange={(event) => setRedeemDraft((value) => ({ ...value, baseCallCredits: event.target.value }))} /></label>
+                    <label>{t('control.redeem.hosted')}<input type="number" min="0" value={redeemDraft.hostedRunCredits} onChange={(event) => setRedeemDraft((value) => ({ ...value, hostedRunCredits: event.target.value }))} /></label>
+                    <label>{t('control.redeem.max')}<input type="number" min="1" value={redeemDraft.maxRedemptions} onChange={(event) => setRedeemDraft((value) => ({ ...value, maxRedemptions: event.target.value }))} /></label>
+                    <label>{t('control.redeem.days')}<input type="number" min="1" value={redeemDraft.days} onChange={(event) => setRedeemDraft((value) => ({ ...value, days: event.target.value }))} /></label>
+                    <label>{t('control.redeem.note')}<input value={redeemDraft.note} onChange={(event) => setRedeemDraft((value) => ({ ...value, note: event.target.value }))} /></label>
+                  </div>
+                  <button className="btn btn-primary" onClick={createRedeemCode} disabled={busy}>{t('control.action.createRedeemCode')}</button>
+                  <div className="ccm-redeem-list">
+                    {redeemCodes.length === 0 && <div className="ccm-empty compact">{t('control.redeem.empty')}</div>}
+                    {redeemCodes.map((code) => (
+                      <article key={code.id} className={`ccm-redeem-row ${code.enabled === false ? 'off' : ''}`}>
+                        <div>
+                          <strong>{code.code}</strong>
+                          <span>
+                            +{code.baseCallCredits || 0} {t('control.quota.basic')} · +{code.hostedRunCredits || 0} {t('control.quota.hosted')} · +{code.premiumCredits || 0} {t('control.quota.premium')}
+                            {code.tierUpgrade ? ` · ${code.tierUpgrade}` : ''}
+                          </span>
+                          <small>{code.redeemedCount}/{code.maxRedemptions} · {formatDate(code.expiresAt)}{code.note ? ` · ${code.note}` : ''}</small>
+                        </div>
+                        <button className={`btn ${code.enabled === false ? 'btn-secondary' : 'btn-ghost danger'}`} onClick={() => toggleRedeemCode(code)} disabled={busy}>
+                          {code.enabled === false ? t('control.redeem.enable') : t('control.redeem.disable')}
+                        </button>
+                      </article>
+                    ))}
                   </div>
                 </section>
 

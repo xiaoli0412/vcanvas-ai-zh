@@ -757,6 +757,58 @@ function dailySignInRecord(data, userId, now = new Date()) {
   }) || null
 }
 
+function normalizeRewardNumber(value) {
+  const number = Math.floor(Number(value) || 0)
+  return Math.max(0, Math.min(999999, number))
+}
+
+function normalizeTierUpgrade(value) {
+  return ['host-admin', 'admin', 'vip'].includes(value) ? value : undefined
+}
+
+function generateRedeemCode() {
+  const segment = () => Math.random().toString(36).slice(2, 6).toUpperCase()
+  return `INSC-${segment()}-${segment()}`
+}
+
+function maskRedeemCode(code) {
+  return String(code || '').replace(/.(?=.{4})/g, '*')
+}
+
+function safeRedeemCode(code, reveal = false) {
+  return {
+    id: code.id,
+    code: reveal ? code.code : maskRedeemCode(code.code),
+    tierUpgrade: code.tierUpgrade,
+    premiumCredits: code.premiumCredits || 0,
+    baseCallCredits: code.baseCallCredits || 0,
+    hostedRunCredits: code.hostedRunCredits || 0,
+    expiresAt: code.expiresAt,
+    maxRedemptions: code.maxRedemptions,
+    redeemedCount: code.redeemedCount,
+    redeemedBy: reveal ? code.redeemedBy || [] : undefined,
+    enabled: code.enabled ?? true,
+    note: code.note || null,
+    createdBy: code.createdBy || null,
+    createdAt: code.createdAt || null,
+    updatedAt: code.updatedAt || null,
+  }
+}
+
+function applyRedeemReward(data, actorId, ledger, code) {
+  ledger.premiumCredits += code.premiumCredits || 0
+  ledger.baseCallsRemaining += code.baseCallCredits || 0
+  ledger.hostedRunsRemaining = (ledger.hostedRunsRemaining || 0) + (code.hostedRunCredits || 0)
+  if (code.tierUpgrade) {
+    ledger.tier = code.tierUpgrade
+    const user = data.users.find((item) => item.id === actorId)
+    if (user) user.tier = code.tierUpgrade
+    data.sessions = data.sessions.map((session) => (
+      session.userId === actorId ? { ...session, tier: code.tierUpgrade } : session
+    ))
+  }
+}
+
 function upsertUser(data, input) {
   const now = new Date().toISOString()
   const existing = data.users.find((item) => item.id === input.id)
@@ -2262,7 +2314,7 @@ async function handleApi(req, res, url) {
     sendJson(res, 200, {
       ok: true,
       ledger,
-      redeemCodes: data.redeemCodes.map((code) => ({ ...code, code: code.code.replace(/.(?=.{4})/g, '*') })),
+      redeemCodes: canManageUsers(actor.tier) ? data.redeemCodes.map((code) => safeRedeemCode(code, true)) : [],
     })
     return true
   }
@@ -2276,17 +2328,84 @@ async function handleApi(req, res, url) {
       return true
     }
     const ledger = refreshQuotaLedger(data, actor.id, actor.tier)
-    ledger.premiumCredits += code.premiumCredits || 0
-    if (code.tierUpgrade) {
-      ledger.tier = code.tierUpgrade
-      const user = data.users.find((item) => item.id === actor.id)
-      if (user) user.tier = code.tierUpgrade
-    }
+    applyRedeemReward(data, actor.id, ledger, code)
     code.redeemedCount += 1
     code.redeemedBy = [...(code.redeemedBy || []), actor.id]
+    code.updatedAt = new Date().toISOString()
     withAudit(data, req, 'quota.redeem', actor.id, actor.tier, { redeemCodeId: code.id })
     writeData(data)
     sendJson(res, 200, { ok: true, ledger })
+    return true
+  }
+
+  if (url.pathname === '/api/quotas/redeem-codes' && method === 'GET') {
+    const actor = getActor(data, req)
+    if (!canManageUsers(actor.tier)) {
+      sendJson(res, 403, { ok: false, error: 'Only host-admin/admin can manage redeem codes.' })
+      return true
+    }
+    sendJson(res, 200, { ok: true, redeemCodes: data.redeemCodes.map((code) => safeRedeemCode(code, true)) })
+    return true
+  }
+
+  if (url.pathname === '/api/quotas/redeem-codes' && method === 'POST') {
+    const actor = getActor(data, req)
+    if (!canManageUsers(actor.tier)) {
+      sendJson(res, 403, { ok: false, error: 'Only host-admin/admin can create redeem codes.' })
+      return true
+    }
+    const body = await readJsonBody(req)
+    const now = new Date().toISOString()
+    const codeValue = String(body.code || generateRedeemCode()).trim().toUpperCase()
+    if (data.redeemCodes.some((item) => String(item.code).toUpperCase() === codeValue)) {
+      sendJson(res, 409, { ok: false, error: 'Redeem code already exists.' })
+      return true
+    }
+    const code = {
+      id: createId('redeem'),
+      code: codeValue,
+      tierUpgrade: normalizeTierUpgrade(body.tierUpgrade),
+      premiumCredits: normalizeRewardNumber(body.premiumCredits),
+      baseCallCredits: normalizeRewardNumber(body.baseCallCredits),
+      hostedRunCredits: normalizeRewardNumber(body.hostedRunCredits),
+      expiresAt: body.expiresAt || new Date(Date.now() + 30 * dayMs).toISOString(),
+      maxRedemptions: Math.max(1, Math.min(10000, normalizeRewardNumber(body.maxRedemptions) || 1)),
+      redeemedCount: 0,
+      redeemedBy: [],
+      enabled: body.enabled !== false,
+      note: String(body.note || '').slice(0, 80) || null,
+      createdBy: actor.id,
+      createdAt: now,
+      updatedAt: now,
+    }
+    data.redeemCodes.unshift(code)
+    withAudit(data, req, 'quota.redeemCode.create', actor.id, actor.tier, { redeemCodeId: code.id, maxRedemptions: code.maxRedemptions })
+    writeData(data)
+    sendJson(res, 200, { ok: true, redeemCode: safeRedeemCode(code, true) })
+    return true
+  }
+
+  const redeemCodeMatch = url.pathname.match(/^\/api\/quotas\/redeem-codes\/([^/]+)$/)
+  if (redeemCodeMatch && method === 'PATCH') {
+    const actor = getActor(data, req)
+    if (!canManageUsers(actor.tier)) {
+      sendJson(res, 403, { ok: false, error: 'Only host-admin/admin can update redeem codes.' })
+      return true
+    }
+    const body = await readJsonBody(req)
+    const id = decodeURIComponent(redeemCodeMatch[1])
+    const code = data.redeemCodes.find((item) => item.id === id)
+    if (!code) {
+      sendJson(res, 404, { ok: false, error: 'Redeem code not found.' })
+      return true
+    }
+    if (typeof body.enabled === 'boolean') code.enabled = body.enabled
+    if (body.expiresAt) code.expiresAt = body.expiresAt
+    if (body.note !== undefined) code.note = String(body.note || '').slice(0, 80) || null
+    code.updatedAt = new Date().toISOString()
+    withAudit(data, req, 'quota.redeemCode.update', actor.id, actor.tier, { redeemCodeId: code.id, enabled: code.enabled })
+    writeData(data)
+    sendJson(res, 200, { ok: true, redeemCode: safeRedeemCode(code, true) })
     return true
   }
 
