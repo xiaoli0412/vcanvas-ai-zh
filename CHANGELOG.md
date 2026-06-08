@@ -1,3 +1,9 @@
+## 1.11.15 - 2026-06-08
+
+### Fixes
+- Pre-warmed the macOS `dmg-builder@1.2.0` helper cache from a verified mirror before packaging, avoiding repeated GitHub `504` failures during DMG creation.
+- Kept Electron runtime mirroring separate from helper binary caching so the macOS packaging pipeline does not redirect unrelated downloads.
+
 ## 1.11.14 - 2026-06-08
 
 ### Fixes

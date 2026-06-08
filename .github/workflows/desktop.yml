@@ -53,6 +53,11 @@ jobs:
             sleep "$delay"
           done
 
+      - name: Prepare macOS DMG builder cache
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: node scripts/prepare-dmg-builder-cache.mjs
+
       - name: Build desktop packages
         shell: bash
         run: |
