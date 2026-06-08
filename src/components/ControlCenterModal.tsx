@@ -13,6 +13,7 @@ import type {
   SiteSettings,
   UserPermission,
   UserTier,
+  UpdateCheckResult,
   WorkRecord,
 } from '../../shared/contracts/publicServer'
 import type { Translate } from '../lib/i18n'
@@ -136,6 +137,7 @@ export function ControlCenterModal({
   const [dataImportText, setDataImportText] = useState('')
   const [dataVerificationText, setDataVerificationText] = useState('')
   const [dataConfirmText, setDataConfirmText] = useState('')
+  const [updateCheck, setUpdateCheck] = useState<UpdateCheckResult | null>(null)
   const [loginDraft, setLoginDraft] = useState({ username: 'local-admin' })
   const [profileDraft, setProfileDraft] = useState({ displayName: '', motto: '', qq: '', avatarUrl: '' })
   const [noticeDraft, setNoticeDraft] = useState({ kind: 'announcement' as NoticeMessage['kind'], title: '', body: '', force: false })
@@ -226,10 +228,15 @@ export function ControlCenterModal({
           setDataVerificationText(payload.verificationText || 'IMPORT INSCANVAS DATA')
         })
         .catch(() => undefined)
+      fetch('/api/updates/check', { headers: mergeSessionHeaders() })
+        .then((response) => readJson<{ update: UpdateCheckResult }>(response))
+        .then((payload) => setUpdateCheck(payload.update))
+        .catch(() => undefined)
     } else {
       setManagedUsers([])
       setBlockedIps([])
       setDataManifest(null)
+      setUpdateCheck(null)
     }
     setProfileDraft({
       displayName: sessionPayload.user.displayName || '',
@@ -430,6 +437,13 @@ export function ControlCenterModal({
     setDataImportSummary(result.manifest)
     setDataConfirmText('')
     return t('control.notice.dataImported')
+  })
+
+  const checkUpdates = () => run(async () => {
+    const payload = await fetch('/api/updates/check', { headers: mergeSessionHeaders() })
+      .then((response) => readJson<{ update: UpdateCheckResult }>(response))
+    setUpdateCheck(payload.update)
+    return payload.update.updateAvailable ? t('control.notice.updateAvailable') : t('control.notice.updateChecked')
   })
 
   const tabs: Array<{ id: ControlTab; label: string; admin?: boolean }> = [
@@ -774,6 +788,30 @@ export function ControlCenterModal({
 
             {tab === 'data' && admin && (
               <div className="ccm-grid">
+                <section className="ccm-card wide">
+                  <div className="ccm-section-row">
+                    <div>
+                      <h3>{t('control.update.title')}</h3>
+                      <p>{t('control.update.note')}</p>
+                    </div>
+                    <button className="btn btn-secondary" onClick={checkUpdates} disabled={busy}>
+                      {t('control.action.checkUpdates')}
+                    </button>
+                  </div>
+                  <div className="ccm-update-grid">
+                    <div className="ccm-kv"><span>{t('control.update.repo')}</span><strong>{updateCheck?.repo || updatePolicy.githubRepo || '-'}</strong></div>
+                    <div className="ccm-kv"><span>{t('control.update.current')}</span><strong>{updateCheck?.currentVersion || '-'}</strong></div>
+                    <div className="ccm-kv"><span>{t('control.update.latest')}</span><strong>{updateCheck?.latestVersion || '-'}</strong></div>
+                    <div className="ccm-kv"><span>{t('control.update.status')}</span><strong>{updateCheck ? t(updateCheck.updateAvailable ? 'control.update.available' : `control.update.status.${updateCheck.comparison}`) : '-'}</strong></div>
+                  </div>
+                  {updateCheck?.release?.url && (
+                    <a className="ccm-link" href={updateCheck.release.url} target="_blank" rel="noreferrer">
+                      {t('control.update.openRelease')}
+                    </a>
+                  )}
+                  {updateCheck?.error && <p className="ccm-dispatch-message">{updateCheck.error}</p>}
+                </section>
+
                 <section className="ccm-card wide">
                   <div className="ccm-section-row">
                     <div>

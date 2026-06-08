@@ -29,6 +29,7 @@
 - `1.11.5` adds local AES-GCM provider-key custody and provider write permissions: guests cannot save server channels, regular users can only edit owned channels, and host-admin/admin owns site-level provider governance.
 - `1.11.7` makes the planned-only dispatch opening operationally visible: admins can edit weighted candidate nodes in Site Settings, Ops shows selected/fallback dispatch status, and both Fastify/lightweight services preserve nested dispatch policy updates.
 - `1.11.8` adds admin-only local JSON data portability v1: `/api/data/export|import` work in both Fastify and the lightweight deployment service, Control Center exposes a secondary Data tab, imports dry-run by default, and applied imports require an explicit confirmation phrase.
+- `1.11.9` adds admin-only read-only GitHub Release checks: `/api/updates/check` works in both Fastify and the lightweight deployment service, optionally uses `GITHUB_TOKEN`/`GH_TOKEN`, and Control Center shows current/latest version status inside the existing Data tab.
 - Frontend, server typecheck, build, service smoke tests, and desktop/mobile browser screenshots passed on 2026-06-06.
 
 ## Completion Matrix
@@ -139,6 +140,7 @@
 - `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve `/api/platform/readiness` with the same public-server maturity report
 - `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve `/api/assets/import` metadata-only v1 and return workflow `executionPlan` metadata from `/api/workflows/generate|refine|plan`
 - `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve admin-only `/api/data/export|import` for local-json-v1 manifests, full JSON bundles, dry-run summaries, confirmation-gated imports, and export/import audit records
+- `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve admin-only `/api/updates/check` for read-only GitHub latest Release status, with optional authenticated GitHub API requests through `GITHUB_TOKEN`/`GH_TOKEN`
 - `done` local JSON persistence adapter for site settings, personal settings, notices, providers, works, workflow runs, sessions, users, quotas, shares, gallery entries, rate-limit events, blocked IPs, and audit events
 - `in_progress` 24h workflow run retention with compressed context payloads
 - `todo` bridge `newapi`, `subapi`, `octopus`
@@ -175,6 +177,8 @@
 - `1.11.8` adds `/api/data/export|import` to the required Fastify and lightweight smoke set.
 - Data export/import remains scoped to the local JSON adapter: manifest-only export, full bundle export, dry-run import, confirmation-gated import, and audit records must pass before release.
 - Browser review must confirm the new Control Center Data tab stays inside the secondary modal and does not change `.workspace` dimensions.
+- `1.11.9` adds `/api/updates/check` to the required Fastify and lightweight smoke set. Validation must cover host-admin login, current package version reporting, latest GitHub Release lookup, and graceful `source: error` fallback when anonymous GitHub API rate limits are hit.
+- `1.11.9` validation passed on both Fastify and lightweight services with authenticated GitHub API lookup: current version `1.11.9`, latest release `v1.11.8`, comparison `older` before publishing this release. Browser screenshots confirmed Control Center Data tab remains a secondary modal with no horizontal overflow at `1440x960` and `390x844`; trailing-slash GitHub URLs such as `https://github.com/octocat/Hello-World/` normalize without falling back to the default repo.
 
 ### 10. Sign-in / Quota
 - `in_progress` login-as-signin flow through local/mock records
@@ -188,7 +192,7 @@
 - `todo` redeemable goods: tier, concurrency, quota, space
 
 ### 12. Updates / Migration
-- `todo` GitHub update notice flow
+- `in_progress` GitHub update notice flow: read-only latest Release check exists, but auto-update scheduling is intentionally not implemented
 - `todo` low-traffic update path
 - `in_progress` local/mock data export/import v1 with manifest counts, dry-run import, confirmation text, and Control Center admin UI
 - `todo` encrypted migration verification, production backup/rollback, and durable database/queue migration

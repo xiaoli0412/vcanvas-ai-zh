@@ -1,3 +1,13 @@
+## 1.11.9 - 2026-06-08
+
+### Highlights
+- Added an admin-only read-only GitHub Release check at `/api/updates/check` for both Fastify and `scripts/serve-vcanvas.mjs`.
+- Added optional `GITHUB_TOKEN` / `GH_TOKEN` support for authenticated GitHub API requests while keeping anonymous fallback and safe error reporting.
+- Added a Control Center Data & Migration card that shows repository, current version, latest release, comparison status, and a direct release link without adding persistent canvas chrome.
+
+### Notes
+- This is an update notice/check only. It does not pull code, restart services, schedule low-traffic updates, or perform backup/rollback automation.
+
 ## 1.11.8 - 2026-06-08
 
 ### Highlights

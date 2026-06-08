@@ -59,14 +59,15 @@
 - `/api/providers` write permissions are now explicit: guests cannot persist server-side channels, regular users can only edit owned channels, and site/built-in channels plus cross-owner edits require host-admin/admin. Fastify and the lightweight deployment service share the same behavior.
 - `1.11.7` exposes the planned-only dispatch layer inside the secondary Control Center: Site Settings can edit weighted dispatch nodes as JSON, Ops previews selected/fallback routing state, and the Fastify/lightweight settings paths both preserve nested `dispatchPolicy` updates. This remains a contract-only opening until real queues and cross-server workers exist.
 - `1.11.8` adds local-json-v1 data portability to Fastify and `scripts/serve-vcanvas.mjs`: host-admin/admin can fetch manifest counts, download a full local JSON bundle, dry-run pasted imports, and apply imports only after the configured confirmation phrase. Control Center exposes this through an admin-only Data tab without adding persistent canvas chrome.
+- `1.11.9` adds read-only GitHub latest Release checks to Fastify and `scripts/serve-vcanvas.mjs`: host-admin/admin can inspect current/latest version status from the Control Center Data tab, and deployments can provide `GITHUB_TOKEN` or `GH_TOKEN` to avoid anonymous GitHub API rate limits. This is notice-only, not auto-update or rollback automation.
 
 ## 2026-06-06 Verification Snapshot
 - `npm run typecheck`
 - `npm run typecheck:server`
 - `node --check scripts/serve-vcanvas.mjs`
 - `npm run build`
-- Fastify smoke test: `/health`, `/_vcanvas_proxy`, `/`, `/share/:slug`, `/gallery`, `/api/session/register|login|me`, `/api/users`, `/api/security/blocked-ips`, `/api/providers`, `/api/settings/site`, `/api/notices`, `/api/quotas/sign-in|redeem`, `/api/works` CRUD/share/gallery-submit/delete, `/api/gallery`, `/api/workflows/generate|refine|plan`, `/api/remix/fetch`, `/api/ops/status`, `/api/maintenance/cleanup`, `/api/data/export|import`.
-- Lightweight `scripts/serve-vcanvas.mjs` smoke test: same endpoint set as Fastify, including public `/share/:slug` and `/gallery`, with post-delete counts confirming no orphaned share/gallery records and parity for `/api/users`, `/api/security/blocked-ips`, and `/api/data/export|import`.
+- Fastify smoke test: `/health`, `/_vcanvas_proxy`, `/`, `/share/:slug`, `/gallery`, `/api/session/register|login|me`, `/api/users`, `/api/security/blocked-ips`, `/api/providers`, `/api/settings/site`, `/api/notices`, `/api/quotas/sign-in|redeem`, `/api/works` CRUD/share/gallery-submit/delete, `/api/gallery`, `/api/workflows/generate|refine|plan`, `/api/remix/fetch`, `/api/ops/status`, `/api/maintenance/cleanup`, `/api/data/export|import`, `/api/updates/check`.
+- Lightweight `scripts/serve-vcanvas.mjs` smoke test: same endpoint set as Fastify, including public `/share/:slug` and `/gallery`, with post-delete counts confirming no orphaned share/gallery records and parity for `/api/users`, `/api/security/blocked-ips`, `/api/data/export|import`, and `/api/updates/check`.
 - Follow-up smoke test: admin user patch, forced warning notice payload, work-limit 409, delete-for-space, and re-save passed on both Fastify and lightweight services.
 - Security follow-up smoke test: `/api/security/blocked-ips` list/block/self-block rejection/blocked request rejection/unblock passed on both Fastify and lightweight services.
 - Browser/CDP screenshots reviewed at desktop `1440x960` and mobile `390x844`; opening the Control Center leaves `.workspace` dimensions unchanged (`1440x920` desktop, `390x804` mobile).
@@ -78,10 +79,13 @@
 - `1.11.3` validation adds `/api/platform/readiness` to the required Fastify/lightweight smoke set and includes a negative privilege test: posting `tier: "host-admin"` for an arbitrary user must still return `tier: "user"`.
 - `1.11.4` validation adds explicit-session smoke tests: requests without a session header resolve to guest, requests with the saved login session resolve to that user, and user-id-only headers cannot authenticate.
 
+## 2026-06-08 Verification Snapshot
+- `1.11.9` validation adds `/api/updates/check` smoke coverage for Fastify and `scripts/serve-vcanvas.mjs`: host-admin login, authenticated GitHub latest-release lookup, current package version `1.11.9`, latest remote release `v1.11.8` before publishing, trailing-slash repo URL normalization, and Control Center Data tab screenshots at `1440x960` / `390x844` with no horizontal overflow.
+
 ## Deferred Beyond This Commit
 - Real auth on top of latest `newapi`, production key encryption, payment-grade quotas, PostgreSQL/Redis persistence, and external `newapi/subapi/octopus` bridges.
 - Production-grade native Excalidraw embeddable element integration, deeper iframe-block detection, and persisted web-embed previews.
 - Queue-backed screenshots, Redis, PostgreSQL, and worker orchestration.
 - Verified official model catalogs and Asterbot-style model capability auto-detection across every provider channel.
-- Production backup/rollback, encrypted migration verification, cross-node restore, and database/queue migrations; `1.11.8` only covers the local JSON adapter.
+- Production auto-update, backup/rollback, encrypted migration verification, cross-node restore, and database/queue migrations; `1.11.8` only covers the local JSON adapter and `1.11.9` only covers read-only GitHub Release checks.
 - Real production readiness requires service extraction around `AuthService`, `WorkflowService`, `ModelRegistry`, `KeyVault`, `QuotaPolicy`, and durable store/queue adapters; the current local JSON stack is intentionally a zero-config development baseline, not the final 250-online architecture.

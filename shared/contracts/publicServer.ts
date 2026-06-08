@@ -524,6 +524,25 @@ export interface DataExportManifest {
   counts: Record<string, number>
 }
 
+export interface UpdateCheckResult {
+  checkedAt: string
+  source: 'github-releases' | 'disabled' | 'error'
+  repo: string
+  currentVersion: string
+  latestVersion?: string | null
+  updateAvailable: boolean
+  comparison: 'newer' | 'current' | 'older' | 'unknown'
+  release?: {
+    tagName: string
+    name?: string | null
+    url: string
+    publishedAt?: string | null
+    prerelease?: boolean
+    draft?: boolean
+  } | null
+  error?: string | null
+}
+
 export interface AuditEvent {
   id: string
   actorId?: string | null

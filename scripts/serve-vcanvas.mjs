@@ -12,6 +12,7 @@ const dataDir = path.resolve(process.env.VCANVAS_DATA_DIR || '.vcanvas-data')
 const dataFile = path.join(dataDir, 'public-server.json')
 const dataExportSchemaVersion = 'local-json-v1'
 const dataImportVerificationText = 'IMPORT INSCANVAS DATA'
+const defaultGithubRepo = 'xiaoli0412/vcanvas-ai-zh'
 const dataPortableCollections = [
   'siteSettings',
   'personalSettings',
@@ -384,6 +385,120 @@ function applyImportData(target, payload) {
   }
 }
 
+function currentPackageVersion() {
+  try {
+    const pkg = JSON.parse(readFileSync(path.resolve(process.cwd(), 'package.json'), 'utf8'))
+    return pkg.version || '0.0.0'
+  } catch {
+    return '0.0.0'
+  }
+}
+
+function normalizeGithubRepo(value) {
+  const raw = String(value || defaultGithubRepo).trim()
+  try {
+    const parsed = /^https?:\/\//i.test(raw) ? new URL(raw) : null
+    if (parsed && /(^|\.)github\.com$/i.test(parsed.hostname)) {
+      const [owner, repo] = parsed.pathname.split('/').filter(Boolean)
+      if (owner && repo) return `${owner}/${repo.replace(/\.git$/i, '')}`
+    }
+  } catch {
+    // Fall back to the permissive text parser below.
+  }
+  const cleaned = raw.replace(/[#?].*$/, '').replace(/\/+$/, '').replace(/\.git$/i, '')
+  const match = cleaned.match(/github\.com[:/]+([^/\s]+)\/([^/\s#?]+)$/i)
+    || cleaned.match(/^([^/\s]+)\/([^/\s]+)$/)
+  if (!match) return defaultGithubRepo
+  return `${match[1]}/${match[2].replace(/\.git$/i, '')}`
+}
+
+function parseVersion(value) {
+  const parts = String(value || '').trim().replace(/^v/i, '').split(/[^\d]+/).filter(Boolean).slice(0, 3).map((part) => Number(part))
+  if (parts.length === 0 || parts.some((part) => !Number.isFinite(part))) return null
+  while (parts.length < 3) parts.push(0)
+  return parts
+}
+
+function compareVersions(current, latest) {
+  const currentParts = parseVersion(current)
+  const latestParts = parseVersion(latest)
+  if (!currentParts || !latestParts) return 'unknown'
+  for (let index = 0; index < 3; index += 1) {
+    if (latestParts[index] > currentParts[index]) return 'newer'
+    if (latestParts[index] < currentParts[index]) return 'older'
+  }
+  return 'current'
+}
+
+function githubHeaders() {
+  const headers = {
+    Accept: 'application/vnd.github+json',
+    'User-Agent': 'inscanvas-update-check',
+  }
+  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN
+  if (token) headers.Authorization = `Bearer ${token}`
+  return headers
+}
+
+async function checkGithubReleaseUpdate(siteSettings) {
+  const checkedAt = new Date().toISOString()
+  const currentVersion = currentPackageVersion()
+  const repo = normalizeGithubRepo(siteSettings.updatePolicy?.githubRepo)
+  if (siteSettings.updatePolicy?.checkEnabled === false) {
+    return {
+      checkedAt,
+      source: 'disabled',
+      repo,
+      currentVersion,
+      latestVersion: null,
+      updateAvailable: false,
+      comparison: 'unknown',
+      release: null,
+      error: 'GitHub update checks are disabled by site settings.',
+    }
+  }
+  try {
+    const response = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
+      headers: githubHeaders(),
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!response.ok) throw new Error(`GitHub releases responded ${response.status}`)
+    const release = await response.json()
+    const latestVersion = release.tag_name || null
+    const comparison = compareVersions(currentVersion, latestVersion)
+    return {
+      checkedAt,
+      source: 'github-releases',
+      repo,
+      currentVersion,
+      latestVersion,
+      updateAvailable: comparison === 'newer',
+      comparison,
+      release: latestVersion ? {
+        tagName: latestVersion,
+        name: release.name || null,
+        url: release.html_url || `https://github.com/${repo}/releases`,
+        publishedAt: release.published_at || null,
+        prerelease: Boolean(release.prerelease),
+        draft: Boolean(release.draft),
+      } : null,
+      error: null,
+    }
+  } catch (error) {
+    return {
+      checkedAt,
+      source: 'error',
+      repo,
+      currentVersion,
+      latestVersion: null,
+      updateAvailable: false,
+      comparison: 'unknown',
+      release: null,
+      error: error instanceof Error ? error.message : 'Unable to check GitHub releases.',
+    }
+  }
+}
+
 async function readJsonBody(req) {
   const raw = await readBody(req)
   return raw ? JSON.parse(raw) : {}
@@ -457,6 +572,10 @@ function canManageSecurity(tier) {
 }
 
 function canManageData(tier) {
+  return permissionsForTier(tier).includes('manage-site') || tier === 'host-admin' || tier === 'admin'
+}
+
+function canCheckUpdates(tier) {
   return permissionsForTier(tier).includes('manage-site') || tier === 'host-admin' || tier === 'admin'
 }
 
@@ -921,11 +1040,11 @@ function platformReadinessSnapshot(data) {
       id: 'update-migration',
       domain: 'migration',
       title: 'update and migration',
-      maturity: 'missing',
-      summary: 'Settings fields describe update and migration intent, but no executable migration or GitHub update flow exists yet.',
-      implemented: ['GitHub repo setting', 'migration policy fields'],
-      gaps: ['GitHub release check', 'low-traffic update scheduling', 'data export/import manifest', 'encrypted migration verification'],
-      nextStep: 'Implement read-only GitHub release checking first, then add export/import manifests for local-json data.',
+      maturity: 'local-mock',
+      summary: 'Read-only GitHub release checks and local-json data portability exist; automated update, rollback, and encrypted migration are not production-ready.',
+      implemented: ['GitHub repo setting', 'read-only GitHub release check', 'migration policy fields', 'local-json export/import manifest'],
+      gaps: ['low-traffic update scheduling', 'encrypted migration verification', 'production backup/rollback'],
+      nextStep: 'Add a signed update planner and keep actual deployment/rollback manual until durable backup adapters exist.',
     }),
   ]
   const completed = capabilities.filter((item) => item.maturity === 'production').length
@@ -2103,6 +2222,17 @@ async function handleApi(req, res, url) {
     } catch (error) {
       sendJson(res, 400, { ok: false, error: error instanceof Error ? error.message : 'Invalid data import payload.' })
     }
+    return true
+  }
+
+  if (url.pathname === '/api/updates/check' && method === 'GET') {
+    const actor = getActor(data, req)
+    if (!canCheckUpdates(actor.tier)) {
+      sendJson(res, 403, { ok: false, error: 'Only host-admin/admin can check inscanvas update status.' })
+      return true
+    }
+    const update = await checkGithubReleaseUpdate(data.siteSettings)
+    sendJson(res, 200, { ok: true, update })
     return true
   }
 

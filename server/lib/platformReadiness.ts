@@ -166,19 +166,20 @@ export function makePlatformReadinessSnapshot(data: PublicServerData): PlatformR
       id: 'update-migration',
       domain: 'migration',
       title: 'update and migration',
-      maturity: 'missing',
-      summary: 'Settings fields describe update and migration intent, but no executable migration or GitHub update flow exists yet.',
+      maturity: 'local-mock',
+      summary: 'Read-only GitHub release checks and local-json data portability exist; automated update, rollback, and encrypted migration are not production-ready.',
       implemented: [
         'GitHub repo setting',
+        'read-only GitHub release check',
         'migration policy fields',
+        'local-json export/import manifest',
       ],
       gaps: [
-        'GitHub release check',
         'low-traffic update scheduling',
-        'data export/import manifest',
         'encrypted migration verification',
+        'production backup/rollback',
       ],
-      nextStep: 'Implement read-only GitHub release checking first, then add export/import manifests for local-json data.',
+      nextStep: 'Add a signed update planner and keep actual deployment/rollback manual until durable backup adapters exist.',
     }),
   ]
 
