@@ -38,6 +38,7 @@
 - `1.11.19` adds local/mock gallery review: host-admin/admin users can publish, reject, or restore submissions from the secondary Control Center, while public `/gallery` now shows only approved published works.
 - `1.11.20` adds local/mock gallery safety preflight: submissions store policy status, risk score, and reason codes; blocked entries cannot be published until the future safety-review adapter changes that verdict; content edits refresh the preflight and can move published entries back to pending review.
 - `1.11.21` promotes safety metadata to saved works: save/import/update/share/gallery paths share local preflight status, blocked works cannot create share links, and stale share links are disabled when edited content becomes blocked.
+- `1.11.22` closes stale public-exposure gaps: public share/gallery routes re-check work/link/entry safety state, gallery rechecks demote blocked published entries, and blocked works disappear from default public gallery APIs.
 - Frontend, server typecheck, build, service smoke tests, and desktop/mobile browser screenshots passed on 2026-06-06.
 
 ## Completion Matrix
@@ -62,7 +63,7 @@
 ### 2. Security
 - `in_progress` Encrypted provider keys for non-guest users: local AES-GCM custody exists, production KMS/key-vault adapter remains todo
 - `in_progress` IP audit, throttling, blocked IP store, manual admin block/unblock, and escalating lockouts on heavy routes
-- `in_progress` injection/leak prevention across UI and service routes; local/mock work safety preflight now protects gallery publishing and public share creation
+- `in_progress` injection/leak prevention across UI and service routes; local/mock work safety preflight now protects gallery publishing, public share creation, stale public share rendering, and public gallery listing
 - `in_progress` long/short disclaimer system
 - `in_progress` export/share comment injection with IP/time metadata
 - `in_progress` admin-only site/security controls are visible in Control Center; production key encryption and security review model remain deferred
@@ -126,6 +127,7 @@
 - `done` share links through `/api/works/:id/share`, with local/mock safety preflight blocking `blocked` works before public links are created
 - `done` public share route `/share/:slug` renders enabled share links and returns branded 404/410/paused fallback pages
 - `done` public gallery route `/gallery` renders a read-only standalone feed for approved published local/mock entries only
+- `done` public share/gallery routes reject stale enabled links or published entries when refreshed work safety becomes `blocked`
 - `done` local/mock gallery / 鉴赏厅 review status, safety preflight, tier quotas, lightweight masonry-feed presentation, and admin publish/reject/restore workflow
 - `done` Control Center includes the secondary gallery review queue; route-level public gallery remains separate and approval-gated
 - `in_progress` per-tier work and gallery limits
@@ -194,7 +196,8 @@
 - `1.11.19` validation must cover admin login, gallery submit, default `/api/gallery` hiding pending entries, admin `includeReview=true` queue access, publish/reject/restore review actions, work `galleryStatus` sync, disabled public `/gallery` hiding cards, enabled public `/gallery` showing only published works, and Fastify/lightweight parity.
 - `1.11.18` validation passed for admin-only redeem-code CRUD, non-admin list hiding, tier-upgrade session refresh, and Fastify/lightweight parity for redeem-code rewards.
 - `1.11.20` validation covers safe submission preflight, blocked submission preflight, admin safety recheck, publish blocking for `blocked`, content-update preflight refresh, publish success for `passed`/`needs-review`, audit parity, and Fastify/lightweight parity.
-- `1.11.21` validation must cover work-level safety metadata on save/import/update, public share blocking for `blocked`, stale share disabling after dangerous edits, Works Center safety display, and Fastify/lightweight parity.
+- `1.11.21` validation covers work-level safety metadata on save/import/update, public share blocking for `blocked`, stale share disabling after dangerous edits, Works Center safety display, and Fastify/lightweight parity.
+- `1.11.22` validation covers stale public exposure closure on both Fastify and `scripts/serve-vcanvas.mjs`: a previously public share/gallery item becomes non-public after a dangerous edit, link-only `blocked` share metadata hides the entry from default `/api/gallery`, admin `includeReview=true` shows blocked content demoted to `pending-review`, blocked share creation returns `409`, and `/api/gallery/:id/safety-review` also disables stale public shares.
 
 ### 10. Sign-in / Quota
 - `done` login/register/guest records are separated from daily check-in records through `SignInRecord.source`

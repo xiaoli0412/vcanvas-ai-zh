@@ -212,6 +212,11 @@
     - 保存、导入、更新、分享、提交鉴赏厅共用同一份本地策略状态
     - `blocked` 作品不能创建公开分享链接；已分享作品被编辑为 `blocked` 时会自动禁用旧链接
     - 作品中心以紧凑标签显示安全状态，不新增常驻画布控件
+  - 2026-06-08 公开暴露安全收口：
+    - `/share/:slug` 在渲染前重新检查 work/link 安全状态，旧 slug 即使残留 enabled 也不会继续公开 `blocked` 内容
+    - `/gallery` 与默认 `/api/gallery` 同步过滤 `blocked` work/entry，不只信任 `published` 状态
+    - `/api/gallery/:id/review` 与 `/api/gallery/:id/safety-review` 刷新出 `blocked` 时会禁用旧分享并把已公开条目退回 `pending-review`
+    - 作品中心只展示仍 enabled、未过期且未 blocked 的分享 slug
 
 ## 已验证
 - `npm run typecheck` 通过
@@ -238,6 +243,9 @@
   - `npm run build`
   - Fastify 与轻量服务公开路由烟测：保存 HTML、分享、`/share/:slug`、提交鉴赏厅、`/gallery`、`/api/gallery`
   - Playwright 截图：`/gallery` 桌面与移动、`/share/:slug` 桌面
+- 当前公开安全收口切片验证通过：
+  - Fastify 与轻量服务均验证：安全作品可分享和发布；危险编辑后旧 `/share/:slug` 不再返回 200；`/gallery` 与默认 `/api/gallery` 不再展示；管理员 `includeReview=true` 可见条目已退回 `pending-review`
+  - 追加验证：`blocked` 作品重新分享返回 `409`；显式 `/api/gallery/:id/safety-review` 也会关闭旧分享并退回公开条目
 - 当前字体 / 语言 / 简约主题切片已完成最终验证：
   - `npm run typecheck`
   - `npm run typecheck:server`
@@ -248,7 +256,7 @@
   - 浏览器截图：主应用、模式面板、模型快速切换、个人设置、控制中心、作品中心、公开 `/gallery` 的桌面与移动布局
 
 ## 当前工作树状态
-- 本轮计划提交信息：`feat: add gallery safety preflight`
+- 本轮计划提交信息：`fix: block stale public exposure for unsafe works`
 - 推送目标：`publish/main` 与 `publish/public-server`
 - 不推送 `origin`
 

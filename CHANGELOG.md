@@ -1,3 +1,11 @@
+## 1.11.22 - 2026-06-08
+
+### Fixes
+- Public share pages now re-check work and link safety state before rendering, so stale enabled slugs cannot expose a work after it becomes `blocked`.
+- Public gallery pages and default gallery API reads now filter out `blocked` work, link, or entry safety state, even if an old entry still says `published`.
+- Gallery review and safety-review routes now disable existing share links and demote published entries back to `pending-review` whenever a refreshed safety result is `blocked`.
+- Works Center no longer displays a disabled or blocked stale share slug as if it were still active.
+
 ## 1.11.21 - 2026-06-08
 
 ### Features

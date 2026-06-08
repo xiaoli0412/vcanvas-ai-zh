@@ -15,18 +15,28 @@ function isExpired(link: ShareLink) {
   return Boolean(link.expiresAt && Date.parse(link.expiresAt) <= Date.now())
 }
 
+function isBlockedSafety(input: WorkRecord | ShareLink | GalleryEntry | null | undefined) {
+  return input?.safetyReview?.status === 'blocked'
+}
+
+function isPublicShareSafe(work: WorkRecord | null | undefined, link: ShareLink | null | undefined) {
+  return Boolean(work && link && link.enabled && !isExpired(link) && !isBlockedSafety(work) && !isBlockedSafety(link) && work.exportMetadata?.safetyStatus !== 'blocked')
+}
+
 function findActiveShare(data: PublicServerData, slug: string) {
   const link = data.shareLinks.find((item) => item.slug === slug && item.enabled)
   if (!link || isExpired(link)) return { link, work: null, expired: Boolean(link && isExpired(link)) }
+  const work = data.works.find((item) => item.id === link.workId) || null
   return {
     link,
-    work: data.works.find((item) => item.id === link.workId) || null,
+    work: isPublicShareSafe(work, link) ? work : null,
     expired: false,
+    blocked: Boolean(work && !isPublicShareSafe(work, link)),
   }
 }
 
 function shareHref(link: ShareLink | undefined) {
-  if (!link || !link.enabled || isExpired(link)) return null
+  if (!link || !link.enabled || isExpired(link) || isBlockedSafety(link)) return null
   return `/share/${encodeURIComponent(link.slug)}`
 }
 
@@ -308,7 +318,11 @@ function renderGalleryPage(data: PublicServerData) {
       work: data.works.find((work) => work.id === entry.workId) || null,
       shareLink: data.shareLinks.find((link) => link.workId === entry.workId && link.enabled),
     }))
-    .filter((item): item is { entry: GalleryEntry; work: WorkRecord; shareLink: ShareLink | undefined } => Boolean(item.work))
+    .filter((item): item is { entry: GalleryEntry; work: WorkRecord; shareLink: ShareLink | undefined } => (
+      Boolean(item.work)
+      && !isBlockedSafety(item.entry)
+      && isPublicShareSafe(item.work, item.shareLink)
+    ))
 
   const cards = visibleEntries.map(({ entry, work, shareLink }) => {
     const href = shareHref(shareLink)
@@ -352,9 +366,12 @@ export async function registerPublicPageRoutes(app: FastifyInstance) {
     if (data.siteSettings.sharePolicy?.enabled === false) {
       return reply.code(403).type('text/html').send(renderStatusPage(403, '分享已暂停', '站点当前已暂停公开分享入口。'))
     }
-    const { work, expired } = findActiveShare(data, slug)
+    const { work, expired, blocked } = findActiveShare(data, slug)
     if (expired) {
       return reply.code(410).type('text/html').send(renderStatusPage(410, '分享已过期', '这个分享链接已经过期，请让作者重新生成分享链接。'))
+    }
+    if (blocked) {
+      return reply.code(410).type('text/html').send(renderStatusPage(410, '分享已关闭', '这个作品未通过公开安全检查，分享入口已关闭。'))
     }
     if (!work) {
       return reply.code(404).type('text/html').send(renderStatusPage(404, '没有找到分享作品', '这个分享链接不存在、已关闭，或对应作品已被删除。'))

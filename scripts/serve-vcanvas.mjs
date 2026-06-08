@@ -881,6 +881,14 @@ function isShareExpired(link) {
   return Boolean(link?.expiresAt && Date.parse(link.expiresAt) <= Date.now())
 }
 
+function isBlockedSafety(input) {
+  return input?.safetyReview?.status === 'blocked' || input?.exportMetadata?.safetyStatus === 'blocked'
+}
+
+function isPublicShareSafe(work, link) {
+  return Boolean(work && link && link.enabled && !isShareExpired(link) && !isBlockedSafety(work) && !isBlockedSafety(link))
+}
+
 function publicPageShell({ title, eyebrow = 'inscanvas', description = '', body, statusCode = 200 }) {
   return `<!doctype html>
 <html lang="zh-CN">
@@ -954,7 +962,7 @@ function renderGalleryPage(data) {
       work: data.works.find((work) => work.id === entry.workId) || null,
       shareLink: data.shareLinks.find((link) => link.workId === entry.workId && link.enabled),
     }))
-    .filter((item) => item.work)
+    .filter((item) => item.work && !isBlockedSafety(item.entry) && isPublicShareSafe(item.work, item.shareLink))
 
   const cards = items.map(({ entry, work, shareLink }) => {
     const href = shareLink && !isShareExpired(shareLink) ? `/share/${encodeURIComponent(shareLink.slug)}` : null
@@ -1002,6 +1010,10 @@ function handlePublicPages(req, res, url) {
       return true
     }
     const work = link ? data.works.find((item) => item.id === link.workId) : null
+    if (work && !isPublicShareSafe(work, link)) {
+      sendHtml(res, 410, renderPublicStatus(410, '分享已关闭', '这个作品未通过公开安全检查，分享入口已关闭。'), head)
+      return true
+    }
     if (!work) {
       sendHtml(res, 404, renderPublicStatus(404, '没有找到分享作品', '这个分享链接不存在、已关闭，或对应作品已被删除。'), head)
       return true
@@ -1055,6 +1067,52 @@ function buildGallerySafetyReview(work, checkedAt = new Date().toISOString()) {
     reasons,
     notes: status === 'passed' ? 'No local policy flags found.' : null,
   }
+}
+
+function applyBlockedWorkPublicSafety(data, workId, safetyReview) {
+  if (safetyReview.status !== 'blocked') return { disabledShareLinks: 0, demotedGallery: false, demotedGalleryEntries: 0 }
+  let disabledShareLinks = 0
+  data.shareLinks = data.shareLinks.map((link) => {
+    if (link.workId !== workId) return link
+    if (link.enabled) disabledShareLinks += 1
+    return { ...link, enabled: false, safetyReview }
+  })
+  const entries = data.galleryEntries.filter((item) => item.workId === workId)
+  let demotedGalleryEntries = 0
+  for (const entry of entries) {
+    entry.safetyReview = safetyReview
+    if (entry.status === 'published') {
+      entry.status = 'pending-review'
+      entry.reviewedAt = null
+      entry.reviewerId = null
+      entry.rejectionReason = null
+      demotedGalleryEntries += 1
+    }
+  }
+  const work = data.works.find((item) => item.id === workId)
+  if (work) {
+    work.safetyReview = safetyReview
+    work.exportMetadata = { ...work.exportMetadata, safetyStatus: safetyReview.status }
+    const entry = entries[0]
+    if (entry) work.galleryStatus = entry.status
+  }
+  return { disabledShareLinks, demotedGallery: demotedGalleryEntries > 0, demotedGalleryEntries }
+}
+
+function findSafePublicShare(data, work) {
+  if (!work || isBlockedSafety(work)) return null
+  return data.shareLinks.find((link) => (
+    link.workId === work.id
+    && link.enabled
+    && !isShareExpired(link)
+    && !isBlockedSafety(link)
+  )) || null
+}
+
+function isPublicGalleryEntry(data, entry) {
+  if (entry.status !== 'published' || isBlockedSafety(entry)) return false
+  const work = data.works.find((item) => item.id === entry.workId) || null
+  return Boolean(work && findSafePublicShare(data, work))
 }
 
 function dispatchSnapshot(data) {
@@ -2228,9 +2286,7 @@ async function handleApi(req, res, url) {
         data.works[index].safetyReview = buildGallerySafetyReview(data.works[index], now)
         data.works[index].exportMetadata = { ...data.works[index].exportMetadata, safetyStatus: data.works[index].safetyReview.status }
         if (data.works[index].safetyReview.status === 'blocked') {
-          data.shareLinks = data.shareLinks.map((link) => link.workId === id
-            ? { ...link, enabled: false, safetyReview: data.works[index].safetyReview }
-            : link)
+          applyBlockedWorkPublicSafety(data, id, data.works[index].safetyReview)
         }
         const galleryEntry = data.galleryEntries.find((entry) => entry.workId === id)
         if (galleryEntry) {
@@ -2277,8 +2333,8 @@ async function handleApi(req, res, url) {
     work.safetyReview = safetyReview
     work.exportMetadata = { ...work.exportMetadata, safetyStatus: safetyReview.status }
     if (safetyReview.status === 'blocked') {
-      data.shareLinks = data.shareLinks.map((link) => link.workId === id ? { ...link, enabled: false, safetyReview } : link)
-      withAudit(data, req, 'work.shareBlocked', actor.id, actor.tier, { workId: id, safetyReview })
+      const publicSafety = applyBlockedWorkPublicSafety(data, id, safetyReview)
+      withAudit(data, req, 'work.shareBlocked', actor.id, actor.tier, { workId: id, safetyReview, publicSafety })
       writeData(data)
       sendJson(res, 409, { ok: false, error: 'Work safety review blocked public sharing.', work, safetyReview })
       return true
@@ -2330,7 +2386,7 @@ async function handleApi(req, res, url) {
     const includeReview = url.searchParams.get('includeReview') === 'true' && canManageGallery(actor.tier)
     const includeOwn = url.searchParams.get('includeOwn') === 'true'
     const entries = data.galleryEntries
-      .filter((entry) => includeReview || entry.status === 'published' || (includeOwn && entry.ownerId === actor.id))
+      .filter((entry) => includeReview || (includeOwn && entry.ownerId === actor.id) || isPublicGalleryEntry(data, entry))
       .sort((a, b) => {
         const rank = { 'pending-review': 0, published: 1, rejected: 2 }
         return rank[a.status] - rank[b.status] || Date.parse(b.submittedAt) - Date.parse(a.submittedAt)
@@ -2367,8 +2423,9 @@ async function handleApi(req, res, url) {
       work.safetyReview = safetyReview
       work.exportMetadata = { ...work.exportMetadata, safetyStatus: safetyReview.status }
     }
+    const publicSafety = applyBlockedWorkPublicSafety(data, entry.workId, safetyReview)
     if (status === 'published' && safetyReview.status === 'blocked') {
-      withAudit(data, req, 'gallery.reviewBlocked', actor.id, actor.tier, { galleryEntryId: entry.id, workId: entry.workId, safetyReview })
+      withAudit(data, req, 'gallery.reviewBlocked', actor.id, actor.tier, { galleryEntryId: entry.id, workId: entry.workId, safetyReview, publicSafety })
       writeData(data)
       sendJson(res, 409, { ok: false, error: 'Gallery safety review blocked publishing.', entry, work, safetyReview })
       return true
@@ -2409,7 +2466,8 @@ async function handleApi(req, res, url) {
       work.safetyReview = safetyReview
       work.exportMetadata = { ...work.exportMetadata, safetyStatus: safetyReview.status }
     }
-    withAudit(data, req, 'gallery.safetyReview', actor.id, actor.tier, { galleryEntryId: entry.id, workId: entry.workId, safetyReview })
+    const publicSafety = applyBlockedWorkPublicSafety(data, entry.workId, safetyReview)
+    withAudit(data, req, 'gallery.safetyReview', actor.id, actor.tier, { galleryEntryId: entry.id, workId: entry.workId, safetyReview, publicSafety })
     writeData(data)
     sendJson(res, 200, { ok: true, entry, work, safetyReview })
     return true

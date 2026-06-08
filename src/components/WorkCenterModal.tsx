@@ -73,7 +73,14 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
   const importRef = useRef<HTMLInputElement | null>(null)
 
   const selectedWork = works.find((work) => work.id === selectedId) || works[0] || null
-  const selectedShare = selectedWork ? shareLinks.find((link) => link.workId === selectedWork.id) : null
+  const selectedShare = selectedWork
+    ? shareLinks.find((link) => (
+      link.workId === selectedWork.id
+      && link.enabled
+      && link.safetyReview?.status !== 'blocked'
+      && (!link.expiresAt || Date.parse(link.expiresAt) > Date.now())
+    ))
+    : null
   const selectedGalleryEntry = selectedWork ? galleryEntries.find((entry) => entry.workId === selectedWork.id) : null
   const selectedSafetyStatus = safetyStatus(selectedWork)
   const canSaveCurrentOutput = Boolean(lastHTML.trim())
@@ -349,7 +356,7 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
                   <p className="wcm-card-note">{selectedMeta}</p>
                   <div className="wcm-status-grid">
                     <span>{t('works.status.saved')}: {selectedWork.status}</span>
-                    <span>{t('works.status.share')}: {selectedShare?.slug || selectedWork.shareSlug || '-'}</span>
+                    <span>{t('works.status.share')}: {selectedShare?.slug || '-'}</span>
                     <span>{t('works.status.gallery')}: {selectedGalleryEntry?.status || selectedWork.galleryStatus || 'private'}</span>
                     <span className={`wcm-safety ${selectedSafetyStatus}`}>{t('works.status.safety')}: {t(`works.safety.${selectedSafetyStatus}`)}</span>
                   </div>
