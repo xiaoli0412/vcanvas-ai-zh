@@ -11,7 +11,6 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
 
 concurrency:
   group: pages
@@ -32,6 +31,8 @@ jobs:
 
       - name: Install dependencies
         shell: bash
+        env:
+          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
         run: |
           for attempt in 1 2 3; do
             npm ci && exit 0

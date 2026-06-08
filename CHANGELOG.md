@@ -1,3 +1,12 @@
+## 1.11.12 - 2026-06-08
+
+### Fixes
+- Scoped Electron mirror usage to dependency installation and Linux desktop packaging so macOS no longer redirects `dmg-builder` through the broken npmmirror path.
+- Restored the electron-builder binary mirror only for Linux packaging, where AppImage helper downloads were hitting GitHub `504` errors.
+
+### Notes
+- Windows packaging already passed on `1.11.11`, so this release keeps Windows on the default upstream packaging path.
+
 ## 1.11.11 - 2026-06-08
 
 ### Fixes
