@@ -108,20 +108,20 @@ export function makePlatformReadinessSnapshot(data: PublicServerData): PlatformR
       domain: 'works',
       title: 'works, sharing, and gallery',
       maturity: 'local-mock',
-      summary: 'Works can be saved, imported, shared, and submitted to the gallery; review and safety are still local/mock.',
+      summary: 'Works can be saved, imported, shared, submitted to the gallery, and reviewed by local/mock admins.',
       implemented: [
         'works CRUD and 10-work limit',
         'HTML import/export',
         'share links and /share/:slug',
         'Xiaohongshu-style /gallery feed shell',
+        'admin gallery review workflow',
       ],
       gaps: [
         'safety review model before publishing',
-        'admin gallery review workflow',
         'flow-map export',
         '24h task resume UI',
       ],
-      nextStep: 'Add a GalleryReviewService and make public publishing depend on safety-review state.',
+      nextStep: 'Attach a safety-review model and public share rendering hardening before production publishing.',
     }),
     status({
       id: 'notice-system',

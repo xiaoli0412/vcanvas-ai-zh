@@ -39,7 +39,7 @@
 - Site settings and notice payloads now preserve nested `sharePolicy`, `noticePolicy`, `updatePolicy`, and `migrationPolicy` defaults when old local JSON data is migrated or partially patched.
 - `scripts/serve-vcanvas.mjs` mirrors the Fastify delete semantics for works, including cleanup of share links and gallery entries, so the deployment server does not accumulate orphaned public metadata.
 - Public share pages now resolve enabled share links at `/share/:slug`; saved HTML is returned directly so imported static landing pages are not wrapped or broken, while missing/expired/paused links return branded fallback pages.
-- Public gallery front-desk pages now resolve at `/gallery` in both Fastify and `scripts/serve-vcanvas.mjs`, rendering pending/published local/mock entries as a read-only standalone page in the simple deep-blue inscanvas direction.
+- Public gallery front-desk pages now resolve at `/gallery` in both Fastify and `scripts/serve-vcanvas.mjs`, rendering only approved `published` local/mock entries when `publicGalleryEnabled` is on, otherwise showing only the paused notice.
 - `1.10.11` language/theme baseline aligns the app and public pages around default Chinese, always-available Header language switching, HarmonyOS Sans system-first body/control typography, and a deeper blue with slight purple accent palette (`#080d1c`, `#0b1024`, `#111831`).
 - `ModelQuickSwitch` and `PersonalSettingsModal` are now wired to the shared i18n dictionary; public `/gallery` and `/share/:slug` fallback pages use Chinese copy in both Fastify and the lightweight deployment server while leaving brand/provider/API/model identifiers unchanged.
 - `1.10.11` typography now embeds local OFL fonts: Noto Serif SC / Source Han Serif style for high-quality Songti display titles and Fusion Pixel 10px Monospaced SC for short playful titles/brand accents, while dense controls keep HarmonyOS/system sans fallbacks. Font notices are tracked in `docs/third-party-fonts.md`.
@@ -65,14 +65,15 @@
 - `1.11.16` keeps embedded typography runtime-safe by loading the SPA font styles from the Vite base URL resolved against `document.baseURI`, so `/fonts/*` works on normal HTTP hosting, GitHub Pages subpaths, and Electron `file://` without Vite build-time font warnings.
 - `1.11.17` turns local/mock quota windows into real daily behavior: ledgers refresh at the next server-local midnight, daily check-in is idempotent, logged-in metered calls consume base quota, guest IP caps use a natural-day window, and disallowed server-managed heavy requests are downgraded before workflow records are saved.
 - `1.11.18` adds local/mock redeem-code management to both Fastify and `scripts/serve-vcanvas.mjs`: admins can create/disable generated quota goods, ordinary users only redeem them, tier-upgrade rewards refresh active sessions, and the secondary Control Center Data area exposes the flow without adding canvas chrome.
+- `1.11.19` adds local/mock gallery review parity to both Fastify and `scripts/serve-vcanvas.mjs`: admins can publish, reject, or restore submissions through `/api/gallery/:id/review`, Control Center shows the review queue in a secondary modal, and public `/gallery` no longer exposes pending/rejected items.
 
 ## 2026-06-06 Verification Snapshot
 - `npm run typecheck`
 - `npm run typecheck:server`
 - `node --check scripts/serve-vcanvas.mjs`
 - `npm run build`
-- Fastify smoke test: `/health`, `/_vcanvas_proxy`, `/`, `/share/:slug`, `/gallery`, `/api/session/register|login|me`, `/api/users`, `/api/security/blocked-ips`, `/api/providers`, `/api/settings/site`, `/api/notices`, `/api/quotas/sign-in|redeem`, `/api/works` CRUD/share/gallery-submit/delete, `/api/gallery`, `/api/workflows/generate|refine|plan`, `/api/remix/fetch`, `/api/ops/status`, `/api/maintenance/cleanup`, `/api/data/export|import`, `/api/updates/check`.
-- Lightweight `scripts/serve-vcanvas.mjs` smoke test: same endpoint set as Fastify, including public `/share/:slug` and `/gallery`, with post-delete counts confirming no orphaned share/gallery records and parity for `/api/users`, `/api/security/blocked-ips`, `/api/data/export|import`, and `/api/updates/check`.
+- Fastify smoke test: `/health`, `/_vcanvas_proxy`, `/`, `/share/:slug`, `/gallery`, `/api/session/register|login|me`, `/api/users`, `/api/security/blocked-ips`, `/api/providers`, `/api/settings/site`, `/api/notices`, `/api/quotas/sign-in|redeem`, `/api/works` CRUD/share/gallery-submit/delete, `/api/gallery`, `/api/gallery/:id/review`, `/api/workflows/generate|refine|plan`, `/api/remix/fetch`, `/api/ops/status`, `/api/maintenance/cleanup`, `/api/data/export|import`, `/api/updates/check`.
+- Lightweight `scripts/serve-vcanvas.mjs` smoke test: same endpoint set as Fastify, including public `/share/:slug` and approval-gated `/gallery`, with post-delete counts confirming no orphaned share/gallery records and parity for `/api/users`, `/api/security/blocked-ips`, `/api/data/export|import`, `/api/updates/check`, and `/api/gallery/:id/review`.
 - Follow-up smoke test: admin user patch, forced warning notice payload, work-limit 409, delete-for-space, and re-save passed on both Fastify and lightweight services.
 - Security follow-up smoke test: `/api/security/blocked-ips` list/block/self-block rejection/blocked request rejection/unblock passed on both Fastify and lightweight services.
 - Browser/CDP screenshots reviewed at desktop `1440x960` and mobile `390x844`; opening the Control Center leaves `.workspace` dimensions unchanged (`1440x920` desktop, `390x804` mobile).
@@ -90,6 +91,7 @@
 - `1.11.16` validation passed for embedded font loading: `npm run build`, `npm run build:gh`, `npm run build:desktop`, `npm run dist:desktop:ci`, and lightweight `/fonts/*` static requests all succeeded without the previous unresolved font stylesheet warnings.
 - `1.11.17` validation adds quota/traffic smoke coverage for Fastify and `scripts/serve-vcanvas.mjs`: daily check-in idempotence, base quota exhaustion, server-managed downgrade, guest natural-day rate metadata, and remix fetch traffic-guard parity.
 - `1.11.18` validation adds redeem-code smoke coverage for Fastify and `scripts/serve-vcanvas.mjs`: admin create/list/disable, non-admin management rejection and list hiding, base/hosted/premium rewards, and tier-upgrade session refresh.
+- `1.11.19` validation adds gallery-review smoke coverage for Fastify and `scripts/serve-vcanvas.mjs`: submitted works remain hidden from default public gallery data, admins can inspect the review queue with `includeReview=true`, publish/reject/restore actions audit and sync work status, disabled public gallery pages show only the paused notice, and enabled public `/gallery` only displays published works.
 
 ## Deferred Beyond This Commit
 - Real auth on top of latest `newapi`, production key encryption, payment-grade quotas/redeem-code generation, PostgreSQL/Redis persistence, and external `newapi/subapi/octopus` bridges.

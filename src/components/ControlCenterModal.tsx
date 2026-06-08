@@ -212,7 +212,7 @@ export function ControlCenterModal({
       fetch('/api/quotas/sign-in', { headers: mergeSessionHeaders() }).then((response) => readJson<{ ledger: QuotaLedger | null; canSignIn?: boolean; nextResetAt?: string | null }>(response)),
       fetch('/api/quotas/redeem', { headers: mergeSessionHeaders() }).then((response) => readJson<{ ledger: QuotaLedger | null }>(response)),
       fetch('/api/ops/status', { headers: mergeSessionHeaders() }).then((response) => readJson<{ snapshot: OpsSnapshot }>(response)),
-      fetch('/api/gallery').then((response) => readJson<{ entries?: GalleryEntryWithWork[]; items?: GalleryEntryWithWork[] }>(response)),
+      fetch('/api/gallery?includeReview=true', { headers: mergeSessionHeaders() }).then((response) => readJson<{ entries?: GalleryEntryWithWork[]; items?: GalleryEntryWithWork[] }>(response)),
       fetch('/api/platform/readiness').then((response) => readJson<PlatformReadinessSnapshot>(response)),
     ])
 
@@ -430,6 +430,18 @@ export function ControlCenterModal({
       body: '{}',
     }).then((response) => readJson(response))
     return t('control.notice.cleanup')
+  })
+
+  const reviewGallery = (entry: GalleryEntryWithWork, status: GalleryEntry['status']) => run(async () => {
+    await fetch(`/api/gallery/${encodeURIComponent(entry.id)}/review`, {
+      method: 'PATCH',
+      headers: mergeSessionHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        status,
+        rejectionReason: status === 'rejected' ? t('control.gallery.defaultRejectReason') : null,
+      }),
+    }).then((response) => readJson(response))
+    return t('control.notice.galleryReviewed')
   })
 
   const exportSiteData = () => run(async () => {
@@ -1012,9 +1024,34 @@ export function ControlCenterModal({
                   {gallery.length === 0 && <div className="ccm-empty">{t('works.galleryEmpty')}</div>}
                   {gallery.map((entry) => (
                     <article key={entry.id} className="ccm-gallery-item">
-                      <strong>{entry.work?.title || entry.workId}</strong>
-                      <span>{entry.status} · {formatDate(entry.submittedAt)}</span>
-                      <p>{entry.work?.description || t('control.gallery.pending')}</p>
+                      <div className="ccm-gallery-main">
+                        <strong>{entry.work?.title || entry.workId}</strong>
+                        <span>{t(`control.gallery.status.${entry.status}`)} · {formatDate(entry.submittedAt)}</span>
+                        <p>{entry.work?.description || t('control.gallery.pending')}</p>
+                        {entry.rejectionReason && <small>{t('control.gallery.rejectionReason')}: {entry.rejectionReason}</small>}
+                      </div>
+                      <div className="ccm-gallery-actions">
+                        <span className={`ccm-pill ${entry.status === 'published' ? 'on' : ''}`}>{t(`control.gallery.status.${entry.status}`)}</span>
+                        {admin && (
+                          <>
+                            {entry.status !== 'published' && (
+                              <button className="btn btn-secondary" onClick={() => reviewGallery(entry, 'published')} disabled={busy}>
+                                {t('control.gallery.publish')}
+                              </button>
+                            )}
+                            {entry.status !== 'rejected' && (
+                              <button className="btn btn-ghost danger" onClick={() => reviewGallery(entry, 'rejected')} disabled={busy}>
+                                {t('control.gallery.reject')}
+                              </button>
+                            )}
+                            {entry.status !== 'pending-review' && (
+                              <button className="btn btn-ghost" onClick={() => reviewGallery(entry, 'pending-review')} disabled={busy}>
+                                {t('control.gallery.restore')}
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </article>
                   ))}
                 </div>

@@ -273,7 +273,7 @@ export interface WorkRecord {
   status: 'draft' | 'saved' | 'published' | 'archived'
   html?: string
   shareSlug?: string | null
-  galleryStatus?: 'private' | 'pending-review' | 'published' | 'rejected'
+  galleryStatus?: GalleryPublicationStatus
   exportMetadata?: {
     exportedAt?: string | null
     includesFlowMap?: boolean
@@ -296,11 +296,15 @@ export interface ShareLink {
   disclaimerComment?: string
 }
 
+export type GalleryReviewStatus = 'pending-review' | 'published' | 'rejected'
+
+export type GalleryPublicationStatus = 'private' | GalleryReviewStatus
+
 export interface GalleryEntry {
   id: string
   workId: string
   ownerId: string
-  status: 'pending-review' | 'published' | 'rejected'
+  status: GalleryReviewStatus
   submittedAt: string
   reviewedAt?: string | null
   reviewerId?: string | null

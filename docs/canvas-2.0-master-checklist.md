@@ -35,6 +35,7 @@
 - `1.11.16` tightens embedded display font loading: the SPA now resolves Noto Serif SC and Fusion Pixel styles from the Vite base URL against `document.baseURI`, preserving web, GitHub Pages, and Electron `file://` compatibility while removing desktop-build font resolution noise.
 - `1.11.17` advances the quota foundation: local/mock ledgers now refresh on server-local natural days, daily check-in is idempotent, logged-in metered calls consume base quota, guest caps use an IP natural-day window, and lightweight `/api/remix/fetch` no longer bypasses the traffic guard.
 - `1.11.18` adds local/mock redeem-code management: host-admin/admin users can create and disable quota goods for premium credits, base calls, hosted runs, and tier upgrades, while ordinary users only redeem codes from the secondary Control Center wallet.
+- `1.11.19` adds local/mock gallery review: host-admin/admin users can publish, reject, or restore submissions from the secondary Control Center, while public `/gallery` now shows only approved published works.
 - Frontend, server typecheck, build, service smoke tests, and desktop/mobile browser screenshots passed on 2026-06-06.
 
 ## Completion Matrix
@@ -122,9 +123,9 @@
 - `done` Works Center shows an in-modal deletion chooser when the work limit is reached, so users can free space without leaving the canvas
 - `done` share links through `/api/works/:id/share`
 - `done` public share route `/share/:slug` renders enabled share links and returns branded 404/410/paused fallback pages
-- `done` public gallery route `/gallery` renders a read-only standalone front desk for pending/published local/mock entries
-- `in_progress` gallery / 鉴赏厅 with mock review status, tier quotas, and lightweight masonry-feed presentation
-- `done` Control Center v1 includes a read-only gallery front desk preview; route-level public gallery now exists separately
+- `done` public gallery route `/gallery` renders a read-only standalone feed for approved published local/mock entries only
+- `done` local/mock gallery / 鉴赏厅 review status, tier quotas, lightweight masonry-feed presentation, and admin publish/reject/restore workflow
+- `done` Control Center includes the secondary gallery review queue; route-level public gallery remains separate and approval-gated
 - `in_progress` per-tier work and gallery limits
 
 ### 8. Frontend / Branding
@@ -138,7 +139,7 @@
 ### 9. Backend Logic
 - `done` public-server skeleton and first API placeholders
 - `done` phase-1 session, providers, notices, settings, works, assets, remix, and workflow route contracts
-- `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve `/health`, `/_vcanvas_proxy`, `/api/session/*`, `/api/providers`, `/api/notices`, `/api/settings/*`, `/api/works/*`, `/api/gallery`, `/api/quotas/*`, `/api/ops/status`, `/api/maintenance/cleanup`, `/api/remix/fetch`, and workflow enqueue routes
+- `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve `/health`, `/_vcanvas_proxy`, `/api/session/*`, `/api/providers`, `/api/notices`, `/api/settings/*`, `/api/works/*`, `/api/gallery`, `/api/gallery/:id/review`, `/api/quotas/*`, `/api/ops/status`, `/api/maintenance/cleanup`, `/api/remix/fetch`, and workflow enqueue routes
 - `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve `/api/users` with admin-only local/mock user management and masked provider-key summaries
 - `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve `/api/security/blocked-ips` with admin-only list/block/unblock parity
 - `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve public HTML routes `/share/:slug` and `/gallery`
@@ -188,6 +189,7 @@
 - `1.11.15` GitHub Actions validation passed for `publish/main` Pages, `publish/main` Desktop, and `v1.11.15` tag Desktop release; release assets include Windows setup, macOS arm64 DMG, Linux AppImage/deb, blockmaps, and latest YAML metadata.
 - `1.11.16` validation passed for embedded font stylesheet loading: normal build, GitHub Pages build, desktop build, full Windows desktop package, and lightweight static serving all kept `/fonts/*` available without unresolved `./fonts/...` warnings.
 - `1.11.17` validation must cover natural-day quota refresh, same-day sign-in idempotence, daily base quota exhaustion, requested `server-managed` downgrade when hosting is not allowed, and lightweight remix fetch passing through the traffic guard.
+- `1.11.19` validation must cover admin login, gallery submit, default `/api/gallery` hiding pending entries, admin `includeReview=true` queue access, publish/reject/restore review actions, work `galleryStatus` sync, disabled public `/gallery` hiding cards, enabled public `/gallery` showing only published works, and Fastify/lightweight parity.
 - `1.11.18` validation passed for admin-only redeem-code CRUD, non-admin list hiding, tier-upgrade session refresh, and Fastify/lightweight parity for redeem-code rewards.
 
 ### 10. Sign-in / Quota

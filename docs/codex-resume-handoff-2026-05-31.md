@@ -136,7 +136,7 @@
       - 个人：资料字段、签到、兑换入口
       - 站点：站点名称、公网 URL、安全模式、GitHub repo、访客/注册/鉴赏厅/强警告开关
       - 提示：announcement / realtime / warning 创建与只读列表
-      - 鉴赏厅：pending/published 作品只读前台
+      - 鉴赏厅：审核队列在控制中心，公开前台只展示已发布作品
       - 运维：本地 JSON 状态、托管策略、手动 cleanup
     - 扩展 `SiteSettings`、`NoticeMessage`、`ProviderChannel`、`QuotaLedger` 的补充细则字段：
       - share / notice / update / migration policy
@@ -196,6 +196,11 @@
     - `/gallery` 进一步收口成轻量瀑布流：优先读取作品快照封面，缺失时使用简洁渐变占位，减少副标题和长说明
     - 新增 `/api/dispatch/status` 与 `/api/dispatch/route` planned-only 调度口，保留后续多服务器均衡负载接入点
     - 参考 New API `v1.0.0-rc.10` 的紧凑管理台方向，只吸收信息密度、徽标、卡片和移动端可读性原则，不复制代码或素材
+  - 2026-06-08 鉴赏厅审核推进：
+    - 新增 Fastify 与轻量服务 `/api/gallery/:id/review`
+    - host-admin/admin 可在控制中心二级面板发布、退回或恢复待审提交
+    - `/api/gallery` 默认只返回已发布作品，`includeReview=true` 仅管理员可看全量审核队列，`includeOwn=true` 仅用于作品中心查看自己的待审状态
+    - `/gallery` 公开页只展示已发布作品，不再泄漏待审或退回作品
 
 ## 已验证
 - `npm run typecheck` 通过
@@ -232,8 +237,8 @@
   - 浏览器截图：主应用、模式面板、模型快速切换、个人设置、控制中心、作品中心、公开 `/gallery` 的桌面与移动布局
 
 ## 当前工作树状态
-- 本轮计划提交信息：`feat: refine language theme and typography`
-- 推送目标：`publish/codex/canvas-lab-public-server-v1.10.9`
+- 本轮计划提交信息：`feat: add gallery review workflow`
+- 推送目标：`publish/main` 与 `publish/public-server`
 - 不推送 `origin`
 
 ## 下次启动后建议直接继续的顺序

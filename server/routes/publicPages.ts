@@ -302,7 +302,7 @@ function latestPreview(work: WorkRecord) {
 
 function renderGalleryPage(data: PublicServerData) {
   const visibleEntries = data.galleryEntries
-    .filter((entry) => entry.status === 'published' || entry.status === 'pending-review')
+    .filter((entry) => entry.status === 'published')
     .map((entry) => ({
       entry,
       work: data.works.find((work) => work.id === entry.workId) || null,
@@ -334,11 +334,14 @@ function renderGalleryPage(data: PublicServerData) {
   const disabledNotice = data.siteSettings.publicGalleryEnabled === false
     ? `<div class="notice">公开展示暂未开放。</div>`
     : ''
+  const galleryBody = data.siteSettings.publicGalleryEnabled === false
+    ? disabledNotice
+    : (cards ? `<section class="gallery-feed">${cards}</section>` : '<div class="empty">还没有作品。</div>')
 
   return publicPageShell({
     title: '鉴赏厅',
     eyebrow: 'inscanvas feed',
-    body: `${disabledNotice}${cards ? `<section class="gallery-feed">${cards}</section>` : '<div class="empty">还没有作品。</div>'}`,
+    body: galleryBody,
   })
 }
 

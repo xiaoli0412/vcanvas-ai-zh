@@ -386,6 +386,7 @@ function isMeteredRoute(method: string, route: string) {
     || route === '/api/assets/import'
     || route === '/api/works'
     || /^\/api\/works\/[^/]+\/(share|gallery-submit)$/.test(route)
+    || /^\/api\/gallery\/[^/]+\/review$/.test(route)
 }
 
 function rateLimitWindow(policy: { windowSeconds: number; windowMode?: 'rolling' | 'natural-day' }, now: Date) {

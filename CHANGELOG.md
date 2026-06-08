@@ -1,3 +1,13 @@
+## 1.11.19 - 2026-06-08
+
+### Features
+- Added an admin-only local/mock gallery review workflow with publish, reject, and restore-to-pending actions in the secondary Control Center Gallery area.
+- Added `/api/gallery/:id/review` parity to both Fastify and the lightweight deployment server, with audit events and matching work `galleryStatus` updates.
+
+### Fixes
+- Public `/gallery` now renders only approved `published` works; pending and rejected submissions stay visible only in owner/admin review contexts.
+- Works Center now fetches the current user's own gallery queue explicitly, so personal pending/rejected status remains visible without leaking into the public feed.
+
 ## 1.11.18 - 2026-06-08
 
 ### Features

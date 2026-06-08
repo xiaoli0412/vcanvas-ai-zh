@@ -571,6 +571,10 @@ function canManageModels(tier) {
   return permissionsForTier(tier).includes('manage-models')
 }
 
+function canManageGallery(tier) {
+  return permissionsForTier(tier).includes('manage-gallery')
+}
+
 function resolveOwnedTargetId(actor, requestedOwnerId) {
   const ownerId = typeof requestedOwnerId === 'string' ? requestedOwnerId.trim() : ''
   if (ownerId && canManageUsers(actor.tier)) {
@@ -944,7 +948,7 @@ function renderShareFallback(work) {
 
 function renderGalleryPage(data) {
   const items = data.galleryEntries
-    .filter((entry) => entry.status === 'published' || entry.status === 'pending-review')
+    .filter((entry) => entry.status === 'published')
     .map((entry) => ({
       entry,
       work: data.works.find((work) => work.id === entry.workId) || null,
@@ -971,11 +975,14 @@ function renderGalleryPage(data) {
   const disabledNotice = data.siteSettings.publicGalleryEnabled === false
     ? '<div class="notice">公开展示暂未开放。</div>'
     : ''
+  const galleryBody = data.siteSettings.publicGalleryEnabled === false
+    ? disabledNotice
+    : (cards ? `<section class="gallery-feed">${cards}</section>` : '<div class="empty">还没有作品。</div>')
 
   return publicPageShell({
     title: '鉴赏厅',
     eyebrow: 'inscanvas feed',
-    body: `${disabledNotice}${cards ? `<section class="gallery-feed">${cards}</section>` : '<div class="empty">还没有作品。</div>'}`,
+    body: galleryBody,
   })
 }
 
@@ -1107,10 +1114,10 @@ function platformReadinessSnapshot(data) {
       domain: 'works',
       title: 'works, sharing, and gallery',
       maturity: 'local-mock',
-      summary: 'Works can be saved, imported, shared, and submitted to the gallery; review and safety are still local/mock.',
-      implemented: ['works CRUD and 10-work limit', 'HTML import/export', 'share links and /share/:slug', 'Xiaohongshu-style /gallery feed shell'],
-      gaps: ['safety review model before publishing', 'admin gallery review workflow', 'flow-map export', '24h task resume UI'],
-      nextStep: 'Add a GalleryReviewService and make public publishing depend on safety-review state.',
+      summary: 'Works can be saved, imported, shared, submitted to the gallery, and reviewed by local/mock admins.',
+      implemented: ['works CRUD and 10-work limit', 'HTML import/export', 'share links and /share/:slug', 'Xiaohongshu-style /gallery feed shell', 'admin gallery review workflow'],
+      gaps: ['safety review model before publishing', 'flow-map export', '24h task resume UI'],
+      nextStep: 'Attach a safety-review model and public share rendering hardening before production publishing.',
     }),
     capabilityStatus({
       id: 'notice-system',
@@ -1421,6 +1428,7 @@ function isMeteredRoute(method, route) {
     || route === '/api/assets/import'
     || route === '/api/works'
     || /^\/api\/works\/[^/]+\/(share|gallery-submit)$/.test(route)
+    || /^\/api\/gallery\/[^/]+\/review$/.test(route)
 }
 
 function rateLimitWindow(policy, now = new Date()) {
@@ -2246,10 +2254,54 @@ async function handleApi(req, res, url) {
   }
 
   if (url.pathname === '/api/gallery' && method === 'GET') {
+    const actor = getActor(data, req)
+    const includeReview = url.searchParams.get('includeReview') === 'true' && canManageGallery(actor.tier)
+    const includeOwn = url.searchParams.get('includeOwn') === 'true'
     const entries = data.galleryEntries
-      .filter((entry) => entry.status === 'published' || entry.status === 'pending-review')
+      .filter((entry) => includeReview || entry.status === 'published' || (includeOwn && entry.ownerId === actor.id))
+      .sort((a, b) => {
+        const rank = { 'pending-review': 0, published: 1, rejected: 2 }
+        return rank[a.status] - rank[b.status] || Date.parse(b.submittedAt) - Date.parse(a.submittedAt)
+      })
       .map((entry) => ({ ...entry, work: data.works.find((work) => work.id === entry.workId) || null }))
     sendJson(res, 200, { ok: true, enabled: data.siteSettings.publicGalleryEnabled, entries, items: entries })
+    return true
+  }
+
+  const galleryReviewMatch = url.pathname.match(/^\/api\/gallery\/([^/]+)\/review$/)
+  if (galleryReviewMatch && method === 'PATCH') {
+    const actor = getActor(data, req)
+    if (!canManageGallery(actor.tier)) {
+      sendJson(res, 403, { ok: false, error: 'Admin permission required for gallery review.' })
+      return true
+    }
+    const id = decodeURIComponent(galleryReviewMatch[1])
+    const entry = data.galleryEntries.find((item) => item.id === id)
+    if (!entry) {
+      sendJson(res, 404, { ok: false, error: 'Gallery entry not found.' })
+      return true
+    }
+    const body = await readJsonBody(req)
+    const status = ['published', 'rejected', 'pending-review'].includes(body.status) ? body.status : null
+    if (!status) {
+      sendJson(res, 400, { ok: false, error: 'Invalid gallery review status.' })
+      return true
+    }
+    const now = new Date().toISOString()
+    entry.status = status
+    entry.reviewedAt = now
+    entry.reviewerId = actor.id
+    entry.rejectionReason = status === 'rejected'
+      ? String(body.rejectionReason || 'Rejected by gallery reviewer.').trim().slice(0, 160)
+      : null
+    const work = data.works.find((item) => item.id === entry.workId) || null
+    if (work) {
+      work.galleryStatus = status
+      work.updatedAt = now
+    }
+    withAudit(data, req, 'gallery.review', actor.id, actor.tier, { galleryEntryId: entry.id, workId: entry.workId, status })
+    writeData(data)
+    sendJson(res, 200, { ok: true, entry, work })
     return true
   }
 

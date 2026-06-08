@@ -85,7 +85,7 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
         limit: number
         shareLinks: ShareLink[]
       }>(response)),
-      fetch('/api/gallery').then((response) => readJson<{
+      fetch('/api/gallery?includeOwn=true', { headers: mergeSessionHeaders() }).then((response) => readJson<{
         entries?: GalleryEntryWithWork[]
         items?: GalleryEntryWithWork[]
       }>(response)),
