@@ -1,3 +1,11 @@
+## 1.11.13 - 2026-06-08
+
+### Fixes
+- Added the electron-builder binary mirror to Windows desktop packaging only, after the `1.11.12` main run passed Linux/macOS but Windows hit a GitHub `504` while downloading `nsis-resources`.
+
+### Notes
+- macOS remains on the default upstream helper path to avoid the `dmg-builder` mirror redirect that caused earlier failures.
+
 ## 1.11.12 - 2026-06-08
 
 ### Fixes
