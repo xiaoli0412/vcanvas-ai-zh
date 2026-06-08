@@ -61,6 +61,8 @@
 - `1.11.8` adds local-json-v1 data portability to Fastify and `scripts/serve-vcanvas.mjs`: host-admin/admin can fetch manifest counts, download a full local JSON bundle, dry-run pasted imports, and apply imports only after the configured confirmation phrase. Control Center exposes this through an admin-only Data tab without adding persistent canvas chrome.
 - `1.11.9` adds read-only GitHub latest Release checks to Fastify and `scripts/serve-vcanvas.mjs`: host-admin/admin can inspect current/latest version status from the Control Center Data tab, and deployments can provide `GITHUB_TOKEN` or `GH_TOKEN` to avoid anonymous GitHub API rate limits. This is notice-only, not auto-update or rollback automation.
 - `1.11.10` hardens release workflows after repeated Linux tag-build `npm ci` failures caused by Electron download `HTTP 504`: desktop and Pages workflows now use Electron mirror variables and retry dependency installation before failing.
+- `1.11.15` completes release workflow hardening for the owner-cadence branch: Electron runtime packages resolve through `electronDownload.mirror`, Linux/Windows helper binaries stay scoped to their mirror, and macOS pre-warms the `dmg-builder` cache before DMG packaging.
+- `1.11.16` keeps embedded typography runtime-safe by loading the SPA font styles from the Vite base URL resolved against `document.baseURI`, so `/fonts/*` works on normal HTTP hosting, GitHub Pages subpaths, and Electron `file://` without Vite build-time font warnings.
 
 ## 2026-06-06 Verification Snapshot
 - `npm run typecheck`
@@ -82,6 +84,8 @@
 
 ## 2026-06-08 Verification Snapshot
 - `1.11.9` validation adds `/api/updates/check` smoke coverage for Fastify and `scripts/serve-vcanvas.mjs`: host-admin login, authenticated GitHub latest-release lookup, current package version `1.11.9`, latest remote release `v1.11.8` before publishing, trailing-slash repo URL normalization, and Control Center Data tab screenshots at `1440x960` / `390x844` with no horizontal overflow.
+- `1.11.15` GitHub Actions validation passed for `main` Pages, `main` Desktop, and tag-triggered Desktop release publishing.
+- `1.11.16` validation passed for embedded font loading: `npm run build`, `npm run build:gh`, `npm run build:desktop`, `npm run dist:desktop:ci`, and lightweight `/fonts/*` static requests all succeeded without the previous unresolved font stylesheet warnings.
 
 ## Deferred Beyond This Commit
 - Real auth on top of latest `newapi`, production key encryption, payment-grade quotas, PostgreSQL/Redis persistence, and external `newapi/subapi/octopus` bridges.

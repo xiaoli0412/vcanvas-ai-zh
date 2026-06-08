@@ -1,3 +1,9 @@
+## 1.11.16 - 2026-06-08
+
+### Fixes
+- Loaded embedded display font styles at runtime from the Vite base URL resolved against `document.baseURI`, keeping Noto Serif SC and Fusion Pixel available on web, GitHub Pages, and Electron `file://` builds.
+- Removed the desktop-build font stylesheet resolution warning without changing the existing public `/fonts/*` asset layout.
+
 ## 1.11.15 - 2026-06-08
 
 ### Fixes

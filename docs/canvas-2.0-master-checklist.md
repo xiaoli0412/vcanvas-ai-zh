@@ -31,6 +31,8 @@
 - `1.11.8` adds admin-only local JSON data portability v1: `/api/data/export|import` work in both Fastify and the lightweight deployment service, Control Center exposes a secondary Data tab, imports dry-run by default, and applied imports require an explicit confirmation phrase.
 - `1.11.9` adds admin-only read-only GitHub Release checks: `/api/updates/check` works in both Fastify and the lightweight deployment service, optionally uses `GITHUB_TOKEN`/`GH_TOKEN`, and Control Center shows current/latest version status inside the existing Data tab.
 - `1.11.10` hardens GitHub Actions release builds after a tag-only Linux Electron download `HTTP 504`: desktop and Pages workflows now use Electron mirror env vars plus retrying `npm ci`.
+- `1.11.15` completes the desktop CI hardening loop: Electron runtime downloads use `electronDownload.mirror`, Linux/Windows helper binaries use scoped mirrors, macOS pre-warms the `dmg-builder` helper cache, and the `v1.11.15` tag release uploaded Windows/macOS/Linux artifacts successfully.
+- `1.11.16` tightens embedded display font loading: the SPA now resolves Noto Serif SC and Fusion Pixel styles from the Vite base URL against `document.baseURI`, preserving web, GitHub Pages, and Electron `file://` compatibility while removing desktop-build font resolution noise.
 - Frontend, server typecheck, build, service smoke tests, and desktop/mobile browser screenshots passed on 2026-06-06.
 
 ## Completion Matrix
@@ -180,6 +182,8 @@
 - Browser review must confirm the new Control Center Data tab stays inside the secondary modal and does not change `.workspace` dimensions.
 - `1.11.9` adds `/api/updates/check` to the required Fastify and lightweight smoke set. Validation must cover host-admin login, current package version reporting, latest GitHub Release lookup, and graceful `source: error` fallback when anonymous GitHub API rate limits are hit.
 - `1.11.9` validation passed on both Fastify and lightweight services with authenticated GitHub API lookup: current version `1.11.9`, latest release `v1.11.8`, comparison `older` before publishing this release. Browser screenshots confirmed Control Center Data tab remains a secondary modal with no horizontal overflow at `1440x960` and `390x844`; trailing-slash GitHub URLs such as `https://github.com/octocat/Hello-World/` normalize without falling back to the default repo.
+- `1.11.15` GitHub Actions validation passed for `publish/main` Pages, `publish/main` Desktop, and `v1.11.15` tag Desktop release; release assets include Windows setup, macOS arm64 DMG, Linux AppImage/deb, blockmaps, and latest YAML metadata.
+- `1.11.16` validation passed for embedded font stylesheet loading: normal build, GitHub Pages build, desktop build, full Windows desktop package, and lightweight static serving all kept `/fonts/*` available without unresolved `./fonts/...` warnings.
 
 ### 10. Sign-in / Quota
 - `in_progress` login-as-signin flow through local/mock records
