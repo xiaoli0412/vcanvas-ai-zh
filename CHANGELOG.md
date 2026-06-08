@@ -1,3 +1,14 @@
+## 1.11.20 - 2026-06-08
+
+### Features
+- Added local/mock gallery safety preflight records with `passed`, `needs-review`, and `blocked` states, risk scores, reason codes, and audit events.
+- Added admin-only `/api/gallery/:id/safety-review` parity for Fastify and the lightweight deployment server, plus a compact Control Center recheck action.
+
+### Fixes
+- Publishing a gallery entry now reuses or runs safety preflight and blocks locally flagged `blocked` submissions before they can reach the public feed.
+- Updating a gallery-submitted work now refreshes its safety preflight and moves already published entries back to `pending-review` if the new content needs review or is blocked.
+- Control Center now surfaces safety status and reason labels in Chinese/English without adding persistent canvas chrome.
+
 ## 1.11.19 - 2026-06-08
 
 ### Features

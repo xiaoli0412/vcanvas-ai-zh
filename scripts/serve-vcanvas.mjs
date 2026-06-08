@@ -1028,6 +1028,35 @@ function galleryLimit(data, tier) {
   return 0
 }
 
+const gallerySafetyBlockRules = [
+  { code: 'secret-like-token', pattern: /\b(sk-[a-z0-9_-]{12,}|api[_\s-]?key|private\s+key|bearer\s+[a-z0-9._-]{12,})\b/i },
+  { code: 'credential-collection', pattern: /\b(phishing|credential\s+harvesting|steal\s+password|password\s+collector)\b/i },
+  { code: 'browser-data-access', pattern: /\b(document\.cookie|localStorage\.getItem|sessionStorage\.getItem)\b/i },
+]
+
+const gallerySafetyReviewRules = [
+  { code: 'active-script', pattern: /<script\b|eval\s*\(|new\s+Function\s*\(/i },
+  { code: 'external-frame-or-script', pattern: /<iframe\b|<script[^>]+src=["']?https?:\/\//i },
+  { code: 'external-network-call', pattern: /\bfetch\s*\(\s*["']https?:\/\/|XMLHttpRequest|navigator\.sendBeacon/i },
+  { code: 'payment-or-wallet-copy', pattern: /\b(payment|wallet|checkout|credit\s+card|银行卡|支付|钱包)\b/i },
+]
+
+function buildGallerySafetyReview(work, checkedAt = new Date().toISOString()) {
+  const text = [work?.title, work?.description, work?.html].filter(Boolean).join('\n').slice(0, 240000)
+  const blockedReasons = gallerySafetyBlockRules.filter((rule) => rule.pattern.test(text)).map((rule) => rule.code)
+  const reviewReasons = gallerySafetyReviewRules.filter((rule) => rule.pattern.test(text)).map((rule) => rule.code)
+  const reasons = [...new Set([...blockedReasons, ...reviewReasons])]
+  const status = blockedReasons.length > 0 ? 'blocked' : (reviewReasons.length > 0 ? 'needs-review' : 'passed')
+  return {
+    status,
+    checkedAt,
+    checker: 'local-policy-v1',
+    riskScore: Math.min(100, blockedReasons.length * 35 + reviewReasons.length * 15),
+    reasons,
+    notes: status === 'passed' ? 'No local policy flags found.' : null,
+  }
+}
+
 function dispatchSnapshot(data) {
   const policy = data.siteSettings.dispatchPolicy || { enabled: false, strategy: 'round-robin-weighted', nodes: [] }
   const nodes = (policy.nodes || [])
@@ -1115,8 +1144,8 @@ function platformReadinessSnapshot(data) {
       title: 'works, sharing, and gallery',
       maturity: 'local-mock',
       summary: 'Works can be saved, imported, shared, submitted to the gallery, and reviewed by local/mock admins.',
-      implemented: ['works CRUD and 10-work limit', 'HTML import/export', 'share links and /share/:slug', 'Xiaohongshu-style /gallery feed shell', 'admin gallery review workflow'],
-      gaps: ['safety review model before publishing', 'flow-map export', '24h task resume UI'],
+      implemented: ['works CRUD and 10-work limit', 'HTML import/export', 'share links and /share/:slug', 'Xiaohongshu-style /gallery feed shell', 'admin gallery review workflow', 'local/mock gallery safety preflight'],
+      gaps: ['external safety review model before publishing', 'flow-map export', '24h task resume UI'],
       nextStep: 'Attach a safety-review model and public share rendering hardening before production publishing.',
     }),
     capabilityStatus({
@@ -1429,6 +1458,7 @@ function isMeteredRoute(method, route) {
     || route === '/api/works'
     || /^\/api\/works\/[^/]+\/(share|gallery-submit)$/.test(route)
     || /^\/api\/gallery\/[^/]+\/review$/.test(route)
+    || /^\/api\/gallery\/[^/]+\/safety-review$/.test(route)
 }
 
 function rateLimitWindow(policy, now = new Date()) {
@@ -2176,6 +2206,7 @@ async function handleApi(req, res, url) {
       const snapshot = body.html || body.canvasData
         ? [{ id: createId('snapshot'), workId: id, html, canvasData: body.canvasData, previewImageUrl: body.previewImageUrl || null, createdAt: now }]
         : []
+      const contentChanged = body.title !== undefined || body.description !== undefined || body.html !== undefined
       data.works[index] = {
         ...data.works[index],
         ...body,
@@ -2187,7 +2218,24 @@ async function handleApi(req, res, url) {
         updatedAt: now,
         snapshots: [...data.works[index].snapshots, ...snapshot],
       }
-      withAudit(data, req, 'work.update', data.works[index].ownerId, data.works[index].ownerId === 'guest-local' ? 'guest' : 'user', { workId: id })
+      let gallerySafetyStatus = null
+      let galleryStatusAfterUpdate = data.works[index].galleryStatus
+      if (contentChanged) {
+        const galleryEntry = data.galleryEntries.find((entry) => entry.workId === id)
+        if (galleryEntry) {
+          galleryEntry.safetyReview = buildGallerySafetyReview(data.works[index], now)
+          gallerySafetyStatus = galleryEntry.safetyReview.status
+          if (galleryEntry.status === 'published' && galleryEntry.safetyReview.status !== 'passed') {
+            galleryEntry.status = 'pending-review'
+            galleryEntry.reviewedAt = null
+            galleryEntry.reviewerId = null
+            galleryEntry.rejectionReason = null
+          }
+          galleryStatusAfterUpdate = galleryEntry.status
+          data.works[index].galleryStatus = galleryEntry.status
+        }
+      }
+      withAudit(data, req, 'work.update', data.works[index].ownerId, data.works[index].ownerId === 'guest-local' ? 'guest' : 'user', { workId: id, gallerySafetyStatus, galleryStatusAfterUpdate })
       writeData(data)
       sendJson(res, 200, { ok: true, work: data.works[index] })
       return true
@@ -2245,9 +2293,10 @@ async function handleApi(req, res, url) {
     }
     const now = new Date().toISOString()
     const entry = { id: createId('gallery'), workId: id, ownerId: work.ownerId, status: 'pending-review', submittedAt: now, reviewedAt: null, reviewerId: null, rejectionReason: null }
+    entry.safetyReview = buildGallerySafetyReview(work, now)
     work.galleryStatus = 'pending-review'
     data.galleryEntries = [...data.galleryEntries.filter((item) => item.workId !== id), entry]
-    withAudit(data, req, 'work.gallerySubmit', actor.id, actor.tier, { workId: id, galleryEntryId: entry.id })
+    withAudit(data, req, 'work.gallerySubmit', actor.id, actor.tier, { workId: id, galleryEntryId: entry.id, safetyStatus: entry.safetyReview.status })
     writeData(data)
     sendJson(res, 200, { ok: true, entry, work, limit })
     return true
@@ -2288,13 +2337,21 @@ async function handleApi(req, res, url) {
       return true
     }
     const now = new Date().toISOString()
+    const work = data.works.find((item) => item.id === entry.workId) || null
+    const safetyReview = entry.safetyReview || buildGallerySafetyReview(work, now)
+    entry.safetyReview = safetyReview
+    if (status === 'published' && safetyReview.status === 'blocked') {
+      withAudit(data, req, 'gallery.reviewBlocked', actor.id, actor.tier, { galleryEntryId: entry.id, workId: entry.workId, safetyReview })
+      writeData(data)
+      sendJson(res, 409, { ok: false, error: 'Gallery safety review blocked publishing.', entry, work, safetyReview })
+      return true
+    }
     entry.status = status
     entry.reviewedAt = now
     entry.reviewerId = actor.id
     entry.rejectionReason = status === 'rejected'
       ? String(body.rejectionReason || 'Rejected by gallery reviewer.').trim().slice(0, 160)
       : null
-    const work = data.works.find((item) => item.id === entry.workId) || null
     if (work) {
       work.galleryStatus = status
       work.updatedAt = now
@@ -2302,6 +2359,28 @@ async function handleApi(req, res, url) {
     withAudit(data, req, 'gallery.review', actor.id, actor.tier, { galleryEntryId: entry.id, workId: entry.workId, status })
     writeData(data)
     sendJson(res, 200, { ok: true, entry, work })
+    return true
+  }
+
+  const gallerySafetyMatch = url.pathname.match(/^\/api\/gallery\/([^/]+)\/safety-review$/)
+  if (gallerySafetyMatch && method === 'POST') {
+    const actor = getActor(data, req)
+    if (!canManageGallery(actor.tier)) {
+      sendJson(res, 403, { ok: false, error: 'Admin permission required for gallery safety review.' })
+      return true
+    }
+    const id = decodeURIComponent(gallerySafetyMatch[1])
+    const entry = data.galleryEntries.find((item) => item.id === id)
+    if (!entry) {
+      sendJson(res, 404, { ok: false, error: 'Gallery entry not found.' })
+      return true
+    }
+    const work = data.works.find((item) => item.id === entry.workId) || null
+    const safetyReview = buildGallerySafetyReview(work)
+    entry.safetyReview = safetyReview
+    withAudit(data, req, 'gallery.safetyReview', actor.id, actor.tier, { galleryEntryId: entry.id, workId: entry.workId, safetyReview })
+    writeData(data)
+    sendJson(res, 200, { ok: true, entry, work, safetyReview })
     return true
   }
 

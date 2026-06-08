@@ -90,6 +90,12 @@ function timeLeft(expiresAt: string | undefined) {
   return `${hours}h ${minutes}m`
 }
 
+function safetyReasonLabel(t: Translate, reason: string) {
+  const key = `control.gallery.safetyReason.${reason}`
+  const label = t(key)
+  return label === key ? reason : label
+}
+
 function canManageSite(user: SessionUser | null) {
   return Boolean(user?.permissions.includes('manage-site') || user?.tier === 'host-admin' || user?.tier === 'admin')
 }
@@ -442,6 +448,15 @@ export function ControlCenterModal({
       }),
     }).then((response) => readJson(response))
     return t('control.notice.galleryReviewed')
+  })
+
+  const runGallerySafety = (entry: GalleryEntryWithWork) => run(async () => {
+    await fetch(`/api/gallery/${encodeURIComponent(entry.id)}/safety-review`, {
+      method: 'POST',
+      headers: mergeSessionHeaders({ 'Content-Type': 'application/json' }),
+      body: '{}',
+    }).then((response) => readJson(response))
+    return t('control.notice.gallerySafetyReviewed')
   })
 
   const exportSiteData = () => run(async () => {
@@ -1029,13 +1044,22 @@ export function ControlCenterModal({
                         <span>{t(`control.gallery.status.${entry.status}`)} · {formatDate(entry.submittedAt)}</span>
                         <p>{entry.work?.description || t('control.gallery.pending')}</p>
                         {entry.rejectionReason && <small>{t('control.gallery.rejectionReason')}: {entry.rejectionReason}</small>}
+                        <div className={`ccm-gallery-safety ${entry.safetyReview?.status || 'pending'}`}>
+                          <span>
+                            {t(`control.gallery.safety.${entry.safetyReview?.status || 'pending'}`)}
+                            {entry.safetyReview ? ` · ${t('control.gallery.safetyScore')}: ${entry.safetyReview.riskScore}` : ''}
+                          </span>
+                          {(entry.safetyReview?.reasons || []).slice(0, 3).map((reason) => (
+                            <small key={reason}>{safetyReasonLabel(t, reason)}</small>
+                          ))}
+                        </div>
                       </div>
                       <div className="ccm-gallery-actions">
                         <span className={`ccm-pill ${entry.status === 'published' ? 'on' : ''}`}>{t(`control.gallery.status.${entry.status}`)}</span>
                         {admin && (
                           <>
                             {entry.status !== 'published' && (
-                              <button className="btn btn-secondary" onClick={() => reviewGallery(entry, 'published')} disabled={busy}>
+                              <button className="btn btn-secondary" onClick={() => reviewGallery(entry, 'published')} disabled={busy || entry.safetyReview?.status === 'blocked'}>
                                 {t('control.gallery.publish')}
                               </button>
                             )}
@@ -1049,6 +1073,9 @@ export function ControlCenterModal({
                                 {t('control.gallery.restore')}
                               </button>
                             )}
+                            <button className="btn btn-ghost" onClick={() => runGallerySafety(entry)} disabled={busy}>
+                              {t('control.gallery.rerunSafety')}
+                            </button>
                           </>
                         )}
                       </div>

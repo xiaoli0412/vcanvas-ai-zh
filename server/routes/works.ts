@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { createId, getClientIp, localDataStore, type PublicServerData } from '../data/localDataStore'
 import type { CanvasModeId, GalleryReviewStatus, WorkRecord, WorkSnapshot } from '../../shared/contracts/publicServer'
+import { buildGallerySafetyReview } from '../lib/gallerySafety'
 import {
   buildDisclaimerComment,
   canSubmitGallery,
@@ -197,6 +198,7 @@ export async function registerWorkRoutes(app: FastifyInstance) {
       const snapshots = body.html || body.canvasData
         ? [...current.snapshots, createSnapshot(id, html, body.canvasData, body.previewImageUrl, now)]
         : current.snapshots
+      const contentChanged = body.title !== undefined || body.description !== undefined || body.html !== undefined
       const next: WorkRecord = {
         ...current,
         ...body,
@@ -213,6 +215,23 @@ export async function registerWorkRoutes(app: FastifyInstance) {
         updatedAt: now,
         snapshots,
       }
+      let gallerySafetyStatus: string | null = null
+      let galleryStatusAfterUpdate = next.galleryStatus
+      if (contentChanged) {
+        const galleryEntry = data.galleryEntries.find((entry) => entry.workId === id)
+        if (galleryEntry) {
+          galleryEntry.safetyReview = buildGallerySafetyReview(next, now)
+          gallerySafetyStatus = galleryEntry.safetyReview.status
+          if (galleryEntry.status === 'published' && galleryEntry.safetyReview.status !== 'passed') {
+            galleryEntry.status = 'pending-review'
+            galleryEntry.reviewedAt = null
+            galleryEntry.reviewerId = null
+            galleryEntry.rejectionReason = null
+          }
+          galleryStatusAfterUpdate = galleryEntry.status
+          next.galleryStatus = galleryEntry.status
+        }
+      }
       data.works[index] = next
       data.auditEvents.push({
         id: createId('audit'),
@@ -221,7 +240,7 @@ export async function registerWorkRoutes(app: FastifyInstance) {
         action: 'work.update',
         ip: getClientIp(request),
         createdAt: now,
-        metadata: { workId: id },
+        metadata: { workId: id, gallerySafetyStatus, galleryStatusAfterUpdate },
       })
       return next
     })
@@ -313,6 +332,7 @@ export async function registerWorkRoutes(app: FastifyInstance) {
       const eligibility = canSubmitGallery(data, actor.id, actor.tier)
       if (!eligibility.ok) return { status: 'denied' as const, eligibility }
       const entry = createGalleryEntry({ workId: id, ownerId: work.ownerId })
+      entry.safetyReview = buildGallerySafetyReview(work, entry.submittedAt)
       work.galleryStatus = 'pending-review'
       data.galleryEntries = [...data.galleryEntries.filter((item) => item.workId !== id), entry]
       data.auditEvents.push({
@@ -322,7 +342,7 @@ export async function registerWorkRoutes(app: FastifyInstance) {
         action: 'work.gallerySubmit',
         ip: getClientIp(request),
         createdAt: entry.submittedAt,
-        metadata: { workId: id, galleryEntryId: entry.id },
+        metadata: { workId: id, galleryEntryId: entry.id, safetyStatus: entry.safetyReview.status },
       })
       return { status: 'ok' as const, entry, work, eligibility }
     })
@@ -376,13 +396,27 @@ export async function registerWorkRoutes(app: FastifyInstance) {
       const entry = data.galleryEntries.find((item) => item.id === id)
       if (!entry) return { status: 'missing' as const }
       const now = new Date().toISOString()
+      const work = data.works.find((item) => item.id === entry.workId) || null
+      const safetyReview = entry.safetyReview || buildGallerySafetyReview(work, now)
+      entry.safetyReview = safetyReview
+      if (status === 'published' && safetyReview.status === 'blocked') {
+        data.auditEvents.push({
+          id: createId('audit'),
+          actorId: actor.id,
+          actorTier: actor.tier,
+          action: 'gallery.reviewBlocked',
+          ip: getClientIp(request),
+          createdAt: now,
+          metadata: { galleryEntryId: entry.id, workId: entry.workId, safetyReview },
+        })
+        return { status: 'blocked' as const, entry, work, safetyReview }
+      }
       entry.status = status
       entry.reviewedAt = now
       entry.reviewerId = actor.id
       entry.rejectionReason = status === 'rejected'
         ? (body.rejectionReason?.trim().slice(0, 160) || 'Rejected by gallery reviewer.')
         : null
-      const work = data.works.find((item) => item.id === entry.workId) || null
       if (work) {
         work.galleryStatus = status
         work.updatedAt = now
@@ -407,6 +441,48 @@ export async function registerWorkRoutes(app: FastifyInstance) {
       reply.code(404).send({ ok: false, error: 'Gallery entry not found.' })
       return
     }
+    if (result.status === 'blocked') {
+      reply.code(409).send({
+        ok: false,
+        error: 'Gallery safety review blocked publishing.',
+        entry: result.entry,
+        work: result.work,
+        safetyReview: result.safetyReview,
+      })
+      return
+    }
     return { ok: true, entry: result.entry, work: result.work }
+  })
+
+  app.post('/api/gallery/:id/safety-review', async (request, reply) => {
+    const id = (request.params as { id: string }).id
+    const result = await localDataStore.update((data) => {
+      const { actor, allowed } = canManageGallery(data, request)
+      if (!allowed) return { status: 'forbidden' as const }
+      const entry = data.galleryEntries.find((item) => item.id === id)
+      if (!entry) return { status: 'missing' as const }
+      const work = data.works.find((item) => item.id === entry.workId) || null
+      const safetyReview = buildGallerySafetyReview(work)
+      entry.safetyReview = safetyReview
+      data.auditEvents.push({
+        id: createId('audit'),
+        actorId: actor.id,
+        actorTier: actor.tier,
+        action: 'gallery.safetyReview',
+        ip: getClientIp(request),
+        createdAt: safetyReview.checkedAt,
+        metadata: { galleryEntryId: entry.id, workId: entry.workId, safetyReview },
+      })
+      return { status: 'ok' as const, entry, work, safetyReview }
+    })
+    if (result.status === 'forbidden') {
+      reply.code(403).send({ ok: false, error: 'Admin permission required for gallery safety review.' })
+      return
+    }
+    if (result.status === 'missing') {
+      reply.code(404).send({ ok: false, error: 'Gallery entry not found.' })
+      return
+    }
+    return { ok: true, entry: result.entry, work: result.work, safetyReview: result.safetyReview }
   })
 }

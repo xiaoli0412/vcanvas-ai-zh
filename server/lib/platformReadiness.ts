@@ -115,9 +115,10 @@ export function makePlatformReadinessSnapshot(data: PublicServerData): PlatformR
         'share links and /share/:slug',
         'Xiaohongshu-style /gallery feed shell',
         'admin gallery review workflow',
+        'local/mock gallery safety preflight',
       ],
       gaps: [
-        'safety review model before publishing',
+        'external safety review model before publishing',
         'flow-map export',
         '24h task resume UI',
       ],

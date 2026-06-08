@@ -755,6 +755,44 @@
   line-height: 1.45;
 }
 
+.ccm-gallery-safety {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.ccm-gallery-safety span,
+.ccm-gallery-safety small {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin: 0;
+  padding: 3px 7px;
+  border: 1px solid rgba(108, 117, 190, 0.18);
+  border-radius: 999px;
+  background: rgba(12, 14, 25, 0.62);
+  color: var(--text-muted);
+  font-size: 9px;
+  line-height: 1.2;
+}
+
+.ccm-gallery-safety.passed span {
+  color: #83d6b0;
+  border-color: rgba(131, 214, 176, 0.22);
+}
+
+.ccm-gallery-safety.needs-review span {
+  color: #f0c779;
+  border-color: rgba(240, 199, 121, 0.28);
+}
+
+.ccm-gallery-safety.blocked span {
+  color: #f09b9b;
+  border-color: rgba(240, 155, 155, 0.3);
+}
+
 .ccm-gallery-actions {
   display: flex;
   align-items: center;

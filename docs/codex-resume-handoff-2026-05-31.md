@@ -201,6 +201,12 @@
     - host-admin/admin 可在控制中心二级面板发布、退回或恢复待审提交
     - `/api/gallery` 默认只返回已发布作品，`includeReview=true` 仅管理员可看全量审核队列，`includeOwn=true` 仅用于作品中心查看自己的待审状态
     - `/gallery` 公开页只展示已发布作品，不再泄漏待审或退回作品
+  - 2026-06-08 鉴赏厅安全预检推进：
+    - 新增 `GallerySafetyReview` contract，记录 `passed / needs-review / blocked`、风险分和原因 code
+    - 新增 Fastify 与轻量服务 `/api/gallery/:id/safety-review`
+    - 提交鉴赏厅时自动执行本地策略预检；发布时若状态为 `blocked` 会被拦截
+    - 已提交作品内容更新时会刷新预检；已公开作品若变为 `needs-review / blocked` 会退回待审
+    - 控制中心鉴赏厅队列显示安全状态、原因与重新预检按钮，仍保持二级入口
 
 ## 已验证
 - `npm run typecheck` 通过
@@ -237,7 +243,7 @@
   - 浏览器截图：主应用、模式面板、模型快速切换、个人设置、控制中心、作品中心、公开 `/gallery` 的桌面与移动布局
 
 ## 当前工作树状态
-- 本轮计划提交信息：`feat: add gallery review workflow`
+- 本轮计划提交信息：`feat: add gallery safety preflight`
 - 推送目标：`publish/main` 与 `publish/public-server`
 - 不推送 `origin`
 

@@ -300,6 +300,17 @@ export type GalleryReviewStatus = 'pending-review' | 'published' | 'rejected'
 
 export type GalleryPublicationStatus = 'private' | GalleryReviewStatus
 
+export type GallerySafetyStatus = 'pending' | 'passed' | 'needs-review' | 'blocked'
+
+export interface GallerySafetyReview {
+  status: GallerySafetyStatus
+  checkedAt: string
+  checker: 'local-policy-v1' | 'external-model' | 'manual-admin'
+  riskScore: number
+  reasons: string[]
+  notes?: string | null
+}
+
 export interface GalleryEntry {
   id: string
   workId: string
@@ -309,6 +320,7 @@ export interface GalleryEntry {
   reviewedAt?: string | null
   reviewerId?: string | null
   rejectionReason?: string | null
+  safetyReview?: GallerySafetyReview | null
 }
 
 export interface QuotaLedger {
