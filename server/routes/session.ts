@@ -5,6 +5,7 @@ import {
   getSessionFromRequest,
   getTierPermissions,
   makeSession,
+  refreshQuotaLedger,
   resolveLocalLoginTier,
   resolveLocalRegisterTier,
   SESSION_TTL_MS,
@@ -27,7 +28,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
         actor,
         session,
         user,
-        quota: data.quotaLedgers.find((ledger) => ledger.userId === actor.id) || null,
+        quota: refreshQuotaLedger(data, actor.id, actor.tier),
       }
     })
 
@@ -84,6 +85,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
         id: createId('signin'),
         userId,
         tier,
+        source: 'login',
         ip,
         userAgent,
         createdAt: new Date().toISOString(),
@@ -99,7 +101,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       return {
         user,
         session,
-        quota: data.quotaLedgers.find((ledger) => ledger.userId === userId) || null,
+        quota: refreshQuotaLedger(data, userId, tier),
       }
     })
 
@@ -158,6 +160,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
         id: createId('signin'),
         userId,
         tier,
+        source: 'register',
         ip,
         userAgent,
         createdAt: new Date().toISOString(),
@@ -173,7 +176,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       return {
         user,
         session,
-        quota: current.quotaLedgers.find((ledger) => ledger.userId === userId) || null,
+        quota: refreshQuotaLedger(current, userId, tier),
       }
     })
 
@@ -253,7 +256,12 @@ export async function registerSessionRoutes(app: FastifyInstance) {
     return { ok: true, removed: result.removed, note: result.reason }
   })
 
-  app.post('/api/session/guest', async (request) => {
+  app.post('/api/session/guest', async (request, reply) => {
+    const current = await localDataStore.read()
+    if (current.siteSettings.guestEnabled === false) {
+      reply.code(403).send({ ok: false, error: 'Guest access is temporarily closed by site settings.' })
+      return
+    }
     const ip = getClientIp(request)
     const userAgent = String(request.headers['user-agent'] || '')
     const session = makeSession({
@@ -263,12 +271,13 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       ip,
       userAgent,
     })
-    await localDataStore.update((data) => {
+    const quota = await localDataStore.update((data) => {
       data.sessions = [...data.sessions.filter((item) => item.userId !== 'guest-local'), session]
       data.signInRecords.push({
         id: createId('signin'),
         userId: 'guest-local',
         tier: 'guest',
+        source: 'guest',
         ip,
         userAgent,
         createdAt: new Date().toISOString(),
@@ -281,6 +290,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
         ip: session.ip,
         createdAt: new Date().toISOString(),
       })
+      return refreshQuotaLedger(data, 'guest-local', 'guest')
     })
     return {
       ok: true,
@@ -292,6 +302,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
         permissions: getTierPermissions('guest'),
       },
       session,
+      quota,
     }
   })
 }

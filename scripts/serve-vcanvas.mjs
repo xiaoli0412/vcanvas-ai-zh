@@ -13,6 +13,9 @@ const dataFile = path.join(dataDir, 'public-server.json')
 const dataExportSchemaVersion = 'local-json-v1'
 const dataImportVerificationText = 'IMPORT INSCANVAS DATA'
 const defaultGithubRepo = 'xiaoli0412/vcanvas-ai-zh'
+const dayMs = 24 * 60 * 60 * 1000
+const dailyBaseCalls = { guest: 8, user: 20, vip: 60, admin: 999999, 'host-admin': 999999 }
+const dailyHostedRuns = { guest: 0, user: 2, vip: 6, admin: 999999, 'host-admin': 999999 }
 const dataPortableCollections = [
   'siteSettings',
   'personalSettings',
@@ -60,6 +63,20 @@ function sendJson(res, statusCode, payload) {
   writeCors(res)
   res.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8' })
   res.end(JSON.stringify(payload))
+}
+
+function startOfLocalDay(value = new Date()) {
+  return new Date(value.getFullYear(), value.getMonth(), value.getDate())
+}
+
+function nextLocalDayReset(value = new Date()) {
+  return new Date(startOfLocalDay(value).getTime() + dayMs)
+}
+
+function isExpiredOrMissing(value, now = new Date()) {
+  if (!value) return true
+  const parsed = Date.parse(value)
+  return !Number.isFinite(parsed) || parsed <= now.getTime()
 }
 
 function parseRequestUrl(req) {
@@ -193,7 +210,7 @@ function defaultData() {
       injectOnShare: true,
     },
     rateLimitPolicies: [
-      { id: 'guest-ip-daily', scope: 'ip', enabled: true, windowSeconds: 86400, maxRequests: 8, lockoutSeconds: 21600 },
+      { id: 'guest-ip-daily', scope: 'ip', enabled: true, windowSeconds: 86400, maxRequests: 8, lockoutSeconds: 21600, windowMode: 'natural-day' },
       { id: 'user-hourly-basic', scope: 'user', enabled: true, windowSeconds: 3600, maxRequests: 20 },
     ],
     providerChannels: [
@@ -704,13 +721,40 @@ function ensureQuotaLedger(data, userId, tier) {
     userId,
     tier,
     premiumCredits: tier === 'guest' ? 0 : 100,
-    baseCallsRemaining: tier === 'guest' ? 8 : 20,
-    hostedRunsRemaining: tier === 'vip' || tier === 'user' ? 2 : tier === 'guest' ? 0 : 999999,
-    resetAt: new Date(now + 86400000).toISOString(),
-    hostedResetAt: new Date(now + 86400000).toISOString(),
+    baseCallsRemaining: dailyBaseCalls[tier] ?? dailyBaseCalls.user,
+    hostedRunsRemaining: dailyHostedRuns[tier] ?? dailyHostedRuns.user,
+    hostedRunsUsedToday: 0,
+    resetAt: nextLocalDayReset(new Date(now)).toISOString(),
+    hostedResetAt: nextLocalDayReset(new Date(now)).toISOString(),
   }
   data.quotaLedgers.push(ledger)
   return ledger
+}
+
+function refreshQuotaLedger(data, userId, tier, now = new Date()) {
+  const ledger = ensureQuotaLedger(data, userId, tier)
+  ledger.tier = tier
+  if (isExpiredOrMissing(ledger.resetAt, now)) {
+    ledger.baseCallsRemaining = dailyBaseCalls[tier] ?? dailyBaseCalls.user
+    ledger.resetAt = nextLocalDayReset(now).toISOString()
+  }
+  if (isExpiredOrMissing(ledger.hostedResetAt, now)) {
+    ledger.hostedRunsRemaining = dailyHostedRuns[tier] ?? dailyHostedRuns.user
+    ledger.hostedRunsUsedToday = 0
+    ledger.hostedResetAt = nextLocalDayReset(now).toISOString()
+  }
+  return ledger
+}
+
+function dailySignInRecord(data, userId, now = new Date()) {
+  const start = startOfLocalDay(now).getTime()
+  const end = nextLocalDayReset(now).getTime()
+  return (data.signInRecords || []).find((record) => {
+    if (record.userId !== userId) return false
+    if (record.source !== 'daily-checkin') return false
+    const createdAt = Date.parse(record.createdAt)
+    return Number.isFinite(createdAt) && createdAt >= start && createdAt < end
+  }) || null
 }
 
 function upsertUser(data, input) {
@@ -734,7 +778,7 @@ function upsertUser(data, input) {
     lastLoginIp: input.ip || null,
   }
   data.users = [...data.users.filter((item) => item.id !== input.id), user]
-  ensureQuotaLedger(data, input.id, input.tier)
+  refreshQuotaLedger(data, input.id, input.tier)
   return user
 }
 
@@ -1180,7 +1224,7 @@ function isHeavyMode(modeId) {
 }
 
 function hostingPolicyFor(data, actor, ownerId, modeId) {
-  const ledger = ensureQuotaLedger(data, ownerId, actor.tier)
+  const ledger = refreshQuotaLedger(data, ownerId, actor.tier)
   const personalEnabled = data.personalSettings.experimental?.serverHighResourceHosting === true
   const canUseServer = actor.tier !== 'guest' && permissionsForTier(actor.tier).includes('use-server-execution')
   const heavy = isHeavyMode(modeId)
@@ -1227,7 +1271,13 @@ function createWorkflowRun(data, req, route, body) {
   const ownerId = ownerResolution.ownerId
   const modeId = body.modeId || body.context?.modeId || 'custom'
   const { ledger, hostingPolicy } = hostingPolicyFor(data, actor, ownerId, modeId)
-  const executionMode = body.executionMode || (isHeavyMode(modeId) ? hostingPolicy.resourceHeavyModeDefault : hostingPolicy.defaultExecutionMode)
+  const policyExecutionMode = isHeavyMode(modeId) ? hostingPolicy.resourceHeavyModeDefault : hostingPolicy.defaultExecutionMode
+  const executionMode = body.executionMode === 'server-managed' && policyExecutionMode !== 'server-managed'
+    ? policyExecutionMode
+    : (body.executionMode || policyExecutionMode)
+  const gatingReason = body.executionMode === 'server-managed' && executionMode !== 'server-managed'
+    ? (hostingPolicy.fallbackReason || 'server-managed-not-allowed')
+    : hostingPolicy.fallbackReason
   const compressed = compressWorkflowContext(body.context)
   const now = new Date()
   const run = {
@@ -1245,6 +1295,7 @@ function createWorkflowRun(data, req, route, body) {
   let hostedRunsDebited = 0
   if (isHeavyMode(modeId) && executionMode === 'server-managed' && typeof ledger.hostedRunsRemaining === 'number') {
     ledger.hostedRunsRemaining = Math.max(0, ledger.hostedRunsRemaining - 1)
+    ledger.hostedRunsUsedToday = (ledger.hostedRunsUsedToday || 0) + 1
     hostedRunsDebited = 1
   }
   data.workflows = data.workflows.filter((item) => !item.expiresAt || Date.parse(item.expiresAt) > Date.now())
@@ -1261,8 +1312,13 @@ function createWorkflowRun(data, req, route, body) {
       strategy: compressed.applied ? 'local-summary-v1' : 'none',
     },
     quota: {
+      baseCallsDebited: actor.tier === 'user' || actor.tier === 'vip' ? 1 : 0,
+      baseCallsRemaining: ledger.baseCallsRemaining,
       hostedRunsDebited,
       hostedRunsRemaining: ledger.hostedRunsRemaining,
+      resetAt: ledger.resetAt,
+      hostedResetAt: ledger.hostedResetAt,
+      gatingReason,
     },
   }
   return { actor, run, hostingPolicy, executionPlan, ownerResolution }
@@ -1315,32 +1371,87 @@ function isMeteredRoute(method, route) {
     || /^\/api\/works\/[^/]+\/(share|gallery-submit)$/.test(route)
 }
 
+function rateLimitWindow(policy, now = new Date()) {
+  if (policy.windowMode === 'natural-day') {
+    return {
+      cutoffMs: startOfLocalDay(now).getTime(),
+      resetAt: nextLocalDayReset(now).toISOString(),
+    }
+  }
+  return {
+    cutoffMs: now.getTime() - policy.windowSeconds * 1000,
+    resetAt: new Date(now.getTime() + policy.windowSeconds * 1000).toISOString(),
+  }
+}
+
 function enforceTrafficGuard(data, req, url) {
   const ip = clientIp(req)
-  const now = Date.now()
+  const nowDate = new Date()
+  const now = nowDate.getTime()
   const blocked = ip ? data.blockedIps.find((item) => item.ip === ip && (!item.expiresAt || Date.parse(item.expiresAt) > now)) : null
   if (blocked) return { ok: false, statusCode: 403, error: `IP blocked: ${blocked.reason}` }
   if (!isMeteredRoute(req.method || 'GET', url.pathname)) return { ok: true }
 
   const actor = getActor(data, req)
   if (actor.tier === 'host-admin' || actor.tier === 'admin') return { ok: true }
+  if (actor.tier === 'guest' && data.siteSettings.guestEnabled === false) {
+    return {
+      ok: false,
+      statusCode: 403,
+      error: 'Guest access is temporarily closed by site settings.',
+      gatingReason: 'guest-access-disabled',
+    }
+  }
   const policy = actor.tier === 'guest'
     ? data.rateLimitPolicies.find((item) => item.id === 'guest-ip-daily')
     : data.rateLimitPolicies.find((item) => item.id === 'user-hourly-basic')
-  if (!policy?.enabled) return { ok: true }
   const subjectType = actor.tier === 'guest' ? 'ip' : 'user'
   const subject = actor.tier === 'guest' ? (ip || 'unknown-ip') : actor.id
-  const cutoff = now - policy.windowSeconds * 1000
+  const window = policy?.enabled ? rateLimitWindow(policy, nowDate) : null
   data.rateLimitEvents = data.rateLimitEvents.filter((event) => Date.parse(event.createdAt) > now - 48 * 60 * 60 * 1000)
-  const count = data.rateLimitEvents.filter((event) => event.subject === subject && event.subjectType === subjectType && Date.parse(event.createdAt) >= cutoff).length
-  if (count >= policy.maxRequests) {
+  const count = window
+    ? data.rateLimitEvents.filter((event) => event.subject === subject && event.subjectType === subjectType && Date.parse(event.createdAt) >= window.cutoffMs).length
+    : 0
+  if (policy?.enabled && window && count >= policy.maxRequests) {
     if (policy.lockoutSeconds && ip) {
       data.blockedIps.push({ ip, reason: `rate limit ${policy.id}`, blockedAt: new Date().toISOString(), expiresAt: new Date(now + policy.lockoutSeconds * 1000).toISOString(), createdBy: 'system' })
     }
-    return { ok: false, statusCode: 429, error: `Rate limit exceeded (${policy.maxRequests}/${policy.windowSeconds}s).` }
+    return {
+      ok: false,
+      statusCode: 429,
+      error: `Rate limit exceeded (${policy.maxRequests}/${policy.windowSeconds}s).`,
+      policyId: policy.id,
+      limit: policy.maxRequests,
+      remaining: 0,
+      resetAt: window.resetAt,
+      gatingReason: 'request-rate-limit-exceeded',
+    }
   }
-  data.rateLimitEvents.push({ id: createId('rate'), subject, subjectType, route: url.pathname, tier: actor.tier, ip, createdAt: new Date().toISOString() })
-  return { ok: true }
+  const ledger = actor.tier === 'guest' ? null : refreshQuotaLedger(data, actor.id, actor.tier, nowDate)
+  if (ledger && ledger.baseCallsRemaining <= 0) {
+    return {
+      ok: false,
+      statusCode: 429,
+      error: 'Daily quota exhausted.',
+      policyId: 'daily-base-calls',
+      limit: dailyBaseCalls[actor.tier] ?? dailyBaseCalls.user,
+      remaining: 0,
+      resetAt: ledger.resetAt,
+      gatingReason: 'daily-base-quota-exhausted',
+    }
+  }
+  if (ledger) ledger.baseCallsRemaining = Math.max(0, ledger.baseCallsRemaining - 1)
+  if (policy?.enabled) {
+    data.rateLimitEvents.push({ id: createId('rate'), subject, subjectType, route: url.pathname, tier: actor.tier, ip, createdAt: new Date().toISOString() })
+  }
+  return {
+    ok: true,
+    policyId: policy?.id || null,
+    limit: policy?.maxRequests,
+    remaining: policy?.enabled ? Math.max(0, policy.maxRequests - count - 1) : undefined,
+    resetAt: window?.resetAt || ledger?.resetAt,
+    quota: ledger ? { baseCallsRemaining: ledger.baseCallsRemaining, resetAt: ledger.resetAt } : null,
+  }
 }
 
 async function handleProxy(req, res) {
@@ -1447,7 +1558,13 @@ async function handleApi(req, res, url) {
   const guard = enforceTrafficGuard(data, req, url)
   if (!guard.ok) {
     writeData(data)
-    sendJson(res, guard.statusCode || 429, { ok: false, error: guard.error })
+    sendJson(res, guard.statusCode || 429, { ok: false, ...guard })
+    return true
+  }
+
+  if (method === 'POST' && url.pathname === remixPath) {
+    writeData(data)
+    await handleRemixFetch(req, res)
     return true
   }
 
@@ -1461,6 +1578,8 @@ async function handleApi(req, res, url) {
       writeData(data)
     }
     const user = session ? data.users.find((item) => item.id === actor.id) : null
+    const quota = refreshQuotaLedger(data, actor.id, actor.tier)
+    writeData(data)
     sendJson(res, 200, {
       ok: true,
       executionMode: session?.executionMode || 'browser-local',
@@ -1471,7 +1590,7 @@ async function handleApi(req, res, url) {
         permissions: permissionsForTier(actor.tier),
       },
       session,
-      quota: data.quotaLedgers.find((ledger) => ledger.userId === actor.id) || null,
+      quota,
       loginNotice: {
         ip: clientIp(req),
         time: new Date().toISOString(),
@@ -1484,6 +1603,10 @@ async function handleApi(req, res, url) {
   if ((url.pathname === '/api/session/login' || url.pathname === '/api/session/guest') && method === 'POST') {
     const body = await readJsonBody(req)
     const isGuest = url.pathname.endsWith('/guest')
+    if (isGuest && data.siteSettings.guestEnabled === false) {
+      sendJson(res, 403, { ok: false, error: 'Guest access is temporarily closed by site settings.' })
+      return true
+    }
     const userId = isGuest ? 'guest-local' : (body.userId || body.username || 'mock-user')
     const tier = isGuest ? 'guest' : resolveLocalLoginTier(data, userId)
     const session = makeSession({
@@ -1495,15 +1618,16 @@ async function handleApi(req, res, url) {
     })
     const user = isGuest ? null : upsertUser(data, { id: userId, username: body.username || userId, email: body.email || null, tier, displayName: body.displayName || 'inscanvas user', ip: clientIp(req) })
     data.sessions = [...data.sessions.filter((item) => item.userId !== session.userId), session]
-    data.signInRecords.push({ id: createId('signin'), userId, tier, ip: clientIp(req), userAgent: req.headers['user-agent'] || null, createdAt: new Date().toISOString() })
+    data.signInRecords.push({ id: createId('signin'), userId, tier, source: isGuest ? 'guest' : 'login', ip: clientIp(req), userAgent: req.headers['user-agent'] || null, createdAt: new Date().toISOString() })
     withAudit(data, req, isGuest ? 'session.guest' : 'session.login', session.userId, session.tier)
+    const quota = refreshQuotaLedger(data, session.userId, session.tier)
     writeData(data)
     sendJson(res, 200, {
       ok: true,
       executionMode: session.executionMode,
       user: { id: session.userId, tier: session.tier, displayName: user?.profile?.displayName || 'Guest', permissions: permissionsForTier(session.tier) },
       session,
-      quota: data.quotaLedgers.find((ledger) => ledger.userId === session.userId) || null,
+      quota,
       note: isGuest ? undefined : 'Local/mock inscanvas login ignores client-supplied tier; real roles must come from the newapi/subapi bridge.',
     })
     return true
@@ -1526,15 +1650,16 @@ async function handleApi(req, res, url) {
     })
     const user = upsertUser(data, { id: userId, username: body.username || userId, email: body.email || null, tier, displayName: body.displayName || 'inscanvas user', ip: clientIp(req) })
     data.sessions = [...data.sessions.filter((item) => item.userId !== session.userId), session]
-    data.signInRecords.push({ id: createId('signin'), userId, tier, ip: clientIp(req), userAgent: req.headers['user-agent'] || '', createdAt: new Date().toISOString() })
+    data.signInRecords.push({ id: createId('signin'), userId, tier, source: 'register', ip: clientIp(req), userAgent: req.headers['user-agent'] || '', createdAt: new Date().toISOString() })
     withAudit(data, req, 'session.register', userId, tier)
+    const quota = refreshQuotaLedger(data, userId, tier)
     writeData(data)
     sendJson(res, 200, {
       ok: true,
       executionMode: session.executionMode,
       user: { id: userId, tier, displayName: user.profile.displayName, permissions: permissionsForTier(tier) },
       session,
-      quota: data.quotaLedgers.find((ledger) => ledger.userId === userId) || null,
+      quota,
       note: 'Local/mock inscanvas registration creates user-tier accounts unless an existing user already has a managed tier.',
     })
     return true
@@ -2091,34 +2216,52 @@ async function handleApi(req, res, url) {
     const { actor, run, hostingPolicy, executionPlan, ownerResolution } = createWorkflowRun(data, req, route, body)
     withAudit(data, req, `workflow.${route}`, actor.id, actor.tier, { ownerId: run.ownerId, ownerResolution, workflowRunId: run.id, hostingPolicy, executionPlan })
     writeData(data)
-    sendJson(res, 200, { ok: true, route, run, hostingPolicy, executionPlan })
+    sendJson(res, 200, { ok: true, route, run, hostingPolicy, executionPlan, ownerResolution })
     return true
   }
 
   if (url.pathname === '/api/quotas/sign-in' && method === 'GET') {
     const actor = getActor(data, req)
-    sendJson(res, 200, { ok: true, ledger: data.quotaLedgers.find((ledger) => ledger.userId === actor.id) || null, records: data.signInRecords.filter((record) => record.userId === actor.id).slice(-7) })
+    const ledger = refreshQuotaLedger(data, actor.id, actor.tier)
+    const todayRecord = dailySignInRecord(data, actor.id)
+    writeData(data)
+    sendJson(res, 200, {
+      ok: true,
+      ledger,
+      records: data.signInRecords.filter((record) => record.userId === actor.id).slice(-7),
+      canSignIn: !todayRecord,
+      todayRecord,
+      nextResetAt: ledger.resetAt,
+    })
     return true
   }
 
   if (url.pathname === '/api/quotas/sign-in' && method === 'POST') {
     const actor = getActor(data, req)
-    const ledger = ensureQuotaLedger(data, actor.id, actor.tier)
+    const ledger = refreshQuotaLedger(data, actor.id, actor.tier)
+    const todayRecord = dailySignInRecord(data, actor.id)
+    if (todayRecord) {
+      writeData(data)
+      sendJson(res, 200, { ok: true, ledger, record: todayRecord, alreadySignedIn: true, nextResetAt: ledger.resetAt })
+      return true
+    }
     ledger.baseCallsRemaining += actor.tier === 'guest' ? 1 : 3
-    if (actor.tier === 'vip' || actor.tier === 'user') ledger.hostedRunsRemaining = Math.min(2, (ledger.hostedRunsRemaining || 0) + 1)
-    const record = { id: createId('signin'), userId: actor.id, tier: actor.tier, ip: clientIp(req), userAgent: req.headers['user-agent'] || null, createdAt: new Date().toISOString() }
+    if (actor.tier === 'vip' || actor.tier === 'user') ledger.hostedRunsRemaining = Math.min(actor.tier === 'vip' ? 6 : 2, (ledger.hostedRunsRemaining || 0) + 1)
+    const record = { id: createId('signin'), userId: actor.id, tier: actor.tier, source: 'daily-checkin', ip: clientIp(req), userAgent: req.headers['user-agent'] || null, createdAt: new Date().toISOString() }
     data.signInRecords.push(record)
     withAudit(data, req, 'quota.signIn', actor.id, actor.tier)
     writeData(data)
-    sendJson(res, 200, { ok: true, ledger, record })
+    sendJson(res, 200, { ok: true, ledger, record, alreadySignedIn: false, nextResetAt: ledger.resetAt })
     return true
   }
 
   if (url.pathname === '/api/quotas/redeem' && method === 'GET') {
     const actor = getActor(data, req)
+    const ledger = refreshQuotaLedger(data, actor.id, actor.tier)
+    writeData(data)
     sendJson(res, 200, {
       ok: true,
-      ledger: data.quotaLedgers.find((ledger) => ledger.userId === actor.id) || null,
+      ledger,
       redeemCodes: data.redeemCodes.map((code) => ({ ...code, code: code.code.replace(/.(?=.{4})/g, '*') })),
     })
     return true
@@ -2132,7 +2275,7 @@ async function handleApi(req, res, url) {
       sendJson(res, 400, { ok: false, error: 'Redeem code unavailable.' })
       return true
     }
-    const ledger = ensureQuotaLedger(data, actor.id, actor.tier)
+    const ledger = refreshQuotaLedger(data, actor.id, actor.tier)
     ledger.premiumCredits += code.premiumCredits || 0
     if (code.tierUpgrade) {
       ledger.tier = code.tierUpgrade
@@ -2309,11 +2452,6 @@ const server = http.createServer(async (req, res) => {
 
   if (method === 'POST' && proxyPaths.has(url.pathname)) {
     await handleProxy(req, res)
-    return
-  }
-
-  if (method === 'POST' && url.pathname === remixPath) {
-    await handleRemixFetch(req, res)
     return
   }
 

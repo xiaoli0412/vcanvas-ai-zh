@@ -1,3 +1,12 @@
+## 1.11.17 - 2026-06-08
+
+### Features
+- Added local/mock natural-day quota windows for base calls and hosted runs, with same-day sign-in idempotence and visible reset times in the secondary Control Center.
+- Hardened heavy-route governance so metered API calls return remaining/reset metadata, logged-in users consume daily base quota, and disallowed `server-managed` requests are downgraded to the policy-approved execution mode.
+
+### Fixes
+- Routed the lightweight deployment service's `/api/remix/fetch` through the same traffic guard as the Fastify server, preserving guest IP caps and API parity for web-copy requests.
+
 ## 1.11.16 - 2026-06-08
 
 ### Fixes

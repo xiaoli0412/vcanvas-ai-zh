@@ -18,6 +18,7 @@ import { stripProviderSecret } from './providerKeyVault'
 export const SESSION_TTL_MS = 8 * 60 * 60 * 1000
 export const WORKFLOW_TTL_MS = 24 * 60 * 60 * 1000
 const RATE_EVENT_RETENTION_MS = 48 * 60 * 60 * 1000
+const DAY_MS = 24 * 60 * 60 * 1000
 
 const TIER_RANK: Record<UserTier, number> = {
   guest: 0,
@@ -25,6 +26,36 @@ const TIER_RANK: Record<UserTier, number> = {
   vip: 2,
   admin: 3,
   'host-admin': 4,
+}
+
+const DAILY_BASE_CALLS: Record<UserTier, number> = {
+  guest: 8,
+  user: 20,
+  vip: 60,
+  admin: 999999,
+  'host-admin': 999999,
+}
+
+const DAILY_HOSTED_RUNS: Record<UserTier, number> = {
+  guest: 0,
+  user: 2,
+  vip: 6,
+  admin: 999999,
+  'host-admin': 999999,
+}
+
+function startOfLocalDay(value = new Date()) {
+  return new Date(value.getFullYear(), value.getMonth(), value.getDate())
+}
+
+export function nextLocalDayReset(value = new Date()) {
+  return new Date(startOfLocalDay(value).getTime() + DAY_MS)
+}
+
+function isExpiredOrMissing(value: string | undefined, now: Date) {
+  if (!value) return true
+  const parsed = Date.parse(value)
+  return !Number.isFinite(parsed) || parsed <= now.getTime()
 }
 
 export function getTierPermissions(tier: UserTier): UserPermission[] {
@@ -163,7 +194,7 @@ export function upsertUser(data: PublicServerData, input: {
     lastLoginIp: input.ip || null,
   }
   data.users = [...data.users.filter((user) => user.id !== input.id), next]
-  ensureQuotaLedger(data, input.id, input.tier)
+  refreshQuotaLedger(data, input.id, input.tier)
   return next
 }
 
@@ -174,18 +205,44 @@ export function ensureQuotaLedger(data: PublicServerData, userId: string, tier: 
     return existing
   }
   const now = new Date()
-  const hostedRunsRemaining = tier === 'vip' || tier === 'user' ? 2 : tier === 'guest' ? 0 : 999999
   const ledger = {
     userId,
     tier,
     premiumCredits: tier === 'guest' ? 0 : 100,
-    baseCallsRemaining: tier === 'guest' ? 8 : 20,
-    hostedRunsRemaining,
-    resetAt: new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(),
-    hostedResetAt: new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+    baseCallsRemaining: DAILY_BASE_CALLS[tier],
+    hostedRunsRemaining: DAILY_HOSTED_RUNS[tier],
+    hostedRunsUsedToday: 0,
+    resetAt: nextLocalDayReset(now).toISOString(),
+    hostedResetAt: nextLocalDayReset(now).toISOString(),
   }
   data.quotaLedgers.push(ledger)
   return ledger
+}
+
+export function refreshQuotaLedger(data: PublicServerData, userId: string, tier: UserTier, now = new Date()) {
+  const ledger = ensureQuotaLedger(data, userId, tier)
+  ledger.tier = tier
+  if (isExpiredOrMissing(ledger.resetAt, now)) {
+    ledger.baseCallsRemaining = DAILY_BASE_CALLS[tier]
+    ledger.resetAt = nextLocalDayReset(now).toISOString()
+  }
+  if (isExpiredOrMissing(ledger.hostedResetAt, now)) {
+    ledger.hostedRunsRemaining = DAILY_HOSTED_RUNS[tier]
+    ledger.hostedRunsUsedToday = 0
+    ledger.hostedResetAt = nextLocalDayReset(now).toISOString()
+  }
+  return ledger
+}
+
+export function dailySignInRecord(data: PublicServerData, userId: string, now = new Date()) {
+  const start = startOfLocalDay(now).getTime()
+  const end = nextLocalDayReset(now).getTime()
+  return data.signInRecords.find((record) => {
+    if (record.userId !== userId) return false
+    if (record.source !== 'daily-checkin') return false
+    const createdAt = Date.parse(record.createdAt)
+    return Number.isFinite(createdAt) && createdAt >= start && createdAt < end
+  }) || null
 }
 
 export function maskProviderChannels(channels: ProviderChannel[], actorTier: UserTier, actorId: string) {
@@ -260,7 +317,7 @@ export function resolveHostingPolicy(data: PublicServerData, input: {
   tier: UserTier
 }): HostingPolicy {
   const personalEnabled = data.personalSettings.experimental?.serverHighResourceHosting === true
-  const ledger = ensureQuotaLedger(data, input.actorId, input.tier)
+  const ledger = refreshQuotaLedger(data, input.actorId, input.tier)
   const canUseServer = input.tier !== 'guest' && getTierPermissions(input.tier).includes('use-server-execution')
   const heavy = isResourceHeavyMode(input.modeId)
   const highLoadMode = data.siteSettings.securityMode === 'limited'
@@ -331,11 +388,26 @@ function isMeteredRoute(method: string, route: string) {
     || /^\/api\/works\/[^/]+\/(share|gallery-submit)$/.test(route)
 }
 
+function rateLimitWindow(policy: { windowSeconds: number; windowMode?: 'rolling' | 'natural-day' }, now: Date) {
+  if (policy.windowMode === 'natural-day') {
+    const start = startOfLocalDay(now)
+    return {
+      cutoffMs: start.getTime(),
+      resetAt: nextLocalDayReset(now).toISOString(),
+    }
+  }
+  return {
+    cutoffMs: now.getTime() - policy.windowSeconds * 1000,
+    resetAt: new Date(now.getTime() + policy.windowSeconds * 1000).toISOString(),
+  }
+}
+
 export function enforceTrafficGuard(data: PublicServerData, request: FastifyRequest) {
   const route = request.url.split('?')[0]
   const method = request.method
   const ip = getClientIp(request)
-  const now = Date.now()
+  const nowDate = new Date()
+  const now = nowDate.getTime()
   const blocked = ip
     ? data.blockedIps.find((item) => item.ip === ip && (!item.expiresAt || Date.parse(item.expiresAt) > now))
     : null
@@ -346,22 +418,31 @@ export function enforceTrafficGuard(data: PublicServerData, request: FastifyRequ
 
   const actor = getActor(data, request)
   if (actor.tier === 'host-admin' || actor.tier === 'admin') return { ok: true }
+  if (actor.tier === 'guest' && data.siteSettings.guestEnabled === false) {
+    return {
+      ok: false,
+      statusCode: 403,
+      error: 'Guest access is temporarily closed by site settings.',
+      gatingReason: 'guest-access-disabled',
+    }
+  }
   const subjectType = actor.tier === 'guest' ? 'ip' : 'user'
   const subject = actor.tier === 'guest' ? (ip || 'unknown-ip') : actor.id
   const policy = actor.tier === 'guest'
     ? data.rateLimitPolicies.find((item) => item.id === 'guest-ip-daily')
     : data.rateLimitPolicies.find((item) => item.id === 'user-hourly-basic')
-  if (!policy?.enabled) return { ok: true }
 
-  const cutoff = now - policy.windowSeconds * 1000
+  const window = policy?.enabled ? rateLimitWindow(policy, nowDate) : null
   data.rateLimitEvents = data.rateLimitEvents.filter((event) => Date.parse(event.createdAt) > now - RATE_EVENT_RETENTION_MS)
-  const count = data.rateLimitEvents.filter((event) => (
-    event.subject === subject
-    && event.subjectType === subjectType
-    && Date.parse(event.createdAt) >= cutoff
-  )).length
+  const count = window
+    ? data.rateLimitEvents.filter((event) => (
+      event.subject === subject
+      && event.subjectType === subjectType
+      && Date.parse(event.createdAt) >= window.cutoffMs
+    )).length
+    : 0
 
-  if (count >= policy.maxRequests) {
+  if (policy?.enabled && window && count >= policy.maxRequests) {
     if (policy.lockoutSeconds && ip) {
       data.blockedIps.push({
         ip,
@@ -371,19 +452,57 @@ export function enforceTrafficGuard(data: PublicServerData, request: FastifyRequ
         createdBy: 'system',
       })
     }
-    return { ok: false, statusCode: 429, error: `Rate limit exceeded (${policy.maxRequests}/${policy.windowSeconds}s).` }
+    return {
+      ok: false,
+      statusCode: 429,
+      error: `Rate limit exceeded (${policy.maxRequests}/${policy.windowSeconds}s).`,
+      policyId: policy.id,
+      limit: policy.maxRequests,
+      remaining: 0,
+      resetAt: window.resetAt,
+      gatingReason: 'request-rate-limit-exceeded',
+    }
   }
 
-  data.rateLimitEvents.push({
-    id: createId('rate'),
-    subject,
-    subjectType,
-    route,
-    tier: actor.tier,
-    ip,
-    createdAt: new Date().toISOString(),
-  })
-  return { ok: true }
+  const ledger = actor.tier === 'guest' ? null : refreshQuotaLedger(data, actor.id, actor.tier, nowDate)
+  if (ledger && ledger.baseCallsRemaining <= 0) {
+    return {
+      ok: false,
+      statusCode: 429,
+      error: 'Daily quota exhausted.',
+      policyId: 'daily-base-calls',
+      limit: DAILY_BASE_CALLS[actor.tier],
+      remaining: 0,
+      resetAt: ledger.resetAt,
+      gatingReason: 'daily-base-quota-exhausted',
+    }
+  }
+  if (ledger) ledger.baseCallsRemaining = Math.max(0, ledger.baseCallsRemaining - 1)
+
+  if (policy?.enabled) {
+    data.rateLimitEvents.push({
+      id: createId('rate'),
+      subject,
+      subjectType,
+      route,
+      tier: actor.tier,
+      ip,
+      createdAt: new Date().toISOString(),
+    })
+  }
+  return {
+    ok: true,
+    policyId: policy?.id || null,
+    limit: policy?.maxRequests,
+    remaining: policy?.enabled ? Math.max(0, policy.maxRequests - count - 1) : undefined,
+    resetAt: window?.resetAt || ledger?.resetAt,
+    quota: ledger
+      ? {
+        baseCallsRemaining: ledger.baseCallsRemaining,
+        resetAt: ledger.resetAt,
+      }
+      : null,
+  }
 }
 
 export function cleanupPublicServerData(data: PublicServerData) {

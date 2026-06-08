@@ -86,6 +86,7 @@ export const DEFAULT_RATE_LIMIT_POLICIES: RateLimitPolicy[] = [
     windowSeconds: 24 * 60 * 60,
     maxRequests: 8,
     lockoutSeconds: 6 * 60 * 60,
+    windowMode: 'natural-day',
   },
   {
     id: 'user-hourly-basic',

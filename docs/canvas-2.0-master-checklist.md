@@ -33,6 +33,7 @@
 - `1.11.10` hardens GitHub Actions release builds after a tag-only Linux Electron download `HTTP 504`: desktop and Pages workflows now use Electron mirror env vars plus retrying `npm ci`.
 - `1.11.15` completes the desktop CI hardening loop: Electron runtime downloads use `electronDownload.mirror`, Linux/Windows helper binaries use scoped mirrors, macOS pre-warms the `dmg-builder` helper cache, and the `v1.11.15` tag release uploaded Windows/macOS/Linux artifacts successfully.
 - `1.11.16` tightens embedded display font loading: the SPA now resolves Noto Serif SC and Fusion Pixel styles from the Vite base URL against `document.baseURI`, preserving web, GitHub Pages, and Electron `file://` compatibility while removing desktop-build font resolution noise.
+- `1.11.17` advances the quota foundation: local/mock ledgers now refresh on server-local natural days, daily check-in is idempotent, logged-in metered calls consume base quota, guest caps use an IP natural-day window, and lightweight `/api/remix/fetch` no longer bypasses the traffic guard.
 - Frontend, server typecheck, build, service smoke tests, and desktop/mobile browser screenshots passed on 2026-06-06.
 
 ## Completion Matrix
@@ -148,6 +149,7 @@
 - `in_progress` 24h workflow run retention with compressed context payloads
 - `todo` bridge `newapi`, `subapi`, `octopus`
 - `in_progress` local/mock quota, sign-in, redeem, ops, cleanup, and task-retention interfaces
+- `in_progress` natural-day base/hosted quota windows now exist in local/mock mode; production payment-grade quota settlement remains a bridge/adapter task
 - `todo` production persistence, queues, payment-grade quotas, task recovery, migration
 
 ## 2026-06-06 Validation
@@ -184,12 +186,13 @@
 - `1.11.9` validation passed on both Fastify and lightweight services with authenticated GitHub API lookup: current version `1.11.9`, latest release `v1.11.8`, comparison `older` before publishing this release. Browser screenshots confirmed Control Center Data tab remains a secondary modal with no horizontal overflow at `1440x960` and `390x844`; trailing-slash GitHub URLs such as `https://github.com/octocat/Hello-World/` normalize without falling back to the default repo.
 - `1.11.15` GitHub Actions validation passed for `publish/main` Pages, `publish/main` Desktop, and `v1.11.15` tag Desktop release; release assets include Windows setup, macOS arm64 DMG, Linux AppImage/deb, blockmaps, and latest YAML metadata.
 - `1.11.16` validation passed for embedded font stylesheet loading: normal build, GitHub Pages build, desktop build, full Windows desktop package, and lightweight static serving all kept `/fonts/*` available without unresolved `./fonts/...` warnings.
+- `1.11.17` validation must cover natural-day quota refresh, same-day sign-in idempotence, daily base quota exhaustion, requested `server-managed` downgrade when hosting is not allowed, and lightweight remix fetch passing through the traffic guard.
 
 ### 10. Sign-in / Quota
-- `in_progress` login-as-signin flow through local/mock records
-- `todo` natural-day quota windows
-- `in_progress` premium/basic model quota ledgers in local JSON
-- `in_progress` guest daily/IP caps on heavy routes
+- `done` login/register/guest records are separated from daily check-in records through `SignInRecord.source`
+- `done` natural-day quota windows refresh local/mock base calls and hosted runs at the server-local next midnight
+- `in_progress` premium/basic model quota ledgers in local JSON; payment-grade settlement and external billing are still deferred
+- `in_progress` guest daily/IP caps on heavy routes now use a natural-day IP window; deeper route weighting remains deferred
 
 ### 11. Redeem
 - `in_progress` local/mock redeem endpoint and ledger application

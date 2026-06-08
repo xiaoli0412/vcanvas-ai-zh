@@ -106,6 +106,7 @@ export interface SignInRecord {
   id: string
   userId: string
   tier: UserTier
+  source?: 'login' | 'register' | 'guest' | 'daily-checkin'
   ip?: string | null
   userAgent?: string | null
   createdAt: string
@@ -218,8 +219,13 @@ export interface WorkflowExecutionPlan {
     strategy: 'none' | 'local-summary-v1'
   }
   quota: {
+    baseCallsDebited?: number
+    baseCallsRemaining?: number
     hostedRunsDebited: number
     hostedRunsRemaining?: number
+    resetAt?: string
+    hostedResetAt?: string
+    gatingReason?: string | null
   }
 }
 
@@ -396,6 +402,7 @@ export interface RateLimitPolicy {
   windowSeconds: number
   maxRequests: number
   lockoutSeconds?: number
+  windowMode?: 'rolling' | 'natural-day'
 }
 
 export interface NoticeMessage {

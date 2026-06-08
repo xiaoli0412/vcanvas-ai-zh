@@ -44,7 +44,8 @@ export async function createServer() {
     if (!request.url.startsWith('/api/')) return
     const guard = await localDataStore.update((data) => enforceTrafficGuard(data, request))
     if (!guard.ok) {
-      return reply.code(guard.statusCode || 429).send({ ok: false, error: guard.error })
+      const { ok: _ok, statusCode, ...payload } = guard
+      return reply.code(statusCode || 429).send({ ok: false, ...payload })
     }
   })
 

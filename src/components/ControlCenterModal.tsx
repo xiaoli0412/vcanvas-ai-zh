@@ -123,6 +123,7 @@ export function ControlCenterModal({
   const [session, setSession] = useState<AuthSession | null>(null)
   const [loginNotice, setLoginNotice] = useState<{ ip?: string | null; time?: string; userAgent?: string | null } | null>(null)
   const [quota, setQuota] = useState<QuotaLedger | null>(null)
+  const [quotaStatus, setQuotaStatus] = useState<{ canSignIn?: boolean; nextResetAt?: string | null } | null>(null)
   const [siteSettings, setSiteSettings] = useState<(SiteSettings & Record<string, any>) | null>(null)
   const [notices, setNotices] = useState<NoticeMessage[]>([])
   const [managedUsers, setManagedUsers] = useState<ManagedUser[]>([])
@@ -196,7 +197,7 @@ export function ControlCenterModal({
       fetch('/api/settings/site', { headers: mergeSessionHeaders() }).then((response) => readJson<{ settings: SiteSettings & Record<string, any> }>(response)),
       fetch('/api/notices', { headers: mergeSessionHeaders() }).then((response) => readJson<{ notices: NoticeMessage[] }>(response)),
       fetch('/api/providers', { headers: mergeSessionHeaders() }).then((response) => readJson<{ channels: ProviderChannel[] }>(response)),
-      fetch('/api/quotas/sign-in', { headers: mergeSessionHeaders() }).then((response) => readJson<{ ledger: QuotaLedger | null }>(response)),
+      fetch('/api/quotas/sign-in', { headers: mergeSessionHeaders() }).then((response) => readJson<{ ledger: QuotaLedger | null; canSignIn?: boolean; nextResetAt?: string | null }>(response)),
       fetch('/api/quotas/redeem', { headers: mergeSessionHeaders() }).then((response) => readJson<{ ledger: QuotaLedger | null }>(response)),
       fetch('/api/ops/status', { headers: mergeSessionHeaders() }).then((response) => readJson<{ snapshot: OpsSnapshot }>(response)),
       fetch('/api/gallery').then((response) => readJson<{ entries?: GalleryEntryWithWork[]; items?: GalleryEntryWithWork[] }>(response)),
@@ -207,6 +208,7 @@ export function ControlCenterModal({
     setSession(sessionPayload.session)
     setLoginNotice(sessionPayload.loginNotice)
     setQuota(quotaPayload.ledger || redeemPayload.ledger || sessionPayload.quota || null)
+    setQuotaStatus({ canSignIn: quotaPayload.canSignIn, nextResetAt: quotaPayload.nextResetAt || quotaPayload.ledger?.resetAt || null })
     setSiteSettings(settingsPayload.settings)
     setDispatchNodesText(JSON.stringify(settingsPayload.settings.dispatchPolicy?.nodes || [], null, 2))
     setNotices(noticePayload.notices || [])
@@ -558,6 +560,7 @@ export function ControlCenterModal({
                   <div className="ccm-metric"><strong>{quota?.baseCallsRemaining ?? '-'}</strong><span>{t('control.quota.basic')}</span></div>
                   <div className="ccm-metric"><strong>{quota?.premiumCredits ?? '-'}</strong><span>{t('control.quota.premium')}</span></div>
                   <div className="ccm-metric"><strong>{quota?.hostedRunsRemaining ?? '-'}</strong><span>{t('control.quota.hosted')}</span></div>
+                  <div className="ccm-kv"><span>{t('control.quota.resetAt')}</span><strong>{formatDate(quotaStatus?.nextResetAt || quota?.resetAt)}</strong></div>
                 </section>
 
                 <section className="ccm-card">
@@ -636,7 +639,8 @@ export function ControlCenterModal({
                 </section>
                 <section className="ccm-card">
                   <h3>{t('control.personal.quota')}</h3>
-                  <button className="btn btn-primary" onClick={signIn} disabled={busy}>{t('control.action.signIn')}</button>
+                  <button className="btn btn-primary" onClick={signIn} disabled={busy || quotaStatus?.canSignIn === false}>{quotaStatus?.canSignIn === false ? t('control.quota.signedToday') : t('control.action.signIn')}</button>
+                  <div className="ccm-kv"><span>{t('control.quota.resetAt')}</span><strong>{formatDate(quotaStatus?.nextResetAt || quota?.resetAt)}</strong></div>
                   <div className="ccm-redeem">
                     <input value={redeemCode} onChange={(event) => setRedeemCode(event.target.value)} placeholder={t('control.placeholder.redeem')} />
                     <button className="btn btn-secondary" onClick={redeem} disabled={busy || !redeemCode.trim()}>{t('control.action.redeem')}</button>

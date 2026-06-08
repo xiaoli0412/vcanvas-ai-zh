@@ -9,7 +9,7 @@ import type {
   WorkflowServiceResult,
 } from '../../shared/contracts/publicServer'
 import { createId, type PublicServerData } from '../data/localDataStore'
-import { ensureQuotaLedger, resolveHostingPolicy, resolveOwnedTargetId, WORKFLOW_TTL_MS } from '../lib/platformPolicy'
+import { refreshQuotaLedger, resolveHostingPolicy, resolveOwnedTargetId, WORKFLOW_TTL_MS } from '../lib/platformPolicy'
 
 interface WorkflowServiceInput {
   action: WorkflowAction
@@ -101,8 +101,14 @@ export function createWorkflowRun(data: PublicServerData, input: WorkflowService
     actorId: ownerId,
     tier: input.actor.tier,
   })
-  const executionMode = input.executionMode
-    || (isHeavyMode(modeId) ? hostingPolicy.resourceHeavyModeDefault : hostingPolicy.defaultExecutionMode)
+  const policyExecutionMode = isHeavyMode(modeId) ? hostingPolicy.resourceHeavyModeDefault : hostingPolicy.defaultExecutionMode
+  const requestedExecutionMode = input.executionMode
+  const executionMode = requestedExecutionMode === 'server-managed' && policyExecutionMode !== 'server-managed'
+    ? policyExecutionMode
+    : (requestedExecutionMode || policyExecutionMode)
+  const gatingReason = requestedExecutionMode === 'server-managed' && executionMode !== 'server-managed'
+    ? (hostingPolicy.fallbackReason || 'server-managed-not-allowed')
+    : hostingPolicy.fallbackReason
   const compressed = compressWorkflowContext(input.context)
   const context = compressed.context || defaultWorkflowContext(input, modeId)
   const run: WorkflowRun = {
@@ -118,10 +124,11 @@ export function createWorkflowRun(data: PublicServerData, input: WorkflowService
     expiresAt: new Date(now.getTime() + WORKFLOW_TTL_MS).toISOString(),
   }
 
-  const ledger = ensureQuotaLedger(data, ownerId, input.actor.tier)
+  const ledger = refreshQuotaLedger(data, ownerId, input.actor.tier)
   let hostedRunsDebited = 0
   if (isHeavyMode(modeId) && run.executionMode === 'server-managed' && typeof ledger.hostedRunsRemaining === 'number') {
     ledger.hostedRunsRemaining = Math.max(0, ledger.hostedRunsRemaining - 1)
+    ledger.hostedRunsUsedToday = (ledger.hostedRunsUsedToday || 0) + 1
     hostedRunsDebited = 1
   }
 
@@ -140,8 +147,13 @@ export function createWorkflowRun(data: PublicServerData, input: WorkflowService
       strategy: compressed.applied ? 'local-summary-v1' : 'none',
     },
     quota: {
+      baseCallsDebited: input.actor.tier === 'user' || input.actor.tier === 'vip' ? 1 : 0,
+      baseCallsRemaining: ledger.baseCallsRemaining,
       hostedRunsDebited,
       hostedRunsRemaining: ledger.hostedRunsRemaining,
+      resetAt: ledger.resetAt,
+      hostedResetAt: ledger.hostedResetAt,
+      gatingReason,
     },
   }
 

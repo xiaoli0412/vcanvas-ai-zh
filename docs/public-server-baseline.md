@@ -63,6 +63,7 @@
 - `1.11.10` hardens release workflows after repeated Linux tag-build `npm ci` failures caused by Electron download `HTTP 504`: desktop and Pages workflows now use Electron mirror variables and retry dependency installation before failing.
 - `1.11.15` completes release workflow hardening for the owner-cadence branch: Electron runtime packages resolve through `electronDownload.mirror`, Linux/Windows helper binaries stay scoped to their mirror, and macOS pre-warms the `dmg-builder` cache before DMG packaging.
 - `1.11.16` keeps embedded typography runtime-safe by loading the SPA font styles from the Vite base URL resolved against `document.baseURI`, so `/fonts/*` works on normal HTTP hosting, GitHub Pages subpaths, and Electron `file://` without Vite build-time font warnings.
+- `1.11.17` turns local/mock quota windows into real daily behavior: ledgers refresh at the next server-local midnight, daily check-in is idempotent, logged-in metered calls consume base quota, guest IP caps use a natural-day window, and disallowed server-managed heavy requests are downgraded before workflow records are saved.
 
 ## 2026-06-06 Verification Snapshot
 - `npm run typecheck`
@@ -86,6 +87,7 @@
 - `1.11.9` validation adds `/api/updates/check` smoke coverage for Fastify and `scripts/serve-vcanvas.mjs`: host-admin login, authenticated GitHub latest-release lookup, current package version `1.11.9`, latest remote release `v1.11.8` before publishing, trailing-slash repo URL normalization, and Control Center Data tab screenshots at `1440x960` / `390x844` with no horizontal overflow.
 - `1.11.15` GitHub Actions validation passed for `main` Pages, `main` Desktop, and tag-triggered Desktop release publishing.
 - `1.11.16` validation passed for embedded font loading: `npm run build`, `npm run build:gh`, `npm run build:desktop`, `npm run dist:desktop:ci`, and lightweight `/fonts/*` static requests all succeeded without the previous unresolved font stylesheet warnings.
+- `1.11.17` validation adds quota/traffic smoke coverage for Fastify and `scripts/serve-vcanvas.mjs`: daily check-in idempotence, base quota exhaustion, server-managed downgrade, guest natural-day rate metadata, and remix fetch traffic-guard parity.
 
 ## Deferred Beyond This Commit
 - Real auth on top of latest `newapi`, production key encryption, payment-grade quotas, PostgreSQL/Redis persistence, and external `newapi/subapi/octopus` bridges.

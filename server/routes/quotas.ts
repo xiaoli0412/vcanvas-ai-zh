@@ -1,30 +1,46 @@
 import type { FastifyInstance } from 'fastify'
 import { createId, getClientIp, localDataStore } from '../data/localDataStore'
-import { ensureQuotaLedger, getActor } from '../lib/platformPolicy'
+import { dailySignInRecord, getActor, refreshQuotaLedger } from '../lib/platformPolicy'
 
 export async function registerQuotaRoutes(app: FastifyInstance) {
   app.get('/api/quotas/sign-in', async (request) => {
-    const data = await localDataStore.read()
-    const actor = getActor(data, request)
-    return {
-      ok: true,
-      ledger: data.quotaLedgers.find((ledger) => ledger.userId === actor.id) || null,
-      records: data.signInRecords.filter((record) => record.userId === actor.id).slice(-7),
-    }
+    return localDataStore.update((data) => {
+      const actor = getActor(data, request)
+      const ledger = refreshQuotaLedger(data, actor.id, actor.tier)
+      const todayRecord = dailySignInRecord(data, actor.id)
+      return {
+        ok: true,
+        ledger,
+        records: data.signInRecords.filter((record) => record.userId === actor.id).slice(-7),
+        canSignIn: !todayRecord,
+        todayRecord,
+        nextResetAt: ledger.resetAt,
+      }
+    })
   })
 
   app.post('/api/quotas/sign-in', async (request) => {
     const result = await localDataStore.update((data) => {
       const actor = getActor(data, request)
-      const ledger = ensureQuotaLedger(data, actor.id, actor.tier)
+      const ledger = refreshQuotaLedger(data, actor.id, actor.tier)
+      const todayRecord = dailySignInRecord(data, actor.id)
+      if (todayRecord) {
+        return {
+          ledger,
+          record: todayRecord,
+          alreadySignedIn: true,
+          nextResetAt: ledger.resetAt,
+        }
+      }
       ledger.baseCallsRemaining += actor.tier === 'guest' ? 1 : 3
       if (actor.tier === 'vip' || actor.tier === 'user') {
-        ledger.hostedRunsRemaining = Math.min(2, (ledger.hostedRunsRemaining || 0) + 1)
+        ledger.hostedRunsRemaining = Math.min(actor.tier === 'vip' ? 6 : 2, (ledger.hostedRunsRemaining || 0) + 1)
       }
       const record = {
         id: createId('signin'),
         userId: actor.id,
         tier: actor.tier,
+        source: 'daily-checkin' as const,
         ip: getClientIp(request),
         userAgent: String(request.headers['user-agent'] || ''),
         createdAt: new Date().toISOString(),
@@ -38,28 +54,29 @@ export async function registerQuotaRoutes(app: FastifyInstance) {
         ip: getClientIp(request),
         createdAt: record.createdAt,
       })
-      return { ledger, record }
+      return { ledger, record, alreadySignedIn: false, nextResetAt: ledger.resetAt }
     })
     return { ok: true, ...result }
   })
 
   app.get('/api/quotas/redeem', async (request) => {
-    const data = await localDataStore.read()
-    const actor = getActor(data, request)
-    return {
-      ok: true,
-      ledger: data.quotaLedgers.find((ledger) => ledger.userId === actor.id) || null,
-      redeemCodes: data.redeemCodes.map((code) => ({
-        id: code.id,
-        code: code.code.replace(/.(?=.{4})/g, '*'),
-        tierUpgrade: code.tierUpgrade,
-        premiumCredits: code.premiumCredits,
-        expiresAt: code.expiresAt,
-        maxRedemptions: code.maxRedemptions,
-        redeemedCount: code.redeemedCount,
-        enabled: code.enabled ?? true,
-      })),
-    }
+    return localDataStore.update((data) => {
+      const actor = getActor(data, request)
+      return {
+        ok: true,
+        ledger: refreshQuotaLedger(data, actor.id, actor.tier),
+        redeemCodes: data.redeemCodes.map((code) => ({
+          id: code.id,
+          code: code.code.replace(/.(?=.{4})/g, '*'),
+          tierUpgrade: code.tierUpgrade,
+          premiumCredits: code.premiumCredits,
+          expiresAt: code.expiresAt,
+          maxRedemptions: code.maxRedemptions,
+          redeemedCount: code.redeemedCount,
+          enabled: code.enabled ?? true,
+        })),
+      }
+    })
   })
 
   app.post('/api/quotas/redeem', async (request, reply) => {
@@ -76,7 +93,7 @@ export async function registerQuotaRoutes(app: FastifyInstance) {
       if (Date.parse(code.expiresAt) < Date.now()) return { status: 'expired' as const }
       if (code.redeemedCount >= code.maxRedemptions) return { status: 'exhausted' as const }
       if (code.redeemedBy?.includes(actor.id)) return { status: 'used' as const }
-      const ledger = ensureQuotaLedger(data, actor.id, actor.tier)
+      const ledger = refreshQuotaLedger(data, actor.id, actor.tier)
       ledger.premiumCredits += code.premiumCredits || 0
       if (code.tierUpgrade) {
         ledger.tier = code.tierUpgrade
