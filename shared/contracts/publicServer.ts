@@ -278,7 +278,9 @@ export interface WorkRecord {
     exportedAt?: string | null
     includesFlowMap?: boolean
     disclaimerComment?: string
+    safetyStatus?: WorkSafetyStatus
   }
+  safetyReview?: WorkSafetyReview | null
   disclaimerInjectedAt?: string | null
   createdAt: string
   updatedAt: string
@@ -294,22 +296,27 @@ export interface ShareLink {
   createdAt: string
   expiresAt?: string | null
   disclaimerComment?: string
+  safetyReview?: WorkSafetyReview | null
 }
 
 export type GalleryReviewStatus = 'pending-review' | 'published' | 'rejected'
 
 export type GalleryPublicationStatus = 'private' | GalleryReviewStatus
 
-export type GallerySafetyStatus = 'pending' | 'passed' | 'needs-review' | 'blocked'
+export type WorkSafetyStatus = 'pending' | 'passed' | 'needs-review' | 'blocked'
 
-export interface GallerySafetyReview {
-  status: GallerySafetyStatus
+export interface WorkSafetyReview {
+  status: WorkSafetyStatus
   checkedAt: string
   checker: 'local-policy-v1' | 'external-model' | 'manual-admin'
   riskScore: number
   reasons: string[]
   notes?: string | null
 }
+
+export type GallerySafetyStatus = WorkSafetyStatus
+
+export type GallerySafetyReview = WorkSafetyReview
 
 export interface GalleryEntry {
   id: string

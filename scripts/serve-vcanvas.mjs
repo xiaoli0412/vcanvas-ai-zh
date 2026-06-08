@@ -2138,6 +2138,8 @@ async function handleApi(req, res, url) {
       updatedAt: now,
       snapshots: [{ id: createId('snapshot'), workId: id, html, canvasData: body.canvasData, previewImageUrl: body.previewImageUrl || null, createdAt: now }],
     }
+    work.safetyReview = buildGallerySafetyReview(work, now)
+    work.exportMetadata = { ...work.exportMetadata, safetyStatus: work.safetyReview.status }
     data.works.push(work)
     withAudit(data, req, 'work.create', ownerId, actor.tier, { workId: id })
     writeData(data)
@@ -2178,6 +2180,8 @@ async function handleApi(req, res, url) {
       updatedAt: now,
       snapshots: [{ id: createId('snapshot'), workId: id, html, canvasData: body.canvasData, previewImageUrl: body.previewImageUrl || null, createdAt: now }],
     }
+    work.safetyReview = buildGallerySafetyReview(work, now)
+    work.exportMetadata = { ...work.exportMetadata, safetyStatus: work.safetyReview.status }
     data.works.push(work)
     withAudit(data, req, 'work.importHtml', ownerId, actor.tier, { workId: id })
     writeData(data)
@@ -2221,9 +2225,16 @@ async function handleApi(req, res, url) {
       let gallerySafetyStatus = null
       let galleryStatusAfterUpdate = data.works[index].galleryStatus
       if (contentChanged) {
+        data.works[index].safetyReview = buildGallerySafetyReview(data.works[index], now)
+        data.works[index].exportMetadata = { ...data.works[index].exportMetadata, safetyStatus: data.works[index].safetyReview.status }
+        if (data.works[index].safetyReview.status === 'blocked') {
+          data.shareLinks = data.shareLinks.map((link) => link.workId === id
+            ? { ...link, enabled: false, safetyReview: data.works[index].safetyReview }
+            : link)
+        }
         const galleryEntry = data.galleryEntries.find((entry) => entry.workId === id)
         if (galleryEntry) {
-          galleryEntry.safetyReview = buildGallerySafetyReview(data.works[index], now)
+          galleryEntry.safetyReview = data.works[index].safetyReview
           gallerySafetyStatus = galleryEntry.safetyReview.status
           if (galleryEntry.status === 'published' && galleryEntry.safetyReview.status !== 'passed') {
             galleryEntry.status = 'pending-review'
@@ -2235,7 +2246,7 @@ async function handleApi(req, res, url) {
           data.works[index].galleryStatus = galleryEntry.status
         }
       }
-      withAudit(data, req, 'work.update', data.works[index].ownerId, data.works[index].ownerId === 'guest-local' ? 'guest' : 'user', { workId: id, gallerySafetyStatus, galleryStatusAfterUpdate })
+      withAudit(data, req, 'work.update', data.works[index].ownerId, data.works[index].ownerId === 'guest-local' ? 'guest' : 'user', { workId: id, workSafetyStatus: data.works[index].safetyReview?.status || null, gallerySafetyStatus, galleryStatusAfterUpdate })
       writeData(data)
       sendJson(res, 200, { ok: true, work: data.works[index] })
       return true
@@ -2262,17 +2273,27 @@ async function handleApi(req, res, url) {
     }
     const actor = getActor(data, req)
     const now = new Date().toISOString()
+    const safetyReview = buildGallerySafetyReview(work, now)
+    work.safetyReview = safetyReview
+    work.exportMetadata = { ...work.exportMetadata, safetyStatus: safetyReview.status }
+    if (safetyReview.status === 'blocked') {
+      data.shareLinks = data.shareLinks.map((link) => link.workId === id ? { ...link, enabled: false, safetyReview } : link)
+      withAudit(data, req, 'work.shareBlocked', actor.id, actor.tier, { workId: id, safetyReview })
+      writeData(data)
+      sendJson(res, 409, { ok: false, error: 'Work safety review blocked public sharing.', work, safetyReview })
+      return true
+    }
     const slug = work.shareSlug || `${id}-${Math.random().toString(36).slice(2, 7)}`
     const disclaimerComment = buildDisclaimerComment(data, req, 'share')
     work.shareSlug = slug
     work.html = injectDisclaimer(work.html, req, data, 'share')
-    work.exportMetadata = { ...work.exportMetadata, exportedAt: now, disclaimerComment }
+    work.exportMetadata = { ...work.exportMetadata, exportedAt: now, disclaimerComment, safetyStatus: safetyReview.status }
     work.updatedAt = now
-    const link = { id: createId('share'), workId: id, ownerId: work.ownerId, slug, enabled: true, createdAt: now, expiresAt: null, disclaimerComment }
+    const link = { id: createId('share'), workId: id, ownerId: work.ownerId, slug, enabled: true, createdAt: now, expiresAt: null, disclaimerComment, safetyReview }
     data.shareLinks = [...data.shareLinks.filter((item) => item.workId !== id), link]
-    withAudit(data, req, 'work.share', actor.id, actor.tier, { workId: id, slug })
+    withAudit(data, req, 'work.share', actor.id, actor.tier, { workId: id, slug, safetyStatus: safetyReview.status })
     writeData(data)
-    sendJson(res, 200, { ok: true, work, link })
+    sendJson(res, 200, { ok: true, work, link, safetyReview })
     return true
   }
 
@@ -2294,6 +2315,8 @@ async function handleApi(req, res, url) {
     const now = new Date().toISOString()
     const entry = { id: createId('gallery'), workId: id, ownerId: work.ownerId, status: 'pending-review', submittedAt: now, reviewedAt: null, reviewerId: null, rejectionReason: null }
     entry.safetyReview = buildGallerySafetyReview(work, now)
+    work.safetyReview = entry.safetyReview
+    work.exportMetadata = { ...work.exportMetadata, safetyStatus: entry.safetyReview.status }
     work.galleryStatus = 'pending-review'
     data.galleryEntries = [...data.galleryEntries.filter((item) => item.workId !== id), entry]
     withAudit(data, req, 'work.gallerySubmit', actor.id, actor.tier, { workId: id, galleryEntryId: entry.id, safetyStatus: entry.safetyReview.status })
@@ -2338,8 +2361,12 @@ async function handleApi(req, res, url) {
     }
     const now = new Date().toISOString()
     const work = data.works.find((item) => item.id === entry.workId) || null
-    const safetyReview = entry.safetyReview || buildGallerySafetyReview(work, now)
+    const safetyReview = buildGallerySafetyReview(work, now)
     entry.safetyReview = safetyReview
+    if (work) {
+      work.safetyReview = safetyReview
+      work.exportMetadata = { ...work.exportMetadata, safetyStatus: safetyReview.status }
+    }
     if (status === 'published' && safetyReview.status === 'blocked') {
       withAudit(data, req, 'gallery.reviewBlocked', actor.id, actor.tier, { galleryEntryId: entry.id, workId: entry.workId, safetyReview })
       writeData(data)
@@ -2378,6 +2405,10 @@ async function handleApi(req, res, url) {
     const work = data.works.find((item) => item.id === entry.workId) || null
     const safetyReview = buildGallerySafetyReview(work)
     entry.safetyReview = safetyReview
+    if (work) {
+      work.safetyReview = safetyReview
+      work.exportMetadata = { ...work.exportMetadata, safetyStatus: safetyReview.status }
+    }
     withAudit(data, req, 'gallery.safetyReview', actor.id, actor.tier, { galleryEntryId: entry.id, workId: entry.workId, safetyReview })
     writeData(data)
     sendJson(res, 200, { ok: true, entry, work, safetyReview })

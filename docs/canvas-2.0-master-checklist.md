@@ -37,6 +37,7 @@
 - `1.11.18` adds local/mock redeem-code management: host-admin/admin users can create and disable quota goods for premium credits, base calls, hosted runs, and tier upgrades, while ordinary users only redeem codes from the secondary Control Center wallet.
 - `1.11.19` adds local/mock gallery review: host-admin/admin users can publish, reject, or restore submissions from the secondary Control Center, while public `/gallery` now shows only approved published works.
 - `1.11.20` adds local/mock gallery safety preflight: submissions store policy status, risk score, and reason codes; blocked entries cannot be published until the future safety-review adapter changes that verdict; content edits refresh the preflight and can move published entries back to pending review.
+- `1.11.21` promotes safety metadata to saved works: save/import/update/share/gallery paths share local preflight status, blocked works cannot create share links, and stale share links are disabled when edited content becomes blocked.
 - Frontend, server typecheck, build, service smoke tests, and desktop/mobile browser screenshots passed on 2026-06-06.
 
 ## Completion Matrix
@@ -61,7 +62,7 @@
 ### 2. Security
 - `in_progress` Encrypted provider keys for non-guest users: local AES-GCM custody exists, production KMS/key-vault adapter remains todo
 - `in_progress` IP audit, throttling, blocked IP store, manual admin block/unblock, and escalating lockouts on heavy routes
-- `todo` injection/leak prevention across UI and service routes
+- `in_progress` injection/leak prevention across UI and service routes; local/mock work safety preflight now protects gallery publishing and public share creation
 - `in_progress` long/short disclaimer system
 - `in_progress` export/share comment injection with IP/time metadata
 - `in_progress` admin-only site/security controls are visible in Control Center; production key encryption and security review model remain deferred
@@ -122,7 +123,7 @@
 - `in_progress` persistent work save/list/manage on server through local JSON store, `/api/works`, and the secondary Works Center modal
 - `done` import HTML through `/api/works/import-html` with the 10-work owner limit
 - `done` Works Center shows an in-modal deletion chooser when the work limit is reached, so users can free space without leaving the canvas
-- `done` share links through `/api/works/:id/share`
+- `done` share links through `/api/works/:id/share`, with local/mock safety preflight blocking `blocked` works before public links are created
 - `done` public share route `/share/:slug` renders enabled share links and returns branded 404/410/paused fallback pages
 - `done` public gallery route `/gallery` renders a read-only standalone feed for approved published local/mock entries only
 - `done` local/mock gallery / 鉴赏厅 review status, safety preflight, tier quotas, lightweight masonry-feed presentation, and admin publish/reject/restore workflow
@@ -193,6 +194,7 @@
 - `1.11.19` validation must cover admin login, gallery submit, default `/api/gallery` hiding pending entries, admin `includeReview=true` queue access, publish/reject/restore review actions, work `galleryStatus` sync, disabled public `/gallery` hiding cards, enabled public `/gallery` showing only published works, and Fastify/lightweight parity.
 - `1.11.18` validation passed for admin-only redeem-code CRUD, non-admin list hiding, tier-upgrade session refresh, and Fastify/lightweight parity for redeem-code rewards.
 - `1.11.20` validation covers safe submission preflight, blocked submission preflight, admin safety recheck, publish blocking for `blocked`, content-update preflight refresh, publish success for `passed`/`needs-review`, audit parity, and Fastify/lightweight parity.
+- `1.11.21` validation must cover work-level safety metadata on save/import/update, public share blocking for `blocked`, stale share disabling after dangerous edits, Works Center safety display, and Fastify/lightweight parity.
 
 ### 10. Sign-in / Quota
 - `done` login/register/guest records are separated from daily check-in records through `SignInRecord.source`

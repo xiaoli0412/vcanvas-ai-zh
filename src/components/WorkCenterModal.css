@@ -379,7 +379,7 @@
 
 .wcm-status-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
   gap: 8px;
   margin-top: 12px;
 }
@@ -395,6 +395,21 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.wcm-status-grid .wcm-safety.passed {
+  border-color: rgba(74, 158, 142, 0.32);
+  color: #8ed7c7;
+}
+
+.wcm-status-grid .wcm-safety.needs-review {
+  border-color: rgba(212, 170, 83, 0.34);
+  color: #e0bc70;
+}
+
+.wcm-status-grid .wcm-safety.blocked {
+  border-color: rgba(214, 96, 96, 0.38);
+  color: #e48c8c;
 }
 
 .wcm-empty {

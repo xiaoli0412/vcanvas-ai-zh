@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { createId, getClientIp, localDataStore, type PublicServerData } from '../data/localDataStore'
 import type { CanvasModeId, GalleryReviewStatus, WorkRecord, WorkSnapshot } from '../../shared/contracts/publicServer'
-import { buildGallerySafetyReview } from '../lib/gallerySafety'
+import { buildWorkSafetyReview } from '../lib/gallerySafety'
 import {
   buildDisclaimerComment,
   canSubmitGallery,
@@ -55,7 +55,7 @@ function buildWork(input: {
   })
   const html = injectDisclaimerComment(input.body.html, comment)
   const snapshot = createSnapshot(id, html, input.body.canvasData, input.body.previewImageUrl, input.now)
-  return {
+  const work: WorkRecord = {
     id,
     ownerId: input.ownerId,
     title: input.body.title?.slice(0, 50) || '未命名作品',
@@ -74,7 +74,13 @@ function buildWork(input: {
     createdAt: input.now,
     updatedAt: input.now,
     snapshots: [snapshot],
-  } satisfies WorkRecord
+  }
+  work.safetyReview = buildWorkSafetyReview(work, input.now)
+  work.exportMetadata = {
+    ...work.exportMetadata,
+    safetyStatus: work.safetyReview.status,
+  }
+  return work
 }
 
 export async function registerWorkRoutes(app: FastifyInstance) {
@@ -218,9 +224,19 @@ export async function registerWorkRoutes(app: FastifyInstance) {
       let gallerySafetyStatus: string | null = null
       let galleryStatusAfterUpdate = next.galleryStatus
       if (contentChanged) {
+        next.safetyReview = buildWorkSafetyReview(next, now)
+        next.exportMetadata = {
+          ...next.exportMetadata,
+          safetyStatus: next.safetyReview.status,
+        }
+        if (next.safetyReview.status === 'blocked') {
+          data.shareLinks = data.shareLinks.map((link) => link.workId === id
+            ? { ...link, enabled: false, safetyReview: next.safetyReview }
+            : link)
+        }
         const galleryEntry = data.galleryEntries.find((entry) => entry.workId === id)
         if (galleryEntry) {
-          galleryEntry.safetyReview = buildGallerySafetyReview(next, now)
+          galleryEntry.safetyReview = next.safetyReview
           gallerySafetyStatus = galleryEntry.safetyReview.status
           if (galleryEntry.status === 'published' && galleryEntry.safetyReview.status !== 'passed') {
             galleryEntry.status = 'pending-review'
@@ -240,7 +256,7 @@ export async function registerWorkRoutes(app: FastifyInstance) {
         action: 'work.update',
         ip: getClientIp(request),
         createdAt: now,
-        metadata: { workId: id, gallerySafetyStatus, galleryStatusAfterUpdate },
+        metadata: { workId: id, workSafetyStatus: next.safetyReview?.status || null, gallerySafetyStatus, galleryStatusAfterUpdate },
       })
       return next
     })
@@ -280,6 +296,25 @@ export async function registerWorkRoutes(app: FastifyInstance) {
       if (!work || !canAccessWork(data, request, work)) return null
       const actor = getActor(data, request)
       const now = new Date().toISOString()
+      const safetyReview = buildWorkSafetyReview(work, now)
+      work.safetyReview = safetyReview
+      work.exportMetadata = {
+        ...work.exportMetadata,
+        safetyStatus: safetyReview.status,
+      }
+      if (safetyReview.status === 'blocked') {
+        data.shareLinks = data.shareLinks.map((link) => link.workId === id ? { ...link, enabled: false, safetyReview } : link)
+        data.auditEvents.push({
+          id: createId('audit'),
+          actorId: actor.id,
+          actorTier: actor.tier,
+          action: 'work.shareBlocked',
+          ip: getClientIp(request),
+          createdAt: now,
+          metadata: { workId: id, safetyReview },
+        })
+        return { status: 'blocked' as const, work, safetyReview }
+      }
       const comment = buildDisclaimerComment(data.disclaimerPolicy, {
         ip: getClientIp(request),
         time: now,
@@ -303,6 +338,7 @@ export async function registerWorkRoutes(app: FastifyInstance) {
         createdAt: now,
         expiresAt: null,
         disclaimerComment: comment,
+        safetyReview,
       }
       data.shareLinks = [...data.shareLinks.filter((item) => item.workId !== id), link]
       data.auditEvents.push({
@@ -312,12 +348,21 @@ export async function registerWorkRoutes(app: FastifyInstance) {
         action: 'work.share',
         ip: getClientIp(request),
         createdAt: now,
-        metadata: { workId: id, slug },
+        metadata: { workId: id, slug, safetyStatus: safetyReview.status },
       })
-      return { work, link }
+      return { status: 'ok' as const, work, link, safetyReview }
     })
     if (!result) {
       reply.code(404).send({ ok: false, error: 'Work not found' })
+      return
+    }
+    if (result.status === 'blocked') {
+      reply.code(409).send({
+        ok: false,
+        error: 'Work safety review blocked public sharing.',
+        work: result.work,
+        safetyReview: result.safetyReview,
+      })
       return
     }
     return { ok: true, ...result }
@@ -332,7 +377,9 @@ export async function registerWorkRoutes(app: FastifyInstance) {
       const eligibility = canSubmitGallery(data, actor.id, actor.tier)
       if (!eligibility.ok) return { status: 'denied' as const, eligibility }
       const entry = createGalleryEntry({ workId: id, ownerId: work.ownerId })
-      entry.safetyReview = buildGallerySafetyReview(work, entry.submittedAt)
+      entry.safetyReview = buildWorkSafetyReview(work, entry.submittedAt)
+      work.safetyReview = entry.safetyReview
+      work.exportMetadata = { ...work.exportMetadata, safetyStatus: entry.safetyReview.status }
       work.galleryStatus = 'pending-review'
       data.galleryEntries = [...data.galleryEntries.filter((item) => item.workId !== id), entry]
       data.auditEvents.push({
@@ -397,8 +444,12 @@ export async function registerWorkRoutes(app: FastifyInstance) {
       if (!entry) return { status: 'missing' as const }
       const now = new Date().toISOString()
       const work = data.works.find((item) => item.id === entry.workId) || null
-      const safetyReview = entry.safetyReview || buildGallerySafetyReview(work, now)
+      const safetyReview = buildWorkSafetyReview(work, now)
       entry.safetyReview = safetyReview
+      if (work) {
+        work.safetyReview = safetyReview
+        work.exportMetadata = { ...work.exportMetadata, safetyStatus: safetyReview.status }
+      }
       if (status === 'published' && safetyReview.status === 'blocked') {
         data.auditEvents.push({
           id: createId('audit'),
@@ -462,8 +513,12 @@ export async function registerWorkRoutes(app: FastifyInstance) {
       const entry = data.galleryEntries.find((item) => item.id === id)
       if (!entry) return { status: 'missing' as const }
       const work = data.works.find((item) => item.id === entry.workId) || null
-      const safetyReview = buildGallerySafetyReview(work)
+      const safetyReview = buildWorkSafetyReview(work)
       entry.safetyReview = safetyReview
+      if (work) {
+        work.safetyReview = safetyReview
+        work.exportMetadata = { ...work.exportMetadata, safetyStatus: safetyReview.status }
+      }
       data.auditEvents.push({
         id: createId('audit'),
         actorId: actor.id,

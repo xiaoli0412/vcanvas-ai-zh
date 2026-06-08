@@ -36,6 +36,10 @@ function makeDefaultTitle(promptDraft: string, fallback: string) {
   return normalized.length > 34 ? `${normalized.slice(0, 34)}...` : normalized
 }
 
+function safetyStatus(work: WorkRecord | null | undefined) {
+  return work?.safetyReview?.status || work?.exportMetadata?.safetyStatus || 'pending'
+}
+
 function downloadHtml(work: WorkRecord) {
   if (!work.html) return
   const blob = new Blob([work.html], { type: 'text/html;charset=utf-8' })
@@ -71,6 +75,7 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
   const selectedWork = works.find((work) => work.id === selectedId) || works[0] || null
   const selectedShare = selectedWork ? shareLinks.find((link) => link.workId === selectedWork.id) : null
   const selectedGalleryEntry = selectedWork ? galleryEntries.find((entry) => entry.workId === selectedWork.id) : null
+  const selectedSafetyStatus = safetyStatus(selectedWork)
   const canSaveCurrentOutput = Boolean(lastHTML.trim())
   const workCountLabel = `${works.length}/${limit}`
 
@@ -311,7 +316,7 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
                     onClick={() => setSelectedId(work.id)}
                   >
                     <span className="wcm-item-title">{work.title}</span>
-                    <span className="wcm-item-meta">{work.galleryStatus || 'private'} · {formatDate(work.updatedAt)}</span>
+                    <span className="wcm-item-meta">{work.galleryStatus || 'private'} · {t(`works.safety.${safetyStatus(work)}`)} · {formatDate(work.updatedAt)}</span>
                   </button>
                 ))}
               </div>
@@ -346,10 +351,11 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
                     <span>{t('works.status.saved')}: {selectedWork.status}</span>
                     <span>{t('works.status.share')}: {selectedShare?.slug || selectedWork.shareSlug || '-'}</span>
                     <span>{t('works.status.gallery')}: {selectedGalleryEntry?.status || selectedWork.galleryStatus || 'private'}</span>
+                    <span className={`wcm-safety ${selectedSafetyStatus}`}>{t('works.status.safety')}: {t(`works.safety.${selectedSafetyStatus}`)}</span>
                   </div>
                   <div className="wcm-actions wrap">
                     <button className="btn btn-secondary" onClick={() => downloadHtml(selectedWork)} disabled={!selectedWork.html}>{t('works.exportHtml')}</button>
-                    <button className="btn btn-secondary" onClick={shareSelected} disabled={busy}>{t('works.share')}</button>
+                    <button className="btn btn-secondary" onClick={shareSelected} disabled={busy || selectedSafetyStatus === 'blocked'}>{t('works.share')}</button>
                     <button className="btn btn-secondary" onClick={submitGallery} disabled={busy}>{t('works.submitGallery')}</button>
                     <button className="btn btn-ghost danger" onClick={deleteSelected} disabled={busy}>{t('works.delete')}</button>
                   </div>

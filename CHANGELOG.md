@@ -1,3 +1,13 @@
+## 1.11.21 - 2026-06-08
+
+### Features
+- Promoted local/mock safety metadata from gallery-only entries to work records, so saved/imported/updated works carry a reusable safety status.
+- Public sharing now runs the same local preflight and blocks `blocked` works with `409` before a share link is created.
+
+### Fixes
+- Existing share links are automatically disabled when a work edit refreshes safety status to `blocked`, preventing stale public links from exposing newly risky content.
+- Works Center now shows compact safety status labels without adding persistent canvas chrome.
+
 ## 1.11.20 - 2026-06-08
 
 ### Features

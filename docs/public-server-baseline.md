@@ -67,6 +67,7 @@
 - `1.11.18` adds local/mock redeem-code management to both Fastify and `scripts/serve-vcanvas.mjs`: admins can create/disable generated quota goods, ordinary users only redeem them, tier-upgrade rewards refresh active sessions, and the secondary Control Center Data area exposes the flow without adding canvas chrome.
 - `1.11.19` adds local/mock gallery review parity to both Fastify and `scripts/serve-vcanvas.mjs`: admins can publish, reject, or restore submissions through `/api/gallery/:id/review`, Control Center shows the review queue in a secondary modal, and public `/gallery` no longer exposes pending/rejected items.
 - `1.11.20` adds local/mock gallery safety preflight parity to both Fastify and `scripts/serve-vcanvas.mjs`: submissions carry safety status, risk score, and reason codes, admins can rerun `/api/gallery/:id/safety-review`, locally blocked entries cannot be published, and content edits refresh the preflight before public exposure continues.
+- `1.11.21` promotes safety metadata to work records in both Fastify and `scripts/serve-vcanvas.mjs`: save/import/update/share/gallery paths all refresh local policy status, share creation returns `409` for `blocked` works, and existing share links are disabled when later edits become blocked.
 
 ## 2026-06-06 Verification Snapshot
 - `npm run typecheck`
@@ -94,6 +95,7 @@
 - `1.11.18` validation adds redeem-code smoke coverage for Fastify and `scripts/serve-vcanvas.mjs`: admin create/list/disable, non-admin management rejection and list hiding, base/hosted/premium rewards, and tier-upgrade session refresh.
 - `1.11.19` validation adds gallery-review smoke coverage for Fastify and `scripts/serve-vcanvas.mjs`: submitted works remain hidden from default public gallery data, admins can inspect the review queue with `includeReview=true`, publish/reject/restore actions audit and sync work status, disabled public gallery pages show only the paused notice, and enabled public `/gallery` only displays published works.
 - `1.11.20` validation adds gallery-safety smoke coverage for Fastify and `scripts/serve-vcanvas.mjs`: safe works get `passed`, script/payment examples get `needs-review`, secret-like submissions get `blocked`, blocked entries cannot be published, content edits refresh safety metadata, and admin rechecks refresh safety metadata.
+- `1.11.21` validation adds public-share safety smoke coverage for Fastify and `scripts/serve-vcanvas.mjs`: saved and imported works receive work-level safety metadata, `blocked` works cannot create share links, previously shared works disable stale links when edited into `blocked`, and Works Center renders compact safety labels.
 
 ## Deferred Beyond This Commit
 - Real auth on top of latest `newapi`, production key encryption, payment-grade quotas/redeem-code generation, PostgreSQL/Redis persistence, and external `newapi/subapi/octopus` bridges.

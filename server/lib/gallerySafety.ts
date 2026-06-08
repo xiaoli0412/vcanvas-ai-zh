@@ -1,4 +1,4 @@
-import type { GallerySafetyReview, WorkRecord } from '../../shared/contracts/publicServer'
+import type { WorkRecord, WorkSafetyReview } from '../../shared/contracts/publicServer'
 
 const BLOCK_RULES = [
   { code: 'secret-like-token', pattern: /\b(sk-[a-z0-9_-]{12,}|api[_\s-]?key|private\s+key|bearer\s+[a-z0-9._-]{12,})\b/i },
@@ -20,7 +20,7 @@ function workText(work: WorkRecord | null | undefined) {
     .slice(0, 240_000)
 }
 
-export function buildGallerySafetyReview(work: WorkRecord | null | undefined, checkedAt = new Date().toISOString()): GallerySafetyReview {
+export function buildWorkSafetyReview(work: WorkRecord | null | undefined, checkedAt = new Date().toISOString()): WorkSafetyReview {
   const text = workText(work)
   const blockedReasons = BLOCK_RULES.filter((rule) => rule.pattern.test(text)).map((rule) => rule.code)
   const reviewReasons = REVIEW_RULES.filter((rule) => rule.pattern.test(text)).map((rule) => rule.code)
@@ -37,3 +37,5 @@ export function buildGallerySafetyReview(work: WorkRecord | null | undefined, ch
     notes: status === 'passed' ? 'No local policy flags found.' : null,
   }
 }
+
+export const buildGallerySafetyReview = buildWorkSafetyReview
