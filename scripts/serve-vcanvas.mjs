@@ -10,6 +10,28 @@ const proxyPaths = new Set(['/proxy', '/_vcanvas_proxy'])
 const remixPath = '/api/remix/fetch'
 const dataDir = path.resolve(process.env.VCANVAS_DATA_DIR || '.vcanvas-data')
 const dataFile = path.join(dataDir, 'public-server.json')
+const dataExportSchemaVersion = 'local-json-v1'
+const dataImportVerificationText = 'IMPORT INSCANVAS DATA'
+const dataPortableCollections = [
+  'siteSettings',
+  'personalSettings',
+  'providerChannels',
+  'notices',
+  'works',
+  'workflows',
+  'sessions',
+  'users',
+  'quotaLedgers',
+  'redeemCodes',
+  'blockedIps',
+  'rateLimitEvents',
+  'signInRecords',
+  'shareLinks',
+  'galleryEntries',
+  'auditEvents',
+  'rateLimitPolicies',
+  'disclaimerPolicy',
+]
 
 const contentTypes = {
   '.css': 'text/css; charset=utf-8',
@@ -276,6 +298,92 @@ function writeData(data) {
   writeFileSync(dataFile, `${JSON.stringify(data, null, 2)}\n`, 'utf8')
 }
 
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value))
+}
+
+function countPortableValue(value) {
+  if (Array.isArray(value)) return value.length
+  if (value && typeof value === 'object') return 1
+  return value == null ? 0 : 1
+}
+
+function buildDataExportManifest(data) {
+  const counts = {}
+  for (const key of dataPortableCollections) counts[key] = countPortableValue(data[key])
+  return {
+    exportedAt: new Date().toISOString(),
+    adapter: 'local-json',
+    productName: 'inscanvas',
+    schemaVersion: dataExportSchemaVersion,
+    includes: [...dataPortableCollections],
+    counts,
+  }
+}
+
+function buildDataExportPayload(data) {
+  const exportData = {}
+  for (const key of dataPortableCollections) exportData[key] = cloneJson(data[key])
+  return {
+    ok: true,
+    manifest: buildDataExportManifest(data),
+    data: exportData,
+  }
+}
+
+function readImportData(payload) {
+  if (!payload || typeof payload !== 'object') throw new Error('Invalid data import payload.')
+  const source = payload.data && typeof payload.data === 'object' ? payload.data : payload
+  if (!source || typeof source !== 'object') throw new Error('Invalid data import payload.')
+  return source
+}
+
+function summarizeImportPayload(payload) {
+  const source = readImportData(payload)
+  const counts = {}
+  const includes = []
+  for (const key of dataPortableCollections) {
+    if (source[key] === undefined) continue
+    includes.push(key)
+    counts[key] = countPortableValue(source[key])
+  }
+  return {
+    manifest: {
+      exportedAt: new Date().toISOString(),
+      adapter: 'local-json',
+      productName: 'inscanvas',
+      schemaVersion: dataExportSchemaVersion,
+      includes,
+      counts,
+    },
+  }
+}
+
+function applyImportData(target, payload) {
+  const source = readImportData(payload)
+  const applied = []
+  for (const key of dataPortableCollections) {
+    const value = source[key]
+    if (value === undefined) continue
+    if (Array.isArray(target[key])) {
+      if (!Array.isArray(value)) throw new Error(`Import collection ${key} must be an array.`)
+      target[key] = cloneJson(value)
+    } else if (target[key] && typeof target[key] === 'object') {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new Error(`Import collection ${key} must be an object.`)
+      }
+      target[key] = { ...target[key], ...cloneJson(value) }
+    } else {
+      target[key] = cloneJson(value)
+    }
+    applied.push(key)
+  }
+  return {
+    applied,
+    manifest: buildDataExportManifest(target),
+  }
+}
+
 async function readJsonBody(req) {
   const raw = await readBody(req)
   return raw ? JSON.parse(raw) : {}
@@ -346,6 +454,10 @@ function resolveOwnedTargetId(actor, requestedOwnerId) {
 function canManageSecurity(tier) {
   const permissions = permissionsForTier(tier)
   return permissions.includes('manage-users') || permissions.includes('manage-site')
+}
+
+function canManageData(tier) {
+  return permissionsForTier(tier).includes('manage-site') || tier === 'host-admin' || tier === 'admin'
 }
 
 function normalizeIp(value) {
@@ -1913,6 +2025,84 @@ async function handleApi(req, res, url) {
     withAudit(data, req, 'quota.redeem', actor.id, actor.tier, { redeemCodeId: code.id })
     writeData(data)
     sendJson(res, 200, { ok: true, ledger })
+    return true
+  }
+
+  if (url.pathname === '/api/data/export' && method === 'GET') {
+    const actor = getActor(data, req)
+    if (!canManageData(actor.tier)) {
+      sendJson(res, 403, { ok: false, error: 'Only host-admin/admin can export inscanvas site data.' })
+      return true
+    }
+    if (data.siteSettings.migrationPolicy?.exportEnabled === false) {
+      sendJson(res, 403, { ok: false, error: 'inscanvas data export/import is disabled by site migration policy.' })
+      return true
+    }
+    const includeData = url.searchParams.get('includeData') === 'true'
+    if (includeData) {
+      const payload = buildDataExportPayload(data)
+      withAudit(data, req, 'data.export', actor.id, actor.tier, {
+        includes: payload.manifest.includes,
+        schemaVersion: payload.manifest.schemaVersion,
+      })
+      writeData(data)
+      sendJson(res, 200, payload)
+      return true
+    }
+    sendJson(res, 200, {
+      ok: true,
+      manifest: buildDataExportManifest(data),
+      verificationText: dataImportVerificationText,
+    })
+    return true
+  }
+
+  if (url.pathname === '/api/data/import' && method === 'POST') {
+    const actor = getActor(data, req)
+    if (!canManageData(actor.tier)) {
+      sendJson(res, 403, { ok: false, error: 'Only host-admin/admin can import inscanvas site data.' })
+      return true
+    }
+    if (data.siteSettings.migrationPolicy?.exportEnabled === false) {
+      sendJson(res, 403, { ok: false, error: 'inscanvas data export/import is disabled by site migration policy.' })
+      return true
+    }
+    let body
+    try {
+      body = await readJsonBody(req)
+    } catch {
+      sendJson(res, 400, { ok: false, error: 'Invalid data import payload.' })
+      return true
+    }
+    if (body.confirmImport !== true) {
+      try {
+        sendJson(res, 200, {
+          ok: true,
+          dryRun: true,
+          verificationRequired: data.siteSettings.migrationPolicy?.requireVerification !== false,
+          verificationText: dataImportVerificationText,
+          ...summarizeImportPayload(body),
+        })
+      } catch (error) {
+        sendJson(res, 400, { ok: false, error: error instanceof Error ? error.message : 'Invalid data import payload.' })
+      }
+      return true
+    }
+    if (data.siteSettings.migrationPolicy?.requireVerification !== false && body.verificationText !== dataImportVerificationText) {
+      sendJson(res, 400, { ok: false, error: `Type "${dataImportVerificationText}" before applying a local-json import.` })
+      return true
+    }
+    try {
+      const result = applyImportData(data, body)
+      withAudit(data, req, 'data.import', actor.id, actor.tier, {
+        applied: result.applied,
+        schemaVersion: result.manifest.schemaVersion,
+      })
+      writeData(data)
+      sendJson(res, 200, { ok: true, dryRun: false, ...result })
+    } catch (error) {
+      sendJson(res, 400, { ok: false, error: error instanceof Error ? error.message : 'Invalid data import payload.' })
+    }
     return true
   }
 

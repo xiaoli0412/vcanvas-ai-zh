@@ -58,14 +58,15 @@
 - `1.11.5` adds local provider-key custody for public-server channels. `apiKey` request bodies are encrypted with AES-256-GCM before JSON persistence, responses strip ciphertext, and `keyCustody` reports `none`, `masked-only`, or `encrypted-local`. This is still a local adapter; production deployments should set `VCANVAS_KEY_SECRET` and later replace it with KMS/key-vault custody.
 - `/api/providers` write permissions are now explicit: guests cannot persist server-side channels, regular users can only edit owned channels, and site/built-in channels plus cross-owner edits require host-admin/admin. Fastify and the lightweight deployment service share the same behavior.
 - `1.11.7` exposes the planned-only dispatch layer inside the secondary Control Center: Site Settings can edit weighted dispatch nodes as JSON, Ops previews selected/fallback routing state, and the Fastify/lightweight settings paths both preserve nested `dispatchPolicy` updates. This remains a contract-only opening until real queues and cross-server workers exist.
+- `1.11.8` adds local-json-v1 data portability to Fastify and `scripts/serve-vcanvas.mjs`: host-admin/admin can fetch manifest counts, download a full local JSON bundle, dry-run pasted imports, and apply imports only after the configured confirmation phrase. Control Center exposes this through an admin-only Data tab without adding persistent canvas chrome.
 
 ## 2026-06-06 Verification Snapshot
 - `npm run typecheck`
 - `npm run typecheck:server`
 - `node --check scripts/serve-vcanvas.mjs`
 - `npm run build`
-- Fastify smoke test: `/health`, `/_vcanvas_proxy`, `/`, `/share/:slug`, `/gallery`, `/api/session/register|login|me`, `/api/users`, `/api/security/blocked-ips`, `/api/providers`, `/api/settings/site`, `/api/notices`, `/api/quotas/sign-in|redeem`, `/api/works` CRUD/share/gallery-submit/delete, `/api/gallery`, `/api/workflows/generate|refine|plan`, `/api/remix/fetch`, `/api/ops/status`, `/api/maintenance/cleanup`.
-- Lightweight `scripts/serve-vcanvas.mjs` smoke test: same endpoint set as Fastify, including public `/share/:slug` and `/gallery`, with post-delete counts confirming no orphaned share/gallery records and parity for `/api/users` plus `/api/security/blocked-ips`.
+- Fastify smoke test: `/health`, `/_vcanvas_proxy`, `/`, `/share/:slug`, `/gallery`, `/api/session/register|login|me`, `/api/users`, `/api/security/blocked-ips`, `/api/providers`, `/api/settings/site`, `/api/notices`, `/api/quotas/sign-in|redeem`, `/api/works` CRUD/share/gallery-submit/delete, `/api/gallery`, `/api/workflows/generate|refine|plan`, `/api/remix/fetch`, `/api/ops/status`, `/api/maintenance/cleanup`, `/api/data/export|import`.
+- Lightweight `scripts/serve-vcanvas.mjs` smoke test: same endpoint set as Fastify, including public `/share/:slug` and `/gallery`, with post-delete counts confirming no orphaned share/gallery records and parity for `/api/users`, `/api/security/blocked-ips`, and `/api/data/export|import`.
 - Follow-up smoke test: admin user patch, forced warning notice payload, work-limit 409, delete-for-space, and re-save passed on both Fastify and lightweight services.
 - Security follow-up smoke test: `/api/security/blocked-ips` list/block/self-block rejection/blocked request rejection/unblock passed on both Fastify and lightweight services.
 - Browser/CDP screenshots reviewed at desktop `1440x960` and mobile `390x844`; opening the Control Center leaves `.workspace` dimensions unchanged (`1440x920` desktop, `390x804` mobile).
@@ -82,4 +83,5 @@
 - Production-grade native Excalidraw embeddable element integration, deeper iframe-block detection, and persisted web-embed previews.
 - Queue-backed screenshots, Redis, PostgreSQL, and worker orchestration.
 - Verified official model catalogs and Asterbot-style model capability auto-detection across every provider channel.
+- Production backup/rollback, encrypted migration verification, cross-node restore, and database/queue migrations; `1.11.8` only covers the local JSON adapter.
 - Real production readiness requires service extraction around `AuthService`, `WorkflowService`, `ModelRegistry`, `KeyVault`, `QuotaPolicy`, and durable store/queue adapters; the current local JSON stack is intentionally a zero-config development baseline, not the final 250-online architecture.

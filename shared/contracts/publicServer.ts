@@ -518,6 +518,8 @@ export interface OpsSnapshot {
 export interface DataExportManifest {
   exportedAt: string
   adapter: 'local-json'
+  productName?: 'inscanvas'
+  schemaVersion?: 'local-json-v1'
   includes: string[]
   counts: Record<string, number>
 }

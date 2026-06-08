@@ -28,6 +28,7 @@
 - `1.11.4` extracts workflow run creation into a server `WorkflowService` boundary and upgrades `/api/assets/import` into metadata-only asset intake with audit records in both Fastify and the lightweight deployment server.
 - `1.11.5` adds local AES-GCM provider-key custody and provider write permissions: guests cannot save server channels, regular users can only edit owned channels, and host-admin/admin owns site-level provider governance.
 - `1.11.7` makes the planned-only dispatch opening operationally visible: admins can edit weighted candidate nodes in Site Settings, Ops shows selected/fallback dispatch status, and both Fastify/lightweight services preserve nested dispatch policy updates.
+- `1.11.8` adds admin-only local JSON data portability v1: `/api/data/export|import` work in both Fastify and the lightweight deployment service, Control Center exposes a secondary Data tab, imports dry-run by default, and applied imports require an explicit confirmation phrase.
 - Frontend, server typecheck, build, service smoke tests, and desktop/mobile browser screenshots passed on 2026-06-06.
 
 ## Completion Matrix
@@ -137,6 +138,7 @@
 - `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve public HTML routes `/share/:slug` and `/gallery`
 - `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve `/api/platform/readiness` with the same public-server maturity report
 - `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve `/api/assets/import` metadata-only v1 and return workflow `executionPlan` metadata from `/api/workflows/generate|refine|plan`
+- `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve admin-only `/api/data/export|import` for local-json-v1 manifests, full JSON bundles, dry-run summaries, confirmation-gated imports, and export/import audit records
 - `done` local JSON persistence adapter for site settings, personal settings, notices, providers, works, workflow runs, sessions, users, quotas, shares, gallery entries, rate-limit events, blocked IPs, and audit events
 - `in_progress` 24h workflow run retention with compressed context payloads
 - `todo` bridge `newapi`, `subapi`, `octopus`
@@ -169,6 +171,11 @@
 - Owner-spoof smoke test passed on both services: non-admin workflow/assets requests with `ownerId=local-admin` are pinned back to the caller, while host-admin delegated ownership remains allowed.
 - `1.11.5` provider custody smoke test passed on both services: anonymous provider writes are rejected, regular users can save encrypted owned channels, plaintext API keys do not persist to JSON, other users receive masked/hidden provider views, and only host-admin/admin can edit built-in channel capabilities.
 
+## 2026-06-08 Validation
+- `1.11.8` adds `/api/data/export|import` to the required Fastify and lightweight smoke set.
+- Data export/import remains scoped to the local JSON adapter: manifest-only export, full bundle export, dry-run import, confirmation-gated import, and audit records must pass before release.
+- Browser review must confirm the new Control Center Data tab stays inside the secondary modal and does not change `.workspace` dimensions.
+
 ### 10. Sign-in / Quota
 - `in_progress` login-as-signin flow through local/mock records
 - `todo` natural-day quota windows
@@ -183,7 +190,8 @@
 ### 12. Updates / Migration
 - `todo` GitHub update notice flow
 - `todo` low-traffic update path
-- `todo` encrypted migration/export/import
+- `in_progress` local/mock data export/import v1 with manifest counts, dry-run import, confirmation text, and Control Center admin UI
+- `todo` encrypted migration verification, production backup/rollback, and durable database/queue migration
 
 ## Execution Order
 1. Keep landing current phase-1 ergonomics and mode system until the canvas UX is stable.

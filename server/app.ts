@@ -19,6 +19,7 @@ import { registerQuotaRoutes } from './routes/quotas'
 import { registerOpsRoutes } from './routes/ops'
 import { registerPublicPageRoutes } from './routes/publicPages'
 import { registerDispatchRoutes } from './routes/dispatch'
+import { registerDataRoutes } from './routes/data'
 import { registerPlatformRoutes } from './routes/platform'
 
 export async function createServer() {
@@ -70,6 +71,7 @@ export async function createServer() {
   await registerQuotaRoutes(app)
   await registerOpsRoutes(app)
   await registerDispatchRoutes(app)
+  await registerDataRoutes(app)
   await registerPlatformRoutes(app)
   await registerPublicPageRoutes(app)
 

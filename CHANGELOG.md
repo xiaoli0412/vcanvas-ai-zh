@@ -1,3 +1,14 @@
+## 1.11.8 - 2026-06-08
+
+### Highlights
+- Added admin-only local JSON data portability v1 across both Fastify and `scripts/serve-vcanvas.mjs`: `/api/data/export` returns a manifest by default and can include local/mock site data with `includeData=true`.
+- Added `/api/data/import` with dry-run summaries by default, explicit confirmation text for applied imports, migration-policy gating, and audit records for full export/import actions.
+- Added a secondary Control Center `Data` tab so host-admin/admin users can inspect collection counts, download a full JSON bundle, dry-run pasted imports, and apply imports without adding persistent canvas chrome.
+
+### Notes
+- This is local/mock portability for the `.vcanvas-data` JSON adapter, not production encrypted backup, durable rollback, PostgreSQL migration, or a cross-node restore system.
+- Exported bundles should be treated as sensitive because they may include sessions, audit history, rate-limit/security records, and encrypted provider custody metadata.
+
 ## 1.11.7 - 2026-06-08
 
 ### Highlights

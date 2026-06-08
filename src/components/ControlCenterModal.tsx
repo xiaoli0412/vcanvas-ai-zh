@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import type {
   AuthSession,
   BlockedIp,
+  DataExportManifest,
   GalleryEntry,
   NoticeMessage,
   OpsSnapshot,
@@ -18,7 +19,7 @@ import type { Translate } from '../lib/i18n'
 import { clearPublicSession, mergeSessionHeaders, savePublicSession } from '../lib/sessionClient'
 import './ControlCenterModal.css'
 
-type ControlTab = 'readiness' | 'overview' | 'personal' | 'users' | 'site' | 'notices' | 'gallery' | 'ops'
+type ControlTab = 'readiness' | 'overview' | 'personal' | 'users' | 'site' | 'data' | 'notices' | 'gallery' | 'ops'
 
 interface SessionUser {
   id: string
@@ -129,6 +130,12 @@ export function ControlCenterModal({
   const [gallery, setGallery] = useState<GalleryEntryWithWork[]>([])
   const [ops, setOps] = useState<OpsSnapshot | null>(null)
   const [readiness, setReadiness] = useState<PlatformReadinessSnapshot | null>(null)
+  const [dataManifest, setDataManifest] = useState<DataExportManifest | null>(null)
+  const [dataImportSummary, setDataImportSummary] = useState<DataExportManifest | null>(null)
+  const [dataExportText, setDataExportText] = useState('')
+  const [dataImportText, setDataImportText] = useState('')
+  const [dataVerificationText, setDataVerificationText] = useState('')
+  const [dataConfirmText, setDataConfirmText] = useState('')
   const [loginDraft, setLoginDraft] = useState({ username: 'local-admin' })
   const [profileDraft, setProfileDraft] = useState({ displayName: '', motto: '', qq: '', avatarUrl: '' })
   const [noticeDraft, setNoticeDraft] = useState({ kind: 'announcement' as NoticeMessage['kind'], title: '', body: '', force: false })
@@ -212,9 +219,17 @@ export function ControlCenterModal({
       ])
       setManagedUsers(usersPayload.users || [])
       setBlockedIps(securityPayload.blockedIps || [])
+      fetch('/api/data/export', { headers: mergeSessionHeaders() })
+        .then((response) => readJson<{ manifest: DataExportManifest; verificationText?: string }>(response))
+        .then((payload) => {
+          setDataManifest(payload.manifest)
+          setDataVerificationText(payload.verificationText || 'IMPORT INSCANVAS DATA')
+        })
+        .catch(() => undefined)
     } else {
       setManagedUsers([])
       setBlockedIps([])
+      setDataManifest(null)
     }
     setProfileDraft({
       displayName: sessionPayload.user.displayName || '',
@@ -363,12 +378,67 @@ export function ControlCenterModal({
     return t('control.notice.cleanup')
   })
 
+  const exportSiteData = () => run(async () => {
+    const payload = await fetch('/api/data/export?includeData=true', { headers: mergeSessionHeaders() })
+      .then((response) => readJson<{ manifest: DataExportManifest } & Record<string, unknown>>(response))
+    const text = JSON.stringify(payload, null, 2)
+    setDataManifest(payload.manifest)
+    setDataExportText(text)
+    const blob = new Blob([text], { type: 'application/json;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `inscanvas-local-json-${new Date().toISOString().slice(0, 10)}.json`
+    link.click()
+    URL.revokeObjectURL(url)
+    return t('control.notice.dataExported')
+  })
+
+  const parseImportText = () => {
+    try {
+      const value = JSON.parse(dataImportText)
+      if (!value || typeof value !== 'object') throw new Error()
+      return value as Record<string, unknown>
+    } catch {
+      throw new Error(t('control.error.importJson'))
+    }
+  }
+
+  const previewImport = () => run(async () => {
+    const payload = parseImportText()
+    const result = await fetch('/api/data/import', {
+      method: 'POST',
+      headers: mergeSessionHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload),
+    }).then((response) => readJson<{ manifest: DataExportManifest; verificationText?: string }>(response))
+    setDataImportSummary(result.manifest)
+    if (result.verificationText) setDataVerificationText(result.verificationText)
+    return t('control.notice.importPreviewed')
+  })
+
+  const applyImport = () => run(async () => {
+    const payload = parseImportText()
+    const result = await fetch('/api/data/import', {
+      method: 'POST',
+      headers: mergeSessionHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        ...payload,
+        confirmImport: true,
+        verificationText: dataConfirmText,
+      }),
+    }).then((response) => readJson<{ manifest: DataExportManifest }>(response))
+    setDataImportSummary(result.manifest)
+    setDataConfirmText('')
+    return t('control.notice.dataImported')
+  })
+
   const tabs: Array<{ id: ControlTab; label: string; admin?: boolean }> = [
     { id: 'readiness', label: t('control.tab.readiness') },
     { id: 'overview', label: t('control.tab.overview') },
     { id: 'personal', label: t('control.tab.personal') },
     { id: 'users', label: t('control.tab.users'), admin: true },
     { id: 'site', label: t('control.tab.site'), admin: true },
+    { id: 'data', label: t('control.tab.data'), admin: true },
     { id: 'notices', label: t('control.tab.notices') },
     { id: 'gallery', label: t('control.tab.gallery') },
     { id: 'ops', label: t('control.tab.ops'), admin: true },
@@ -698,6 +768,85 @@ export function ControlCenterModal({
                   />
                   <div className="ccm-dispatch-example">{t('control.dispatch.example')}</div>
                   <button className="btn btn-primary" onClick={saveSite} disabled={busy}>{t('provider.save')}</button>
+                </section>
+              </div>
+            )}
+
+            {tab === 'data' && admin && (
+              <div className="ccm-grid">
+                <section className="ccm-card wide">
+                  <div className="ccm-section-row">
+                    <div>
+                      <h3>{t('control.data.title')}</h3>
+                      <p>{t('control.data.note')}</p>
+                    </div>
+                    <span className="ccm-pill on">{dataManifest?.schemaVersion || 'local-json-v1'}</span>
+                  </div>
+                  <div className="ccm-data-summary">
+                    {(dataManifest ? Object.entries(dataManifest.counts) : []).map(([key, value]) => (
+                      <span key={key}><strong>{value}</strong>{key}</span>
+                    ))}
+                    {!dataManifest && <div className="ccm-empty compact">{t('control.data.noManifest')}</div>}
+                  </div>
+                </section>
+
+                <section className="ccm-card">
+                  <h3>{t('control.data.exportTitle')}</h3>
+                  <p>{t('control.data.exportNote')}</p>
+                  <button className="btn btn-primary" onClick={exportSiteData} disabled={busy}>
+                    {t('control.action.exportData')}
+                  </button>
+                  {dataExportText && (
+                    <textarea className="ccm-textarea ccm-json-box" readOnly value={dataExportText} />
+                  )}
+                </section>
+
+                <section className="ccm-card">
+                  <h3>{t('control.data.importTitle')}</h3>
+                  <p>{t('control.data.importNote')}</p>
+                  <textarea
+                    className="ccm-textarea ccm-json-box"
+                    value={dataImportText}
+                    onChange={(event) => setDataImportText(event.target.value)}
+                    placeholder={t('control.placeholder.importJson')}
+                    spellCheck={false}
+                  />
+                  <div className="ccm-actions">
+                    <button className="btn btn-secondary" onClick={previewImport} disabled={busy || !dataImportText.trim()}>
+                      {t('control.action.previewImport')}
+                    </button>
+                  </div>
+                </section>
+
+                <section className="ccm-card wide">
+                  <div className="ccm-section-row">
+                    <div>
+                      <h3>{t('control.data.dryRun')}</h3>
+                      <p>{t('control.data.confirmNote')}</p>
+                    </div>
+                    <span className="ccm-pill">{t('control.data.verification')}: {dataVerificationText || 'IMPORT INSCANVAS DATA'}</span>
+                  </div>
+                  <div className="ccm-data-summary compact">
+                    {(dataImportSummary ? Object.entries(dataImportSummary.counts) : []).map(([key, value]) => (
+                      <span key={key}><strong>{value}</strong>{key}</span>
+                    ))}
+                    {!dataImportSummary && <div className="ccm-empty compact">{t('control.data.noDryRun')}</div>}
+                  </div>
+                  <label className="ccm-confirm-field">
+                    {t('control.data.confirmImport')}
+                    <input
+                      value={dataConfirmText}
+                      onChange={(event) => setDataConfirmText(event.target.value)}
+                      placeholder={dataVerificationText || 'IMPORT INSCANVAS DATA'}
+                    />
+                  </label>
+                  <button
+                    className="btn btn-ghost danger"
+                    onClick={applyImport}
+                    disabled={busy || !dataImportText.trim() || dataConfirmText !== (dataVerificationText || 'IMPORT INSCANVAS DATA')}
+                  >
+                    {t('control.action.applyImport')}
+                  </button>
                 </section>
               </div>
             )}

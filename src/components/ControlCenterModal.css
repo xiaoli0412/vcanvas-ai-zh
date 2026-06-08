@@ -513,6 +513,7 @@
 .ccm-ops-grid,
 .ccm-gallery-list,
 .ccm-notice-list,
+.ccm-data-summary,
 .ccm-dispatch-list {
   display: grid;
   gap: 8px;
@@ -524,7 +525,8 @@
 }
 
 .ccm-provider-mini span,
-.ccm-ops-grid span {
+.ccm-ops-grid span,
+.ccm-data-summary span {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -538,8 +540,37 @@
 }
 
 .ccm-provider-mini small,
-.ccm-ops-grid strong {
+.ccm-ops-grid strong,
+.ccm-data-summary strong {
   color: var(--brand-blue-text);
+}
+
+.ccm-data-summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.ccm-data-summary.compact {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.ccm-data-summary span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ccm-json-box {
+  min-height: 180px;
+  max-height: 260px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.6;
+  white-space: pre;
+}
+
+.ccm-confirm-field {
+  margin: 12px 0;
 }
 
 .ccm-node-editor {
@@ -816,6 +847,8 @@
   .ccm-grid,
   .ccm-form-grid,
   .ccm-provider-mini,
+  .ccm-data-summary,
+  .ccm-data-summary.compact,
   .ccm-capability-list {
     grid-template-columns: 1fr;
   }
