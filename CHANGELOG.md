@@ -1,3 +1,12 @@
+## 1.11.6 - 2026-06-08
+
+### Fixes
+- Added repository owner and Linux maintainer metadata so the desktop workflow can build `.deb` packages without electron-builder rejecting the release.
+- Changed the Pages workflow to publish the built site to the `gh-pages` branch, avoiding repeated GitHub Pages deployment API failures when Pages is not enabled for Actions deployment.
+
+### Notes
+- To expose the public Pages URL, the repository still needs GitHub Pages configured to serve the `gh-pages` branch. The workflow itself now publishes the branch artifact without requiring the Pages deployment API.
+
 ## 1.11.5 - 2026-06-07
 
 ### Highlights
