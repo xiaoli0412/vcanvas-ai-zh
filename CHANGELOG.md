@@ -1,3 +1,12 @@
+## 1.11.14 - 2026-06-08
+
+### Fixes
+- Moved Electron runtime downloads into electron-builder's `electronDownload.mirror` configuration so all desktop platforms avoid transient GitHub `504` errors for Electron zip files.
+- Kept electron-builder helper mirrors scoped to Linux and Windows only, preserving the macOS default helper path for `dmg-builder`.
+
+### Notes
+- This avoids using `ELECTRON_MIRROR` during macOS packaging, which previously polluted generic helper downloads.
+
 ## 1.11.13 - 2026-06-08
 
 ### Fixes

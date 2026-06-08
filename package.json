@@ -1,6 +1,6 @@
 {
   "name": "vcanvas",
-  "version": "1.11.13",
+  "version": "1.11.14",
   "description": "inscanvas is a visual creative workspace for vision-language models. Draw, describe, generate.",
   "private": true,
   "main": "electron/main.cjs",
@@ -46,6 +46,9 @@
     "appId": "ai.e01.vcanvas",
     "productName": "inscanvas",
     "copyright": "Copyright © 2026 inscanvas",
+    "electronDownload": {
+      "mirror": "https://npmmirror.com/mirrors/electron/"
+    },
     "directories": {
       "output": "release"
     },

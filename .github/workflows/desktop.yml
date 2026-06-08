@@ -57,7 +57,6 @@ jobs:
         shell: bash
         run: |
           if [ "${{ matrix.platform }}" = "linux" ]; then
-            export ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"
             export ELECTRON_BUILDER_BINARIES_MIRROR="https://npmmirror.com/mirrors/electron-builder-binaries/"
           elif [ "${{ matrix.platform }}" = "windows" ]; then
             export ELECTRON_BUILDER_BINARIES_MIRROR="https://npmmirror.com/mirrors/electron-builder-binaries/"
