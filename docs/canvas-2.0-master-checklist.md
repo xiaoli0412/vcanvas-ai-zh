@@ -27,6 +27,7 @@
 - `1.11.4` hardens owner assignment for workflow and asset intake: non-admin requests cannot forge `ownerId`, and audit events record the real actor separately from target owner metadata.
 - `1.11.4` extracts workflow run creation into a server `WorkflowService` boundary and upgrades `/api/assets/import` into metadata-only asset intake with audit records in both Fastify and the lightweight deployment server.
 - `1.11.5` adds local AES-GCM provider-key custody and provider write permissions: guests cannot save server channels, regular users can only edit owned channels, and host-admin/admin owns site-level provider governance.
+- `1.11.7` makes the planned-only dispatch opening operationally visible: admins can edit weighted candidate nodes in Site Settings, Ops shows selected/fallback dispatch status, and both Fastify/lightweight services preserve nested dispatch policy updates.
 - Frontend, server typecheck, build, service smoke tests, and desktop/mobile browser screenshots passed on 2026-06-06.
 
 ## Completion Matrix
@@ -64,6 +65,7 @@
 - `in_progress` cleanup endpoint for expired workflows, sessions, rate-limit events, and blocked IPs
 - `in_progress` dynamic server/client execution fallback metadata
 - `in_progress` planned-only distributed dispatch contract through `/api/dispatch/status` and `/api/dispatch/route`
+- `in_progress` Control Center dispatch policy editor and Ops dispatch preview make the contract configurable and inspectable without implying real queue execution
 - `in_progress` platform readiness endpoint marks dispatch as `contract-only` until CPU/memory/disk/bandwidth telemetry and a queue backend exist
 - `in_progress` workflow service boundary now centralizes hosting policy, 24h retention, context compression, execution plan metadata, and hosted-run quota debit
 - `done` server-hosted high-resource toggle for video/web copy in personal settings and workflow policy

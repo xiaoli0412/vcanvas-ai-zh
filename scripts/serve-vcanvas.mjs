@@ -1615,7 +1615,15 @@ async function handleApi(req, res, url) {
 
   if (url.pathname === '/api/settings/site' && (method === 'POST' || method === 'PATCH')) {
     const body = await readJsonBody(req)
-    data.siteSettings = { ...data.siteSettings, ...body }
+    data.siteSettings = {
+      ...data.siteSettings,
+      ...body,
+      sharePolicy: { ...(data.siteSettings.sharePolicy || {}), ...(body.sharePolicy || {}) },
+      noticePolicy: { ...(data.siteSettings.noticePolicy || {}), ...(body.noticePolicy || {}) },
+      updatePolicy: { ...(data.siteSettings.updatePolicy || {}), ...(body.updatePolicy || {}) },
+      migrationPolicy: { ...(data.siteSettings.migrationPolicy || {}), ...(body.migrationPolicy || {}) },
+      dispatchPolicy: { ...(data.siteSettings.dispatchPolicy || { enabled: false, strategy: 'round-robin-weighted', nodes: [] }), ...(body.dispatchPolicy || {}) },
+    }
     if (body.disclaimerPolicy) data.disclaimerPolicy = { ...data.disclaimerPolicy, ...body.disclaimerPolicy }
     if (Array.isArray(body.rateLimitPolicies)) data.rateLimitPolicies = body.rateLimitPolicies
     withAudit(data, req, 'settings.site.update', 'local-admin', 'host-admin')

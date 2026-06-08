@@ -320,6 +320,30 @@
   padding: 0 10px;
 }
 
+.ccm-card input[type='checkbox'] {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  padding: 0;
+  accent-color: #3f8cff;
+}
+
+.ccm-switches {
+  flex-wrap: wrap;
+}
+
+.ccm-switches label {
+  flex-direction: row;
+  align-items: center;
+  min-height: 28px;
+  padding: 6px 8px;
+  border: 1px solid rgba(42, 52, 72, 0.75);
+  border-radius: 999px;
+  background: rgba(8, 10, 18, 0.42);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
 .ccm-textarea {
   min-height: 92px;
   margin: 10px 0;
@@ -488,7 +512,8 @@
 .ccm-provider-mini,
 .ccm-ops-grid,
 .ccm-gallery-list,
-.ccm-notice-list {
+.ccm-notice-list,
+.ccm-dispatch-list {
   display: grid;
   gap: 8px;
   margin-top: 10px;
@@ -515,6 +540,68 @@
 .ccm-provider-mini small,
 .ccm-ops-grid strong {
   color: var(--brand-blue-text);
+}
+
+.ccm-node-editor {
+  min-height: 118px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.65;
+}
+
+.ccm-dispatch-example,
+.ccm-dispatch-message {
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.ccm-dispatch-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid rgba(42, 52, 72, 0.78);
+  border-radius: 12px;
+  background: rgba(8, 10, 18, 0.58);
+}
+
+.ccm-dispatch-item.off {
+  opacity: 0.58;
+}
+
+.ccm-dispatch-item div {
+  min-width: 0;
+}
+
+.ccm-dispatch-item strong,
+.ccm-dispatch-item span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ccm-dispatch-item strong {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.ccm-dispatch-item span {
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.ccm-dispatch-item small {
+  flex-shrink: 0;
+  color: var(--brand-blue-text);
+  font-size: 10px;
 }
 
 .ccm-notice,
@@ -767,5 +854,14 @@
   .ccm-blocked-item {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .ccm-dispatch-item {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ccm-dispatch-item small {
+    flex-shrink: 1;
   }
 }

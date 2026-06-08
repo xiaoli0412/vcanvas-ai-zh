@@ -26,6 +26,12 @@ const defaultMigrationPolicy: NonNullable<SiteSettings['migrationPolicy']> = {
   requireVerification: true,
 }
 
+const defaultDispatchPolicy: NonNullable<SiteSettings['dispatchPolicy']> = {
+  enabled: false,
+  strategy: 'round-robin-weighted',
+  nodes: [],
+}
+
 export async function registerSettingsRoutes(app: FastifyInstance) {
   app.get('/api/settings/site', async () => {
     const data = await localDataStore.read()
@@ -52,6 +58,7 @@ export async function registerSettingsRoutes(app: FastifyInstance) {
         noticePolicy: { ...defaultNoticePolicy, ...(data.siteSettings.noticePolicy || {}), ...(body.noticePolicy || {}) },
         updatePolicy: { ...defaultUpdatePolicy, ...(data.siteSettings.updatePolicy || {}), ...(body.updatePolicy || {}) },
         migrationPolicy: { ...defaultMigrationPolicy, ...(data.siteSettings.migrationPolicy || {}), ...(body.migrationPolicy || {}) },
+        dispatchPolicy: { ...defaultDispatchPolicy, ...(data.siteSettings.dispatchPolicy || {}), ...(body.dispatchPolicy || {}) },
       }
       if (body.disclaimerPolicy && typeof body.disclaimerPolicy === 'object') {
         data.disclaimerPolicy = {

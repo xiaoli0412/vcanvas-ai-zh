@@ -14,8 +14,8 @@
 
 ## Version Rule
 - Patch versions advance one step per completed release slice.
-- Current owner-release branch starts at `1.10.9`.
-- Continue as `1.10.10`, `1.10.11`, and so on until the minor version is intentionally raised.
+- Current owner-release line is `1.11.x`.
+- Continue as `1.11.7`, `1.11.8`, and so on until the minor version is intentionally raised.
 
 ## Verification Floor
 - Run at least `npm run typecheck`, `npm run typecheck:server`, `node --check scripts/serve-vcanvas.mjs`, and `npm run build` for code-bearing rounds.

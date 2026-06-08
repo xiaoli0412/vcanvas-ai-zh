@@ -132,6 +132,7 @@ export function ControlCenterModal({
   const [loginDraft, setLoginDraft] = useState({ username: 'local-admin' })
   const [profileDraft, setProfileDraft] = useState({ displayName: '', motto: '', qq: '', avatarUrl: '' })
   const [noticeDraft, setNoticeDraft] = useState({ kind: 'announcement' as NoticeMessage['kind'], title: '', body: '', force: false })
+  const [dispatchNodesText, setDispatchNodesText] = useState('[]')
   const [userSearch, setUserSearch] = useState('')
   const [redeemCode, setRedeemCode] = useState('')
   const [busy, setBusy] = useState(false)
@@ -162,6 +163,7 @@ export function ControlCenterModal({
   const sharePolicy = { ...defaultSharePolicy, ...(siteSettings?.sharePolicy || {}) }
   const noticePolicy = { ...defaultNoticePolicy, ...(siteSettings?.noticePolicy || {}) }
   const updatePolicy = { ...defaultUpdatePolicy, ...(siteSettings?.updatePolicy || {}) }
+  const dispatch = ops?.dispatch
   const maturityTotals = useMemo(() => {
     const totals: Record<PlatformCapabilityMaturity, number> = {
       production: 0,
@@ -197,6 +199,7 @@ export function ControlCenterModal({
     setLoginNotice(sessionPayload.loginNotice)
     setQuota(quotaPayload.ledger || redeemPayload.ledger || sessionPayload.quota || null)
     setSiteSettings(settingsPayload.settings)
+    setDispatchNodesText(JSON.stringify(settingsPayload.settings.dispatchPolicy?.nodes || [], null, 2))
     setNotices(noticePayload.notices || [])
     setProviders(providerPayload.channels || [])
     setOps(opsPayload.snapshot)
@@ -300,10 +303,35 @@ export function ControlCenterModal({
 
   const saveSite = () => run(async () => {
     if (!siteSettings) return
+    let dispatchNodes = siteSettings.dispatchPolicy?.nodes || []
+    try {
+      const parsed = (dispatchNodesText.trim() ? JSON.parse(dispatchNodesText) : []) as Array<Record<string, unknown>>
+      if (!Array.isArray(parsed)) throw new Error('dispatch nodes must be an array')
+      dispatchNodes = parsed.map((node, index) => ({
+        id: String(node.id || `node-${index + 1}`),
+        url: String(node.url || ''),
+        weight: Math.max(1, Number(node.weight) || 1),
+        enabled: node.enabled !== false,
+        currentLoad: typeof node.currentLoad === 'number' ? node.currentLoad : undefined,
+        lastSeenAt: typeof node.lastSeenAt === 'string' ? node.lastSeenAt : null,
+      })).filter((node) => node.url)
+    } catch {
+      throw new Error(t('control.dispatch.invalidJson'))
+    }
+    const siteSettingsBody = { ...siteSettings }
+    delete siteSettingsBody.disclaimerPolicy
+    delete siteSettingsBody.rateLimitPolicies
     await fetch('/api/settings/site', {
       method: 'PATCH',
       headers: mergeSessionHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify(siteSettings),
+      body: JSON.stringify({
+        ...siteSettingsBody,
+        dispatchPolicy: {
+          enabled: siteSettings.dispatchPolicy?.enabled === true,
+          strategy: 'round-robin-weighted',
+          nodes: dispatchNodes,
+        },
+      }),
     }).then((response) => readJson(response))
   })
 
@@ -640,6 +668,37 @@ export function ControlCenterModal({
                   </div>
                   <button className="btn btn-secondary" onClick={onOpenPersonalSettings}>{t('control.action.modelSettings')}</button>
                 </section>
+                <section className="ccm-card wide">
+                  <div className="ccm-section-row">
+                    <div>
+                      <h3>{t('control.dispatch.title')}</h3>
+                      <p>{t('control.dispatch.note')}</p>
+                    </div>
+                    <label className="ccm-inline">
+                      <input
+                        type="checkbox"
+                        checked={siteSettings.dispatchPolicy?.enabled === true}
+                        onChange={(event) => setSiteSettings({
+                          ...siteSettings,
+                          dispatchPolicy: {
+                            enabled: event.target.checked,
+                            strategy: 'round-robin-weighted',
+                            nodes: siteSettings.dispatchPolicy?.nodes || [],
+                          },
+                        })}
+                      />
+                      {t('control.dispatch.enabled')}
+                    </label>
+                  </div>
+                  <textarea
+                    className="ccm-textarea ccm-node-editor"
+                    value={dispatchNodesText}
+                    onChange={(event) => setDispatchNodesText(event.target.value)}
+                    spellCheck={false}
+                  />
+                  <div className="ccm-dispatch-example">{t('control.dispatch.example')}</div>
+                  <button className="btn btn-primary" onClick={saveSite} disabled={busy}>{t('provider.save')}</button>
+                </section>
               </div>
             )}
 
@@ -701,6 +760,25 @@ export function ControlCenterModal({
                   <div className="ccm-kv"><span>{t('control.exec')}</span><strong>{ops?.hostingPolicy.defaultExecutionMode || '-'}</strong></div>
                   <div className="ccm-kv"><span>{t('control.heavy')}</span><strong>{ops?.hostingPolicy.resourceHeavyModeDefault || '-'}</strong></div>
                   <div className="ccm-kv"><span>{t('control.fallback')}</span><strong>{ops?.hostingPolicy.fallbackReason || '-'}</strong></div>
+                </section>
+                <section className="ccm-card wide">
+                  <h3>{t('control.dispatch.preview')}</h3>
+                  <div className="ccm-kv"><span>{t('control.dispatch.selected')}</span><strong>{dispatch?.selectedNode?.id || '-'}</strong></div>
+                  <div className="ccm-kv"><span>{t('control.dispatch.fallback')}</span><strong>{dispatch?.fallbackReason || '-'}</strong></div>
+                  <div className="ccm-kv"><span>{t('control.dispatch.mode')}</span><strong>{dispatch?.plannedOnly ? 'planned-only' : 'active'}</strong></div>
+                  <p className="ccm-dispatch-message">{dispatch?.message || t('control.dispatch.empty')}</p>
+                  <div className="ccm-dispatch-list">
+                    {(dispatch?.nodes || []).length === 0 && <div className="ccm-empty compact">{t('control.dispatch.noNodes')}</div>}
+                    {(dispatch?.nodes || []).map((node) => (
+                      <article key={node.id} className={`ccm-dispatch-item ${node.enabled === false ? 'off' : ''}`}>
+                        <div>
+                          <strong>{node.id}</strong>
+                          <span>{node.url}</span>
+                        </div>
+                        <small>{t('control.dispatch.weight')}: {node.weight} · {t('control.dispatch.load')}: {node.currentLoad ?? 0}</small>
+                      </article>
+                    ))}
+                  </div>
                 </section>
                 <section className="ccm-card wide">
                   <h3>{t('control.ops.blockedIps')}</h3>

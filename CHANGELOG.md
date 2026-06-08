@@ -1,3 +1,16 @@
+## 1.11.7 - 2026-06-08
+
+### Highlights
+- Added a secondary Control Center dispatch policy editor so admins can enable the planned-only multi-server routing preview and configure weighted candidate nodes without touching the canvas workspace.
+- Added an Ops dispatch preview that shows the selected candidate node, fallback reason, planned-only status, and node load/weight details.
+- Kept Fastify and `scripts/serve-vcanvas.mjs` aligned by merging nested `dispatchPolicy` settings consistently when site settings are saved.
+
+### CI
+- Opted GitHub workflows into the Node 24 JavaScript action runtime to avoid the upcoming Node 20 action deprecation warnings while keeping project builds on Node 22.
+
+### Notes
+- Dispatch remains a contract-only opening, not a real queue or cross-server executor. It is intentionally visible as a preview until telemetry, worker queues, and durable routing adapters are added.
+
 ## 1.11.6 - 2026-06-08
 
 ### Fixes

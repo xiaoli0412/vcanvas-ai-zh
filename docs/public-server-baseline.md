@@ -57,6 +57,7 @@
 - `scripts/serve-vcanvas.mjs` remains a compatibility deployment shim with mirrored workflow/asset logic; every workflow/security change must be smoke-tested against both Fastify and the lightweight service until the deployment path can load the TypeScript service bundle directly.
 - `1.11.5` adds local provider-key custody for public-server channels. `apiKey` request bodies are encrypted with AES-256-GCM before JSON persistence, responses strip ciphertext, and `keyCustody` reports `none`, `masked-only`, or `encrypted-local`. This is still a local adapter; production deployments should set `VCANVAS_KEY_SECRET` and later replace it with KMS/key-vault custody.
 - `/api/providers` write permissions are now explicit: guests cannot persist server-side channels, regular users can only edit owned channels, and site/built-in channels plus cross-owner edits require host-admin/admin. Fastify and the lightweight deployment service share the same behavior.
+- `1.11.7` exposes the planned-only dispatch layer inside the secondary Control Center: Site Settings can edit weighted dispatch nodes as JSON, Ops previews selected/fallback routing state, and the Fastify/lightweight settings paths both preserve nested `dispatchPolicy` updates. This remains a contract-only opening until real queues and cross-server workers exist.
 
 ## 2026-06-06 Verification Snapshot
 - `npm run typecheck`
