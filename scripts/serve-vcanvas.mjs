@@ -1192,7 +1192,7 @@ function platformReadinessSnapshot(data) {
       title: 'server-managed workflow execution',
       maturity: 'contract-only',
       summary: 'Workflow records and hosting policy exist, but model execution still runs from the browser path for most generation flows.',
-      implemented: ['generate/refine/plan workflow run records', 'WorkflowService boundary for retention, hosting policy, context compression, and execution plan', '24h retention metadata', 'hosting policy calculation', 'video/web-copy high-resource gate', 'metadata-only asset import route for image/video/html intake audits'],
+      implemented: ['generate/refine/plan workflow run records', 'WorkflowService boundary for retention, hosting policy, context compression, and execution plan', '24h retention metadata', 'hosting policy calculation', 'video/web-copy high-resource gate', 'metadata-only asset import route for image/video/html intake audits', '24h workflow resume UI with prompt/context summary copy and local/mock cancellation'],
       gaps: ['server-side model execution worker', 'background queue and recovery', 'quota deduction per model', 'context compression worker'],
       nextStep: 'Move Generate/Refine/Plan through a WorkflowService that can execute or delegate model calls server-side.',
     }),
@@ -1203,7 +1203,7 @@ function platformReadinessSnapshot(data) {
       maturity: 'local-mock',
       summary: 'Works can be saved, imported, shared, submitted to the gallery, and reviewed by local/mock admins.',
       implemented: ['works CRUD and 10-work limit', 'HTML import/export', 'share links and /share/:slug', 'Xiaohongshu-style /gallery feed shell', 'admin gallery review workflow', 'local/mock gallery safety preflight', 'stale public share and gallery exposure blocking for blocked work/link/entry states'],
-      gaps: ['external safety review model before production publishing', 'flow-map export', '24h task resume UI'],
+      gaps: ['external safety review model before production publishing', 'flow-map export'],
       nextStep: 'Attach an external safety-review model and keep the local public-exposure gate as the fallback before production publishing.',
     }),
     capabilityStatus({
@@ -1369,6 +1369,59 @@ function isHeavyMode(modeId) {
   return modeId === 'video' || modeId === 'web-copy'
 }
 
+function workflowPromptPreview(value) {
+  const normalized = String(value || '').trim().replace(/\s+/g, ' ')
+  if (!normalized) return ''
+  return normalized.length > 120 ? `${normalized.slice(0, 120)}...` : normalized
+}
+
+function hasWorkflowCompressionMarker(context) {
+  return [
+    context.currentOutputHtml,
+    context.previousTurn?.html,
+    context.websiteReference?.html,
+    context.websiteReference?.rebasedHtml,
+    ...(context.websiteReference?.stylesheetSnippets || []),
+  ].some((value) => typeof value === 'string' && value.includes('[compressed by inscanvas context v1]'))
+}
+
+function summarizeWorkflowRun(run, now = Date.now()) {
+  const context = run.context || {}
+  return {
+    id: run.id,
+    ownerId: run.ownerId,
+    action: run.action || 'unknown',
+    modeId: run.modeId,
+    executionMode: run.executionMode,
+    promptPreview: workflowPromptPreview(run.prompt || context.prompt || ''),
+    status: run.status,
+    createdAt: run.createdAt,
+    updatedAt: run.updatedAt,
+    expiresAt: run.expiresAt,
+    expired: Boolean(run.expiresAt && Date.parse(run.expiresAt) <= now),
+    contextSummary: {
+      carryPolicy: context.carryPolicy,
+      compressed: hasWorkflowCompressionMarker(context),
+      includePreviousPrompt: context.includePreviousPrompt !== false,
+      includePreviousOutput: context.includePreviousOutput !== false,
+      hasPreviousTurn: Boolean(context.previousTurn),
+      hasWebsiteReference: Boolean(context.websiteReference),
+      hasVideoReference: Boolean(context.videoReference),
+      webEmbedCount: context.webEmbeds?.length || 0,
+      annotationCount: context.previewAnnotations?.length || 0,
+      canvasLabelCount: context.currentCanvasLabels?.length || 0,
+    },
+  }
+}
+
+function isWorkflowRunExpired(run, now = Date.now()) {
+  return Boolean(run.expiresAt && Date.parse(run.expiresAt) <= now)
+}
+
+function canCancelWorkflowRun(run, now = Date.now()) {
+  return !isWorkflowRunExpired(run, now) && (run.status === 'queued' || run.status === 'running')
+}
+
 function hostingPolicyFor(data, actor, ownerId, modeId) {
   const ledger = refreshQuotaLedger(data, ownerId, actor.tier)
   const personalEnabled = data.personalSettings.experimental?.serverHighResourceHosting === true
@@ -1429,6 +1482,7 @@ function createWorkflowRun(data, req, route, body) {
   const run = {
     id: createId(`workflow-${route}`),
     ownerId,
+    action: route,
     modeId,
     executionMode,
     prompt: body.prompt || body.context?.prompt || '',
@@ -1510,7 +1564,7 @@ function createAssetImport(data, req, body) {
 
 function isMeteredRoute(method, route) {
   if (!['POST', 'PATCH', 'DELETE'].includes(method)) return false
-  return /^\/api\/workflows\//.test(route)
+  return (method === 'POST' && /^\/api\/workflows\/(generate|refine|plan)$/.test(route))
     || route === '/api/remix/fetch'
     || route === '/api/assets/import'
     || route === '/api/works'
@@ -2482,6 +2536,60 @@ async function handleApi(req, res, url) {
     const asset = createAssetImport(data, req, body)
     writeData(data)
     sendJson(res, 200, { ok: true, route: 'assets/import', asset, phase: 'metadata-only-v1' })
+    return true
+  }
+
+  if (url.pathname === '/api/workflows' && method === 'GET') {
+    const actor = getActor(data, req)
+    const ownerResolution = resolveOwnedTargetId(actor, url.searchParams.get('ownerId'))
+    const includeExpired = url.searchParams.get('includeExpired') === 'true' && canManageUsers(actor.tier)
+    const limit = Math.max(1, Math.min(100, Number(url.searchParams.get('limit')) || 40))
+    const now = Date.now()
+    const items = data.workflows
+      .filter((workflow) => workflow.ownerId === ownerResolution.ownerId)
+      .map((workflow) => summarizeWorkflowRun(workflow, now))
+      .filter((workflow) => includeExpired || !workflow.expired)
+      .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
+      .slice(0, limit)
+    sendJson(res, 200, { ok: true, items, retentionHours: 24, ownerResolution })
+    return true
+  }
+
+  const workflowDetailMatch = url.pathname.match(/^\/api\/workflows\/([^/]+)$/)
+  if (workflowDetailMatch && method === 'GET') {
+    const actor = getActor(data, req)
+    const id = decodeURIComponent(workflowDetailMatch[1])
+    const run = data.workflows.find((item) => item.id === id)
+    if (!run || isWorkflowRunExpired(run) || (run.ownerId !== actor.id && !canManageUsers(actor.tier))) {
+      sendJson(res, 404, { ok: false, error: 'Workflow run not found.' })
+      return true
+    }
+    sendJson(res, 200, { ok: true, run, summary: summarizeWorkflowRun(run) })
+    return true
+  }
+
+  if (workflowDetailMatch && method === 'PATCH') {
+    const actor = getActor(data, req)
+    const id = decodeURIComponent(workflowDetailMatch[1])
+    const body = await readJsonBody(req)
+    const index = data.workflows.findIndex((item) => item.id === id)
+    if (index < 0 || isWorkflowRunExpired(data.workflows[index]) || (data.workflows[index].ownerId !== actor.id && !canManageUsers(actor.tier))) {
+      sendJson(res, 404, { ok: false, error: 'Workflow run not found.' })
+      return true
+    }
+    if (body.status !== 'cancelled') {
+      sendJson(res, 400, { ok: false, error: 'Only cancelling workflow runs is supported in local/mock mode.' })
+      return true
+    }
+    if (!canCancelWorkflowRun(data.workflows[index])) {
+      sendJson(res, 400, { ok: false, error: 'Only queued or running workflow runs can be cancelled.' })
+      return true
+    }
+    const now = new Date().toISOString()
+    data.workflows[index] = { ...data.workflows[index], status: 'cancelled', updatedAt: now }
+    withAudit(data, req, 'workflow.cancel', actor.id, actor.tier, { workflowRunId: id, ownerId: data.workflows[index].ownerId })
+    writeData(data)
+    sendJson(res, 200, { ok: true, run: data.workflows[index], summary: summarizeWorkflowRun(data.workflows[index]) })
     return true
   }
 

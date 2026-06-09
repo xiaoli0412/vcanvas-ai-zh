@@ -14,6 +14,8 @@ import type {
   SiteSettings,
   UserPermission,
   UserTier,
+  WorkflowRun,
+  WorkflowRunSummary,
   UpdateCheckResult,
   WorkRecord,
 } from '../../shared/contracts/publicServer'
@@ -21,7 +23,7 @@ import type { Translate } from '../lib/i18n'
 import { clearPublicSession, mergeSessionHeaders, savePublicSession } from '../lib/sessionClient'
 import './ControlCenterModal.css'
 
-type ControlTab = 'readiness' | 'overview' | 'personal' | 'users' | 'site' | 'data' | 'notices' | 'gallery' | 'ops'
+type ControlTab = 'readiness' | 'overview' | 'personal' | 'workflows' | 'users' | 'site' | 'data' | 'notices' | 'gallery' | 'ops'
 
 interface SessionUser {
   id: string
@@ -69,7 +71,13 @@ interface Props {
 }
 
 async function readJson<T>(response: Response): Promise<T> {
-  const data = await response.json()
+  const text = await response.text()
+  let data: any
+  try {
+    data = text ? JSON.parse(text) : {}
+  } catch {
+    throw new Error(`Expected JSON from ${response.url || 'request'}, got ${text.slice(0, 48) || response.statusText}`)
+  }
   if (!response.ok || data.ok === false) throw new Error(data.error || response.statusText)
   return data as T
 }
@@ -88,6 +96,27 @@ function timeLeft(expiresAt: string | undefined) {
   const hours = Math.floor(ms / 3600000)
   const minutes = Math.floor((ms % 3600000) / 60000)
   return `${hours}h ${minutes}m`
+}
+
+async function copyText(value: string) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(value)
+      return
+    } catch {
+      // Some IP/HTTP deployments expose navigator.clipboard but still reject writes.
+    }
+  }
+  const textarea = document.createElement('textarea')
+  textarea.value = value
+  textarea.style.position = 'fixed'
+  textarea.style.left = '-9999px'
+  textarea.style.top = '0'
+  document.body.appendChild(textarea)
+  textarea.focus()
+  textarea.select()
+  document.execCommand('copy')
+  textarea.remove()
 }
 
 function safetyReasonLabel(t: Translate, reason: string) {
@@ -137,6 +166,9 @@ export function ControlCenterModal({
   const [blockedIps, setBlockedIps] = useState<BlockedIp[]>([])
   const [providers, setProviders] = useState<ProviderChannel[]>([])
   const [gallery, setGallery] = useState<GalleryEntryWithWork[]>([])
+  const [workflows, setWorkflows] = useState<WorkflowRunSummary[]>([])
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState('')
+  const [workflowDetail, setWorkflowDetail] = useState<{ run: WorkflowRun; summary: WorkflowRunSummary } | null>(null)
   const [ops, setOps] = useState<OpsSnapshot | null>(null)
   const [readiness, setReadiness] = useState<PlatformReadinessSnapshot | null>(null)
   const [dataManifest, setDataManifest] = useState<DataExportManifest | null>(null)
@@ -202,10 +234,11 @@ export function ControlCenterModal({
     for (const capability of readiness?.capabilities || []) totals[capability.maturity] += 1
     return totals
   }, [readiness])
+  const selectedWorkflow = workflows.find((workflow) => workflow.id === selectedWorkflowId) || workflows[0] || null
 
   const load = async () => {
     setError(null)
-    const [sessionPayload, settingsPayload, noticePayload, providerPayload, quotaPayload, redeemPayload, opsPayload, galleryPayload, readinessPayload] = await Promise.all([
+    const [sessionPayload, settingsPayload, noticePayload, providerPayload, quotaPayload, redeemPayload, opsPayload, galleryPayload, workflowPayload, readinessPayload] = await Promise.all([
       fetch('/api/session/me', { headers: mergeSessionHeaders() }).then((response) => readJson<{
         user: SessionUser
         session: AuthSession | null
@@ -219,6 +252,7 @@ export function ControlCenterModal({
       fetch('/api/quotas/redeem', { headers: mergeSessionHeaders() }).then((response) => readJson<{ ledger: QuotaLedger | null }>(response)),
       fetch('/api/ops/status', { headers: mergeSessionHeaders() }).then((response) => readJson<{ snapshot: OpsSnapshot }>(response)),
       fetch('/api/gallery?includeReview=true', { headers: mergeSessionHeaders() }).then((response) => readJson<{ entries?: GalleryEntryWithWork[]; items?: GalleryEntryWithWork[] }>(response)),
+      fetch('/api/workflows?limit=24', { headers: mergeSessionHeaders() }).then((response) => readJson<{ items: WorkflowRunSummary[] }>(response)),
       fetch('/api/platform/readiness').then((response) => readJson<PlatformReadinessSnapshot>(response)),
     ])
 
@@ -233,6 +267,8 @@ export function ControlCenterModal({
     setProviders(providerPayload.channels || [])
     setOps(opsPayload.snapshot)
     setGallery(galleryPayload.entries || galleryPayload.items || [])
+    setWorkflows(workflowPayload.items || [])
+    setSelectedWorkflowId((current) => current || workflowPayload.items?.[0]?.id || '')
     setReadiness(readinessPayload)
     if (canManageSite(sessionPayload.user)) {
       const [usersPayload, securityPayload, redeemCodesPayload] = await Promise.all([
@@ -524,6 +560,7 @@ export function ControlCenterModal({
     { id: 'readiness', label: t('control.tab.readiness') },
     { id: 'overview', label: t('control.tab.overview') },
     { id: 'personal', label: t('control.tab.personal') },
+    { id: 'workflows', label: t('control.tab.workflows') },
     { id: 'users', label: t('control.tab.users'), admin: true },
     { id: 'site', label: t('control.tab.site'), admin: true },
     { id: 'data', label: t('control.tab.data'), admin: true },
@@ -560,6 +597,52 @@ export function ControlCenterModal({
     await fetch(`/api/security/blocked-ips/${encodeURIComponent(ip)}`, { method: 'DELETE', headers: mergeSessionHeaders() })
       .then((response) => readJson(response))
     return t('control.notice.ipUnblocked')
+  })
+
+  const loadWorkflowDetail = (id: string) => run(async () => {
+    const payload = await fetch(`/api/workflows/${encodeURIComponent(id)}`, { headers: mergeSessionHeaders() })
+      .then((response) => readJson<{ run: WorkflowRun; summary: WorkflowRunSummary }>(response))
+    setSelectedWorkflowId(id)
+    setWorkflowDetail(payload)
+    return t('control.notice.workflowLoaded')
+  })
+
+  const cancelWorkflow = (workflow: WorkflowRunSummary) => run(async () => {
+    const payload = await fetch(`/api/workflows/${encodeURIComponent(workflow.id)}`, {
+      method: 'PATCH',
+      headers: mergeSessionHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ status: 'cancelled' }),
+    }).then((response) => readJson<{ run: WorkflowRun; summary: WorkflowRunSummary }>(response))
+    setWorkflows((items) => items.map((item) => item.id === workflow.id ? payload.summary : item))
+    setWorkflowDetail((current) => current?.run.id === workflow.id ? payload : current)
+    return t('control.notice.workflowCancelled')
+  })
+
+  const copyWorkflowPrompt = (workflow: WorkflowRunSummary) => run(async () => {
+    const detail = workflowDetail?.run.id === workflow.id
+      ? workflowDetail
+      : await fetch(`/api/workflows/${encodeURIComponent(workflow.id)}`, { headers: mergeSessionHeaders() })
+        .then((response) => readJson<{ run: WorkflowRun; summary: WorkflowRunSummary }>(response))
+    setWorkflowDetail(detail)
+    setSelectedWorkflowId(workflow.id)
+    await copyText(detail.run.prompt || detail.run.context?.prompt || workflow.promptPreview)
+    return t('control.notice.workflowPromptCopied')
+  })
+
+  const copyWorkflowSummary = (workflow: WorkflowRunSummary) => run(async () => {
+    const text = [
+      `inscanvas workflow ${workflow.id}`,
+      `action: ${workflow.action}`,
+      `mode: ${workflow.modeId}`,
+      `execution: ${workflow.executionMode}`,
+      `status: ${workflow.status}`,
+      `created: ${workflow.createdAt}`,
+      `expires: ${workflow.expiresAt || '-'}`,
+      `prompt: ${workflow.promptPreview || '-'}`,
+      `context: ${JSON.stringify(workflow.contextSummary)}`,
+    ].join('\n')
+    await copyText(text)
+    return t('control.notice.workflowSummaryCopied')
   })
 
   return (
@@ -717,6 +800,98 @@ export function ControlCenterModal({
                     <input value={redeemCode} onChange={(event) => setRedeemCode(event.target.value)} placeholder={t('control.placeholder.redeem')} />
                     <button className="btn btn-secondary" onClick={redeem} disabled={busy || !redeemCode.trim()}>{t('control.action.redeem')}</button>
                   </div>
+                </section>
+              </div>
+            )}
+
+            {tab === 'workflows' && (
+              <div className="ccm-grid">
+                <section className="ccm-card wide">
+                  <div className="ccm-section-row">
+                    <div>
+                      <h3>{t('control.workflows.title')}</h3>
+                      <p>{t('control.workflows.note')}</p>
+                    </div>
+                    <span className="ccm-pill">{workflows.length} / 24h</span>
+                  </div>
+                  {workflows.length === 0 ? (
+                    <div className="ccm-empty">{t('control.workflows.empty')}</div>
+                  ) : (
+                    <div className="ccm-workflow-list">
+                      {workflows.map((workflow) => (
+                        <button
+                          key={workflow.id}
+                          className={`ccm-workflow-item ${selectedWorkflow?.id === workflow.id ? 'active' : ''} ${workflow.status}`}
+                          onClick={() => {
+                            setSelectedWorkflowId(workflow.id)
+                            setWorkflowDetail(null)
+                          }}
+                        >
+                          <span className="ccm-workflow-main">
+                            <strong>{workflow.action} · {workflow.modeId}</strong>
+                            <small>{workflow.promptPreview || t('control.workflows.noPrompt')}</small>
+                          </span>
+                          <span className="ccm-workflow-meta">
+                            {workflow.executionMode} · {workflow.status} · {formatDate(workflow.createdAt)}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+                <section className="ccm-card wide">
+                  <div className="ccm-section-row">
+                    <div>
+                      <h3>{t('control.workflows.selected')}</h3>
+                      <p>{t('control.workflows.selectedNote')}</p>
+                    </div>
+                    {selectedWorkflow && (
+                      <span className={`ccm-workflow-badge ${selectedWorkflow.status}`}>{selectedWorkflow.status}</span>
+                    )}
+                  </div>
+                  {selectedWorkflow ? (
+                    <>
+                      <div className="ccm-workflow-detail-grid">
+                        <span>{t('control.workflows.action')}<strong>{selectedWorkflow.action}</strong></span>
+                        <span>{t('control.workflows.mode')}<strong>{selectedWorkflow.modeId}</strong></span>
+                        <span>{t('control.workflows.execution')}<strong>{selectedWorkflow.executionMode}</strong></span>
+                        <span>{t('control.workflows.expires')}<strong>{formatDate(selectedWorkflow.expiresAt)}</strong></span>
+                      </div>
+                      <div className="ccm-workflow-context">
+                        <span>{t('control.workflows.carryPolicy')}: {selectedWorkflow.contextSummary.carryPolicy || '-'}</span>
+                        <span>{t('control.workflows.previous')}: {selectedWorkflow.contextSummary.hasPreviousTurn ? t('common.yes') : t('common.no')}</span>
+                        <span>{t('control.workflows.website')}: {selectedWorkflow.contextSummary.hasWebsiteReference ? t('common.yes') : t('common.no')}</span>
+                        <span>{t('control.workflows.video')}: {selectedWorkflow.contextSummary.hasVideoReference ? t('common.yes') : t('common.no')}</span>
+                        <span>{t('control.workflows.embeds')}: {selectedWorkflow.contextSummary.webEmbedCount}</span>
+                        <span>{t('control.workflows.annotations')}: {selectedWorkflow.contextSummary.annotationCount}</span>
+                        <span>{t('control.workflows.compressed')}: {selectedWorkflow.contextSummary.compressed ? t('common.yes') : t('common.no')}</span>
+                      </div>
+                      <div className="ccm-workflow-prompt">{selectedWorkflow.promptPreview || t('control.workflows.noPrompt')}</div>
+                      {workflowDetail?.run.id === selectedWorkflow.id && (
+                        <pre className="ccm-workflow-json">{JSON.stringify({
+                          id: workflowDetail.run.id,
+                          action: workflowDetail.run.action,
+                          context: workflowDetail.summary.contextSummary,
+                          prompt: workflowDetail.run.prompt,
+                        }, null, 2)}</pre>
+                      )}
+                      <div className="ccm-actions wrap">
+                        <button className="btn btn-secondary" onClick={() => loadWorkflowDetail(selectedWorkflow.id)} disabled={busy}>{t('control.workflows.loadDetail')}</button>
+                        <button className="btn btn-secondary" onClick={() => copyWorkflowPrompt(selectedWorkflow)} disabled={busy}>{t('control.workflows.copyPrompt')}</button>
+                        <button className="btn btn-secondary" onClick={() => copyWorkflowSummary(selectedWorkflow)} disabled={busy}>{t('control.workflows.copySummary')}</button>
+                        <button
+                          className="btn btn-ghost danger"
+                          onClick={() => cancelWorkflow(selectedWorkflow)}
+                          disabled={busy || !['queued', 'running'].includes(selectedWorkflow.status)}
+                        >
+                          {t('control.workflows.cancel')}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="ccm-empty">{t('control.workflows.empty')}</div>
+                  )}
                 </section>
               </div>
             )}

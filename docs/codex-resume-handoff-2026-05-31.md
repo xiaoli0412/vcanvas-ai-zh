@@ -223,6 +223,12 @@
     - 安全能力中明确列出访客关闭后的 metered-route 拦截与基础日额度护栏
     - `/api/session/guest` 与 metered routes 在关闭访客时统一返回 `guest-access-disabled`
     - 后续 next step 收敛为外部安全审核模型，而不是重复提示已完成的分享渲染加固
+  - 2026-06-09 流程恢复入口收口：
+    - Fastify 与轻量服务新增 `/api/workflows`、`/api/workflows/:id`、`PATCH /api/workflows/:id`
+    - Control Center 新增 `流程` 二级页，展示 24h 内 Generate/Refine/Plan 留存摘要
+    - 流程可加载详情、复制上一轮 prompt、复制上下文摘要、取消 local/mock queued/running run
+    - `/api/workflows/:id` 查看/取消不消耗普通额度，只有 Generate/Refine/Plan POST 继续走 metered guard
+    - 过期流程详情/取消统一按 404 隐藏，已完成/失败/已取消流程不能再次取消
 
 ## 已验证
 - `npm run typecheck` 通过
@@ -256,6 +262,11 @@
   - Fastify 与轻量服务 `/api/platform/readiness` 均包含 guest-disabled metered route、base-call quota guard、stale public exposure blocking
   - Fastify 与轻量服务 `/api/session/guest` 在访客关闭时均返回 `guest-access-disabled`
   - readiness next steps 不再包含旧的 `public share rendering hardening` 文案
+- 当前流程恢复切片已完成最终验证：
+  - Fastify 与轻量服务均覆盖 workflow generate、list、detail、cancel
+  - 登录用户 base quota 被压到 1 后，PATCH cancel 不消耗普通额度，第二次 Generate 正确触发 `daily-base-quota-exhausted`
+  - 过期流程 detail 返回 404；已取消流程再次 cancel 返回 400
+  - Control Center `流程` 页浏览器截图通过，桌面 `1440x960` 与移动 `390x844` 均不改变 `.workspace` 尺寸
 - 当前字体 / 语言 / 简约主题切片已完成最终验证：
   - `npm run typecheck`
   - `npm run typecheck:server`
@@ -266,7 +277,7 @@
   - 浏览器截图：主应用、模式面板、模型快速切换、个人设置、控制中心、作品中心、公开 `/gallery` 的桌面与移动布局
 
 ## 当前工作树状态
-- 本轮计划提交信息：`chore: refresh platform readiness map`
+- 本轮计划提交信息：`feat: add workflow resume controls`
 - 推送目标：`publish/main` 与 `publish/public-server`
 - 不推送 `origin`
 

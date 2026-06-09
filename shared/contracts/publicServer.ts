@@ -197,6 +197,7 @@ export interface WorkflowContext {
 export interface WorkflowRun {
   id: string
   ownerId: string
+  action?: WorkflowAction
   modeId: CanvasModeId
   executionMode: ExecutionMode
   prompt: string
@@ -208,6 +209,32 @@ export interface WorkflowRun {
 }
 
 export type WorkflowAction = 'generate' | 'refine' | 'plan'
+
+export interface WorkflowRunSummary {
+  id: string
+  ownerId: string
+  action: WorkflowAction | 'unknown'
+  modeId: CanvasModeId
+  executionMode: ExecutionMode
+  promptPreview: string
+  status: WorkflowRun['status']
+  createdAt: string
+  updatedAt: string
+  expiresAt?: string | null
+  expired: boolean
+  contextSummary: {
+    carryPolicy?: ContextCarryPolicy
+    compressed: boolean
+    includePreviousPrompt: boolean
+    includePreviousOutput: boolean
+    hasPreviousTurn: boolean
+    hasWebsiteReference: boolean
+    hasVideoReference: boolean
+    webEmbedCount: number
+    annotationCount: number
+    canvasLabelCount: number
+  }
+}
 
 export interface WorkflowExecutionPlan {
   action: WorkflowAction

@@ -6,6 +6,7 @@ import type {
   WorkflowContext,
   WorkflowExecutionPlan,
   WorkflowRun,
+  WorkflowRunSummary,
   WorkflowServiceResult,
 } from '../../shared/contracts/publicServer'
 import { createId, type PublicServerData } from '../data/localDataStore'
@@ -114,6 +115,7 @@ export function createWorkflowRun(data: PublicServerData, input: WorkflowService
   const run: WorkflowRun = {
     id: createId(`workflow-${input.action}`),
     ownerId,
+    action: input.action,
     modeId,
     executionMode,
     prompt: input.prompt || input.context?.prompt || '',
@@ -166,4 +168,57 @@ export function createWorkflowRun(data: PublicServerData, input: WorkflowService
       ownerOverrideAccepted: ownerResolution.ownerOverrideAccepted,
     },
   }
+}
+
+function promptPreview(value: string) {
+  const normalized = value.trim().replace(/\s+/g, ' ')
+  if (!normalized) return ''
+  return normalized.length > 120 ? `${normalized.slice(0, 120)}...` : normalized
+}
+
+function hasCompressionMarker(context: WorkflowContext) {
+  return [
+    context.currentOutputHtml,
+    context.previousTurn?.html,
+    context.websiteReference?.html,
+    context.websiteReference?.rebasedHtml,
+    ...(context.websiteReference?.stylesheetSnippets || []),
+  ].some((value) => typeof value === 'string' && value.includes('[compressed by inscanvas context v1]'))
+}
+
+export function summarizeWorkflowRun(run: WorkflowRun, now = Date.now()): WorkflowRunSummary {
+  const context = run.context || ({} as WorkflowContext)
+  return {
+    id: run.id,
+    ownerId: run.ownerId,
+    action: run.action || 'unknown',
+    modeId: run.modeId,
+    executionMode: run.executionMode,
+    promptPreview: promptPreview(run.prompt || context.prompt || ''),
+    status: run.status,
+    createdAt: run.createdAt,
+    updatedAt: run.updatedAt,
+    expiresAt: run.expiresAt,
+    expired: Boolean(run.expiresAt && Date.parse(run.expiresAt) <= now),
+    contextSummary: {
+      carryPolicy: context.carryPolicy,
+      compressed: hasCompressionMarker(context),
+      includePreviousPrompt: context.includePreviousPrompt !== false,
+      includePreviousOutput: context.includePreviousOutput !== false,
+      hasPreviousTurn: Boolean(context.previousTurn),
+      hasWebsiteReference: Boolean(context.websiteReference),
+      hasVideoReference: Boolean(context.videoReference),
+      webEmbedCount: context.webEmbeds?.length || 0,
+      annotationCount: context.previewAnnotations?.length || 0,
+      canvasLabelCount: context.currentCanvasLabels?.length || 0,
+    },
+  }
+}
+
+export function isWorkflowRunExpired(run: WorkflowRun, now = Date.now()) {
+  return Boolean(run.expiresAt && Date.parse(run.expiresAt) <= now)
+}
+
+export function canCancelWorkflowRun(run: WorkflowRun, now = Date.now()) {
+  return !isWorkflowRunExpired(run, now) && (run.status === 'queued' || run.status === 'running')
 }

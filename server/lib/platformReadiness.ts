@@ -96,6 +96,7 @@ export function makePlatformReadinessSnapshot(data: PublicServerData): PlatformR
         'hosting policy calculation',
         'video/web-copy high-resource gate',
         'metadata-only asset import route for image/video/html intake audits',
+        '24h workflow resume UI with prompt/context summary copy and local/mock cancellation',
       ],
       gaps: [
         'server-side model execution worker',
@@ -123,7 +124,6 @@ export function makePlatformReadinessSnapshot(data: PublicServerData): PlatformR
       gaps: [
         'external safety review model before production publishing',
         'flow-map export',
-        '24h task resume UI',
       ],
       nextStep: 'Attach an external safety-review model and keep the local public-exposure gate as the fallback before production publishing.',
     }),

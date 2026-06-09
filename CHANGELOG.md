@@ -1,3 +1,14 @@
+## 1.11.24 - 2026-06-09
+
+### Features
+- Added a 24h workflow resume surface in the secondary Control Center so retained Generate/Refine/Plan runs can be listed, inspected, cancelled, and copied without taking canvas space.
+- Added Fastify and lightweight deployment parity for workflow list/detail/cancel APIs while keeping only Generate/Refine/Plan POST routes metered.
+- Updated the platform readiness map so the local/mock workflow resume UI is marked implemented while real server-side workers and queues remain explicit gaps.
+
+### Fixes
+- Hidden expired workflow detail/cancel routes behind the same 24h retention boundary as the list API, and limited local/mock cancellation to queued or running workflow runs.
+- Updated workflow copy/cancel controls to keep mobile actions wrapped, immediately reflect cancelled state, and fall back when clipboard writes are rejected on HTTP/IP deployments.
+
 ## 1.11.23 - 2026-06-09
 
 ### Fixes

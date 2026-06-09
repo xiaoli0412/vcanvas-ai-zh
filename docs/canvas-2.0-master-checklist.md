@@ -40,6 +40,7 @@
 - `1.11.21` promotes safety metadata to saved works: save/import/update/share/gallery paths share local preflight status, blocked works cannot create share links, and stale share links are disabled when edited content becomes blocked.
 - `1.11.22` closes stale public-exposure gaps: public share/gallery routes re-check work/link/entry safety state, gallery rechecks demote blocked published entries, and blocked works disappear from default public gallery APIs.
 - `1.11.23` refreshes the platform readiness map so Control Center no longer reports public-share rendering hardening as unfinished; the local/mock guest and base-quota guardrails are visible in the security capability, and guest-session shutdown returns the same `guest-access-disabled` reason code as metered routes.
+- `1.11.24` adds a Control Center workflow resume surface backed by `/api/workflows` list/detail/cancel parity in Fastify and the lightweight deployment server; it exposes 24h retained prompts and context summaries, hides expired detail routes, limits cancel to queued/running local/mock runs, and does not claim a real background worker.
 - Frontend, server typecheck, build, service smoke tests, and desktop/mobile browser screenshots passed on 2026-06-06.
 
 ## Completion Matrix
@@ -81,6 +82,7 @@
 - `in_progress` Control Center dispatch policy editor and Ops dispatch preview make the contract configurable and inspectable without implying real queue execution
 - `in_progress` platform readiness endpoint marks dispatch as `contract-only` until CPU/memory/disk/bandwidth telemetry and a queue backend exist
 - `in_progress` workflow service boundary now centralizes hosting policy, 24h retention, context compression, execution plan metadata, and hosted-run quota debit
+- `done` 24h workflow resume UI: Control Center lists retained runs, loads details, copies prompt/context summaries, and can cancel only local/mock queued/running runs inside the 24h retention window
 - `done` server-hosted high-resource toggle for video/web copy in personal settings and workflow policy
 - `done` Control Center v1 surfaces ops status and manual cleanup as secondary controls
 
@@ -145,7 +147,7 @@
 ### 9. Backend Logic
 - `done` public-server skeleton and first API placeholders
 - `done` phase-1 session, providers, notices, settings, works, assets, remix, and workflow route contracts
-- `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve `/health`, `/_vcanvas_proxy`, `/api/session/*`, `/api/providers`, `/api/notices`, `/api/settings/*`, `/api/works/*`, `/api/gallery`, `/api/gallery/:id/review`, `/api/gallery/:id/safety-review`, `/api/quotas/*`, `/api/ops/status`, `/api/maintenance/cleanup`, `/api/remix/fetch`, and workflow enqueue routes
+- `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve `/health`, `/_vcanvas_proxy`, `/api/session/*`, `/api/providers`, `/api/notices`, `/api/settings/*`, `/api/works/*`, `/api/gallery`, `/api/gallery/:id/review`, `/api/gallery/:id/safety-review`, `/api/quotas/*`, `/api/ops/status`, `/api/maintenance/cleanup`, `/api/remix/fetch`, workflow enqueue routes, and `/api/workflows` resume routes
 - `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve `/api/users` with admin-only local/mock user management and masked provider-key summaries
 - `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve `/api/security/blocked-ips` with admin-only list/block/unblock parity
 - `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve public HTML routes `/share/:slug` and `/gallery`
@@ -155,6 +157,7 @@
 - `done` `npm run server` and `scripts/serve-vcanvas.mjs` both serve admin-only `/api/updates/check` for read-only GitHub latest Release status, with optional authenticated GitHub API requests through `GITHUB_TOKEN`/`GH_TOKEN`
 - `done` local JSON persistence adapter for site settings, personal settings, notices, providers, works, workflow runs, sessions, users, quotas, shares, gallery entries, rate-limit events, blocked IPs, and audit events
 - `in_progress` 24h workflow run retention with compressed context payloads
+- `done` workflow resume reads stay lightweight by returning summaries for lists and full context only from the selected detail route
 - `todo` bridge `newapi`, `subapi`, `octopus`
 - `in_progress` local/mock quota, sign-in, redeem, ops, cleanup, and task-retention interfaces
 - `in_progress` natural-day base/hosted quota windows now exist in local/mock mode; production payment-grade quota settlement remains a bridge/adapter task

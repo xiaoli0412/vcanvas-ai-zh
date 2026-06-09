@@ -381,7 +381,7 @@ export function makeDispatchSnapshot(data: PublicServerData): DispatchSnapshot {
 
 function isMeteredRoute(method: string, route: string) {
   if (method !== 'POST' && method !== 'PATCH' && method !== 'DELETE') return false
-  return /^\/api\/workflows\//.test(route)
+  return (method === 'POST' && /^\/api\/workflows\/(generate|refine|plan)$/.test(route))
     || route === '/api/remix/fetch'
     || route === '/api/assets/import'
     || route === '/api/works'
