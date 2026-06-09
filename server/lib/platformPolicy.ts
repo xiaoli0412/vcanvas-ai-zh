@@ -6,6 +6,8 @@ import type {
   ExecutionMode,
   GalleryEntry,
   HostingPolicy,
+  MaintenanceCleanupCounts,
+  MaintenanceCleanupReport,
   ProviderChannel,
   DispatchSnapshot,
   UserAccount,
@@ -17,7 +19,7 @@ import { stripProviderSecret } from './providerKeyVault'
 
 export const SESSION_TTL_MS = 8 * 60 * 60 * 1000
 export const WORKFLOW_TTL_MS = 24 * 60 * 60 * 1000
-const RATE_EVENT_RETENTION_MS = 48 * 60 * 60 * 1000
+export const RATE_EVENT_RETENTION_MS = 48 * 60 * 60 * 1000
 const DAY_MS = 24 * 60 * 60 * 1000
 
 const TIER_RANK: Record<UserTier, number> = {
@@ -507,23 +509,68 @@ export function enforceTrafficGuard(data: PublicServerData, request: FastifyRequ
   }
 }
 
-export function cleanupPublicServerData(data: PublicServerData) {
-  const now = Date.now()
-  const before = {
+function cleanupCounts(data: PublicServerData): MaintenanceCleanupCounts {
+  return {
     workflows: data.workflows.length,
     rateLimitEvents: data.rateLimitEvents.length,
     blockedIps: data.blockedIps.length,
     sessions: data.sessions.length,
   }
-  data.workflows = data.workflows.filter((item) => !item.expiresAt || Date.parse(item.expiresAt) > now)
-  data.rateLimitEvents = data.rateLimitEvents.filter((item) => Date.parse(item.createdAt) > now - RATE_EVENT_RETENTION_MS)
-  data.blockedIps = data.blockedIps.filter((item) => !item.expiresAt || Date.parse(item.expiresAt) > now)
-  data.sessions = data.sessions.filter((item) => Date.parse(item.expiresAt) > now)
+}
+
+function subtractCleanupCounts(before: MaintenanceCleanupCounts, after: MaintenanceCleanupCounts): MaintenanceCleanupCounts {
   return {
-    workflows: before.workflows - data.workflows.length,
-    rateLimitEvents: before.rateLimitEvents - data.rateLimitEvents.length,
-    blockedIps: before.blockedIps - data.blockedIps.length,
-    sessions: before.sessions - data.sessions.length,
+    workflows: before.workflows - after.workflows,
+    rateLimitEvents: before.rateLimitEvents - after.rateLimitEvents,
+    blockedIps: before.blockedIps - after.blockedIps,
+    sessions: before.sessions - after.sessions,
+  }
+}
+
+function cleanupRetention() {
+  return {
+    workflowHours: Math.round(WORKFLOW_TTL_MS / (60 * 60 * 1000)),
+    rateLimitEventHours: Math.round(RATE_EVENT_RETENTION_MS / (60 * 60 * 1000)),
+  }
+}
+
+function cleanupCandidates(data: PublicServerData, now = Date.now()): MaintenanceCleanupCounts {
+  return {
+    workflows: data.workflows.filter((item) => Boolean(item.expiresAt && Date.parse(item.expiresAt) <= now)).length,
+    rateLimitEvents: data.rateLimitEvents.filter((item) => Date.parse(item.createdAt) <= now - RATE_EVENT_RETENTION_MS).length,
+    blockedIps: data.blockedIps.filter((item) => Boolean(item.expiresAt && Date.parse(item.expiresAt) <= now)).length,
+    sessions: data.sessions.filter((item) => Date.parse(item.expiresAt) <= now).length,
+  }
+}
+
+export function cleanupPublicServerData(data: PublicServerData, options: { dryRun?: boolean } = {}): MaintenanceCleanupReport {
+  const now = Date.now()
+  const before = cleanupCounts(data)
+  const candidates = cleanupCandidates(data, now)
+  let after = before
+  if (!options.dryRun) {
+    data.workflows = data.workflows.filter((item) => !item.expiresAt || Date.parse(item.expiresAt) > now)
+    data.rateLimitEvents = data.rateLimitEvents.filter((item) => Date.parse(item.createdAt) > now - RATE_EVENT_RETENTION_MS)
+    data.blockedIps = data.blockedIps.filter((item) => !item.expiresAt || Date.parse(item.expiresAt) > now)
+    data.sessions = data.sessions.filter((item) => Date.parse(item.expiresAt) > now)
+    after = cleanupCounts(data)
+  } else {
+    after = {
+      workflows: before.workflows - candidates.workflows,
+      rateLimitEvents: before.rateLimitEvents - candidates.rateLimitEvents,
+      blockedIps: before.blockedIps - candidates.blockedIps,
+      sessions: before.sessions - candidates.sessions,
+    }
+  }
+  return {
+    dryRun: options.dryRun === true,
+    applied: options.dryRun !== true,
+    generatedAt: new Date().toISOString(),
+    before,
+    candidates,
+    removed: options.dryRun ? { workflows: 0, rateLimitEvents: 0, blockedIps: 0, sessions: 0 } : subtractCleanupCounts(before, after),
+    after,
+    retention: cleanupRetention(),
   }
 }
 
@@ -549,6 +596,11 @@ export function makeOpsSnapshot(data: PublicServerData) {
     storage: {
       adapter: 'local-json' as const,
       retentionHours: 24,
+    },
+    cleanup: {
+      candidates: cleanupCandidates(data),
+      retention: cleanupRetention(),
+      checkedAt: new Date().toISOString(),
     },
     highLoadMode: data.siteSettings.securityMode === 'limited',
     dispatch: makeDispatchSnapshot(data),

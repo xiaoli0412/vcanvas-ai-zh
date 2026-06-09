@@ -236,6 +236,27 @@ export interface WorkflowRunSummary {
   }
 }
 
+export interface MaintenanceCleanupCounts {
+  workflows: number
+  rateLimitEvents: number
+  blockedIps: number
+  sessions: number
+}
+
+export interface MaintenanceCleanupReport {
+  dryRun: boolean
+  applied: boolean
+  generatedAt: string
+  before: MaintenanceCleanupCounts
+  candidates: MaintenanceCleanupCounts
+  removed: MaintenanceCleanupCounts
+  after: MaintenanceCleanupCounts
+  retention: {
+    workflowHours: number
+    rateLimitEventHours: number
+  }
+}
+
 export interface WorkflowExecutionPlan {
   action: WorkflowAction
   executor: ExecutionMode
@@ -573,6 +594,11 @@ export interface OpsSnapshot {
   storage: {
     adapter: 'local-json'
     retentionHours: number
+  }
+  cleanup?: {
+    candidates: MaintenanceCleanupCounts
+    retention: MaintenanceCleanupReport['retention']
+    checkedAt: string
   }
   highLoadMode: boolean
   dispatch?: DispatchSnapshot

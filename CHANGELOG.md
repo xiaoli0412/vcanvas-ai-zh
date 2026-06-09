@@ -1,3 +1,13 @@
+## 1.11.25 - 2026-06-09
+
+### Features
+- Added an admin-only cleanup preview path for local/mock runtime data so operators can inspect stale workflow, session, rate-limit, and blocked-IP candidates before applying cleanup.
+- Surfaced cleanup candidates, retention windows, preview counts, and applied removal counts in the secondary Control Center Ops tab without adding persistent canvas chrome.
+
+### Fixes
+- Restricted `/api/maintenance/cleanup` to host-admin/admin users in both Fastify and the lightweight deployment server, while keeping `/api/ops/status` read-only.
+- Kept Fastify and `scripts/serve-vcanvas.mjs` cleanup reports aligned with the same `candidates`, `removed`, `before`, `after`, and retention metadata.
+
 ## 1.11.24 - 2026-06-09
 
 ### Features

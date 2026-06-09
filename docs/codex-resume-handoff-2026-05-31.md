@@ -229,6 +229,11 @@
     - 流程可加载详情、复制上一轮 prompt、复制上下文摘要、取消 local/mock queued/running run
     - `/api/workflows/:id` 查看/取消不消耗普通额度，只有 Generate/Refine/Plan POST 继续走 metered guard
     - 过期流程详情/取消统一按 404 隐藏，已完成/失败/已取消流程不能再次取消
+  - 2026-06-09 运维清理可观测性收口：
+    - Fastify 与轻量服务新增 `GET /api/maintenance/cleanup` dry-run 预览
+    - `POST /api/maintenance/cleanup` 返回统一 cleanup report：before、after、candidates、removed、retention
+    - 清理 apply 限制为 host-admin/admin；普通用户与访客返回 403
+    - Control Center `运维` 页显示可清理项、保留窗口、预览数量和实际清理数量
 
 ## 已验证
 - `npm run typecheck` 通过
@@ -267,6 +272,9 @@
   - 登录用户 base quota 被压到 1 后，PATCH cancel 不消耗普通额度，第二次 Generate 正确触发 `daily-base-quota-exhausted`
   - 过期流程 detail 返回 404；已取消流程再次 cancel 返回 400
   - Control Center `流程` 页浏览器截图通过，桌面 `1440x960` 与移动 `390x844` 均不改变 `.workspace` 尺寸
+- 当前运维清理切片已完成最终验证：
+  - Fastify 与轻量服务均覆盖非管理员拒绝、管理员预览、dry-run 不删除、apply 删除、ops snapshot 候选数归零
+  - Control Center `运维` 页浏览器截图通过，桌面 `1440x960` 与移动 `390x844` 均不改变 `.workspace` 尺寸
 - 当前字体 / 语言 / 简约主题切片已完成最终验证：
   - `npm run typecheck`
   - `npm run typecheck:server`
@@ -277,7 +285,7 @@
   - 浏览器截图：主应用、模式面板、模型快速切换、个人设置、控制中心、作品中心、公开 `/gallery` 的桌面与移动布局
 
 ## 当前工作树状态
-- 本轮计划提交信息：`feat: add workflow resume controls`
+- 本轮计划提交信息：`feat: add maintenance cleanup preview`
 - 推送目标：`publish/main` 与 `publish/public-server`
 - 不推送 `origin`
 

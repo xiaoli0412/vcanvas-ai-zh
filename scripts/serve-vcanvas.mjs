@@ -14,6 +14,8 @@ const dataExportSchemaVersion = 'local-json-v1'
 const dataImportVerificationText = 'IMPORT INSCANVAS DATA'
 const defaultGithubRepo = 'xiaoli0412/vcanvas-ai-zh'
 const dayMs = 24 * 60 * 60 * 1000
+const workflowRetentionMs = 24 * 60 * 60 * 1000
+const rateEventRetentionMs = 48 * 60 * 60 * 1000
 const dailyBaseCalls = { guest: 8, user: 20, vip: 60, admin: 999999, 'host-admin': 999999 }
 const dailyHostedRuns = { guest: 0, user: 2, vip: 6, admin: 999999, 'host-admin': 999999 }
 const dataPortableCollections = [
@@ -1222,7 +1224,7 @@ function platformReadinessSnapshot(data) {
       title: 'ops, cleanup, and dispatch',
       maturity: 'contract-only',
       summary: 'Local ops counts and planned-only dispatch are visible; real resource telemetry and distributed queueing are not active.',
-      implemented: ['ops snapshot', 'cleanup endpoint', 'planned weighted dispatch preview', 'high-load fallback metadata'],
+      implemented: ['ops snapshot', 'admin-only cleanup endpoint with dry-run candidate preview', 'planned weighted dispatch preview', 'high-load fallback metadata'],
       gaps: ['CPU/memory/disk/bandwidth telemetry', 'email alerts', 'restart automation', 'multi-node job execution'],
       nextStep: 'Attach a HostMetrics adapter and keep dispatch planned-only until a queue backend exists.',
     }),
@@ -1269,23 +1271,68 @@ function platformReadinessSnapshot(data) {
   }
 }
 
-function cleanupData(data) {
-  const now = Date.now()
-  const before = {
+function cleanupCounts(data) {
+  return {
     workflows: data.workflows.length,
     rateLimitEvents: data.rateLimitEvents.length,
     blockedIps: data.blockedIps.length,
     sessions: data.sessions.length,
   }
-  data.workflows = data.workflows.filter((item) => !item.expiresAt || Date.parse(item.expiresAt) > now)
-  data.rateLimitEvents = data.rateLimitEvents.filter((item) => Date.parse(item.createdAt) > now - 48 * 60 * 60 * 1000)
-  data.blockedIps = data.blockedIps.filter((item) => !item.expiresAt || Date.parse(item.expiresAt) > now)
-  data.sessions = data.sessions.filter((item) => Date.parse(item.expiresAt) > now)
+}
+
+function subtractCleanupCounts(before, after) {
   return {
-    workflows: before.workflows - data.workflows.length,
-    rateLimitEvents: before.rateLimitEvents - data.rateLimitEvents.length,
-    blockedIps: before.blockedIps - data.blockedIps.length,
-    sessions: before.sessions - data.sessions.length,
+    workflows: before.workflows - after.workflows,
+    rateLimitEvents: before.rateLimitEvents - after.rateLimitEvents,
+    blockedIps: before.blockedIps - after.blockedIps,
+    sessions: before.sessions - after.sessions,
+  }
+}
+
+function cleanupRetention() {
+  return {
+    workflowHours: Math.round(workflowRetentionMs / (60 * 60 * 1000)),
+    rateLimitEventHours: Math.round(rateEventRetentionMs / (60 * 60 * 1000)),
+  }
+}
+
+function cleanupCandidates(data, now = Date.now()) {
+  return {
+    workflows: data.workflows.filter((item) => Boolean(item.expiresAt && Date.parse(item.expiresAt) <= now)).length,
+    rateLimitEvents: data.rateLimitEvents.filter((item) => Date.parse(item.createdAt) <= now - rateEventRetentionMs).length,
+    blockedIps: data.blockedIps.filter((item) => Boolean(item.expiresAt && Date.parse(item.expiresAt) <= now)).length,
+    sessions: data.sessions.filter((item) => Date.parse(item.expiresAt) <= now).length,
+  }
+}
+
+function cleanupData(data, options = {}) {
+  const now = Date.now()
+  const before = cleanupCounts(data)
+  const candidates = cleanupCandidates(data, now)
+  let after = before
+  if (!options.dryRun) {
+    data.workflows = data.workflows.filter((item) => !item.expiresAt || Date.parse(item.expiresAt) > now)
+    data.rateLimitEvents = data.rateLimitEvents.filter((item) => Date.parse(item.createdAt) > now - rateEventRetentionMs)
+    data.blockedIps = data.blockedIps.filter((item) => !item.expiresAt || Date.parse(item.expiresAt) > now)
+    data.sessions = data.sessions.filter((item) => Date.parse(item.expiresAt) > now)
+    after = cleanupCounts(data)
+  } else {
+    after = {
+      workflows: before.workflows - candidates.workflows,
+      rateLimitEvents: before.rateLimitEvents - candidates.rateLimitEvents,
+      blockedIps: before.blockedIps - candidates.blockedIps,
+      sessions: before.sessions - candidates.sessions,
+    }
+  }
+  return {
+    dryRun: options.dryRun === true,
+    applied: options.dryRun !== true,
+    generatedAt: new Date().toISOString(),
+    before,
+    candidates,
+    removed: options.dryRun ? { workflows: 0, rateLimitEvents: 0, blockedIps: 0, sessions: 0 } : subtractCleanupCounts(before, after),
+    after,
+    retention: cleanupRetention(),
   }
 }
 
@@ -1310,6 +1357,11 @@ function opsSnapshot(data) {
       fallbackReason: data.siteSettings.securityMode === 'limited' ? 'server-high-load-degrade-after-current-task' : null,
     },
     storage: { adapter: 'local-json', retentionHours: 24 },
+    cleanup: {
+      candidates: cleanupCandidates(data),
+      retention: cleanupRetention(),
+      checkedAt: new Date().toISOString(),
+    },
     highLoadMode: data.siteSettings.securityMode === 'limited',
     dispatch: dispatchSnapshot(data),
   }
@@ -1610,7 +1662,7 @@ function enforceTrafficGuard(data, req, url) {
   const subjectType = actor.tier === 'guest' ? 'ip' : 'user'
   const subject = actor.tier === 'guest' ? (ip || 'unknown-ip') : actor.id
   const window = policy?.enabled ? rateLimitWindow(policy, nowDate) : null
-  data.rateLimitEvents = data.rateLimitEvents.filter((event) => Date.parse(event.createdAt) > now - 48 * 60 * 60 * 1000)
+  data.rateLimitEvents = data.rateLimitEvents.filter((event) => Date.parse(event.createdAt) > now - rateEventRetentionMs)
   const count = window
     ? data.rateLimitEvents.filter((event) => event.subject === subject && event.subjectType === subjectType && Date.parse(event.createdAt) >= window.cutoffMs).length
     : 0
@@ -2850,12 +2902,29 @@ async function handleApi(req, res, url) {
     return true
   }
 
+  if (url.pathname === '/api/maintenance/cleanup' && method === 'GET') {
+    const actor = getActor(data, req)
+    if (!canManageUsers(actor.tier)) {
+      sendJson(res, 403, { ok: false, error: 'Only host-admin/admin can run local maintenance cleanup.' })
+      return true
+    }
+    sendJson(res, 200, { ok: true, cleanup: cleanupData(data, { dryRun: true }), snapshot: opsSnapshot(data) })
+    return true
+  }
+
   if (url.pathname === '/api/maintenance/cleanup' && method === 'POST') {
     const actor = getActor(data, req)
-    const removed = cleanupData(data)
-    withAudit(data, req, 'maintenance.cleanup', actor.id, actor.tier, removed)
-    writeData(data)
-    sendJson(res, 200, { ok: true, removed, snapshot: opsSnapshot(data) })
+    if (!canManageUsers(actor.tier)) {
+      sendJson(res, 403, { ok: false, error: 'Only host-admin/admin can run local maintenance cleanup.' })
+      return true
+    }
+    const body = await readJsonBody(req)
+    const cleanup = cleanupData(data, { dryRun: body.dryRun === true })
+    if (body.dryRun !== true) {
+      withAudit(data, req, 'maintenance.cleanup', actor.id, actor.tier, cleanup)
+      writeData(data)
+    }
+    sendJson(res, 200, { ok: true, cleanup, removed: cleanup.removed, snapshot: opsSnapshot(data) })
     return true
   }
 

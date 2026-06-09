@@ -4,6 +4,7 @@ import type {
   BlockedIp,
   DataExportManifest,
   GalleryEntry,
+  MaintenanceCleanupReport,
   NoticeMessage,
   OpsSnapshot,
   PlatformCapabilityMaturity,
@@ -170,6 +171,7 @@ export function ControlCenterModal({
   const [selectedWorkflowId, setSelectedWorkflowId] = useState('')
   const [workflowDetail, setWorkflowDetail] = useState<{ run: WorkflowRun; summary: WorkflowRunSummary } | null>(null)
   const [ops, setOps] = useState<OpsSnapshot | null>(null)
+  const [cleanupReport, setCleanupReport] = useState<MaintenanceCleanupReport | null>(null)
   const [readiness, setReadiness] = useState<PlatformReadinessSnapshot | null>(null)
   const [dataManifest, setDataManifest] = useState<DataExportManifest | null>(null)
   const [dataImportSummary, setDataImportSummary] = useState<DataExportManifest | null>(null)
@@ -235,6 +237,11 @@ export function ControlCenterModal({
     return totals
   }, [readiness])
   const selectedWorkflow = workflows.find((workflow) => workflow.id === selectedWorkflowId) || workflows[0] || null
+  const cleanupCandidates = cleanupReport?.candidates || ops?.cleanup?.candidates || null
+  const cleanupRetention = cleanupReport?.retention || ops?.cleanup?.retention || null
+  const cleanupTotal = cleanupCandidates
+    ? Object.values(cleanupCandidates).reduce((sum, value) => sum + value, 0)
+    : 0
 
   const load = async () => {
     setError(null)
@@ -466,12 +473,22 @@ export function ControlCenterModal({
   })
 
   const cleanup = () => run(async () => {
-    await fetch('/api/maintenance/cleanup', {
+    const payload = await fetch('/api/maintenance/cleanup', {
       method: 'POST',
       headers: mergeSessionHeaders({ 'Content-Type': 'application/json' }),
       body: '{}',
-    }).then((response) => readJson(response))
+    }).then((response) => readJson<{ cleanup: MaintenanceCleanupReport; snapshot: OpsSnapshot }>(response))
+    setCleanupReport(payload.cleanup)
+    setOps(payload.snapshot)
     return t('control.notice.cleanup')
+  })
+
+  const previewCleanup = () => run(async () => {
+    const payload = await fetch('/api/maintenance/cleanup', { headers: mergeSessionHeaders() })
+      .then((response) => readJson<{ cleanup: MaintenanceCleanupReport; snapshot: OpsSnapshot }>(response))
+    setCleanupReport(payload.cleanup)
+    setOps(payload.snapshot)
+    return t('control.notice.cleanupPreview')
   })
 
   const reviewGallery = (entry: GalleryEntryWithWork, status: GalleryEntry['status']) => run(async () => {
@@ -1267,7 +1284,30 @@ export function ControlCenterModal({
                   <div className="ccm-ops-grid">
                     {ops && Object.entries(ops.counts).map(([key, value]) => <span key={key}><strong>{value}</strong>{key}</span>)}
                   </div>
-                  <button className="btn btn-secondary" onClick={cleanup} disabled={busy}>{t('control.action.cleanup')}</button>
+                  <div className="ccm-section-row compact">
+                    <div>
+                      <h3>{t('control.ops.cleanup')}</h3>
+                      <p>{t('control.ops.cleanupNote')}</p>
+                    </div>
+                    <span className="ccm-pill">{cleanupTotal} {t('control.ops.cleanupCandidates')}</span>
+                  </div>
+                  <div className="ccm-ops-grid cleanup">
+                    {cleanupCandidates && Object.entries(cleanupCandidates).map(([key, value]) => <span key={key}><strong>{value}</strong>{key}</span>)}
+                  </div>
+                  <div className="ccm-kv">
+                    <span>{t('control.ops.retention')}</span>
+                    <strong>{cleanupRetention ? `${cleanupRetention.workflowHours}h / ${cleanupRetention.rateLimitEventHours}h` : '-'}</strong>
+                  </div>
+                  {cleanupReport && (
+                    <div className="ccm-kv">
+                      <span>{cleanupReport.applied ? t('control.ops.removed') : t('control.ops.previewed')}</span>
+                      <strong>{Object.values(cleanupReport.applied ? cleanupReport.removed : cleanupReport.candidates).reduce((sum, value) => sum + value, 0)}</strong>
+                    </div>
+                  )}
+                  <div className="ccm-actions wrap">
+                    <button className="btn btn-secondary" onClick={previewCleanup} disabled={busy}>{t('control.action.cleanupPreview')}</button>
+                    <button className="btn btn-secondary" onClick={cleanup} disabled={busy || cleanupTotal === 0}>{t('control.action.cleanup')}</button>
+                  </div>
                 </section>
                 <section className="ccm-card">
                   <h3>{t('control.ops.hosting')}</h3>

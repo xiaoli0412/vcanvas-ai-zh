@@ -154,7 +154,7 @@ export function makePlatformReadinessSnapshot(data: PublicServerData): PlatformR
       summary: 'Local ops counts and planned-only dispatch are visible; real resource telemetry and distributed queueing are not active.',
       implemented: [
         'ops snapshot',
-        'cleanup endpoint',
+        'admin-only cleanup endpoint with dry-run candidate preview',
         'planned weighted dispatch preview',
         'high-load fallback metadata',
       ],
