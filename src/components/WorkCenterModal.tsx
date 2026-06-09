@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import type { CanvasModeId, GalleryEntry, ShareLink, UserTier, WorkRecord } from '../../shared/contracts/publicServer'
+import type { CanvasModeId, GalleryEntry, ShareLink, UserTier, WorkGalleryQuotaSummary, WorkRecord } from '../../shared/contracts/publicServer'
 import type { Translate } from '../lib/i18n'
 import { mergeSessionHeaders } from '../lib/sessionClient'
 import './WorkCenterModal.css'
@@ -53,8 +53,29 @@ function downloadHtml(work: WorkRecord) {
 
 async function readJson<T>(response: Response): Promise<T> {
   const data = await response.json()
-  if (!response.ok || data.ok === false) throw new Error(data.error || response.statusText)
+  if (!response.ok || data.ok === false) {
+    const error = new Error(data.error || response.statusText) as Error & { payload?: unknown }
+    error.payload = data
+    throw error
+  }
   return data as T
+}
+
+function formatLimit(value: number | null | undefined) {
+  return value === null || value === undefined ? '∞' : String(value)
+}
+
+function formatQuota(summary: WorkGalleryQuotaSummary['works'] | null | undefined, fallback: string) {
+  if (!summary) return fallback
+  return `${summary.used}/${formatLimit(summary.limit)}`
+}
+
+function quotaReasonText(reason: string | null | undefined, t: Translate) {
+  if (!reason) return ''
+  if (reason.includes('cannot publish')) return t('works.quota.galleryDeniedTier')
+  if (reason.includes('Gallery publish limit')) return t('works.quota.galleryLimitReached')
+  if (reason.includes('Work limit')) return t('works.notice.overLimit')
+  return reason
 }
 
 export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, onClose, t }: Props) {
@@ -62,6 +83,7 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
   const [works, setWorks] = useState<WorkRecord[]>([])
   const [shareLinks, setShareLinks] = useState<ShareLink[]>([])
   const [galleryEntries, setGalleryEntries] = useState<GalleryEntryWithWork[]>([])
+  const [quotaSummary, setQuotaSummary] = useState<WorkGalleryQuotaSummary | null>(null)
   const [limit, setLimit] = useState(10)
   const [selectedId, setSelectedId] = useState('')
   const [title, setTitle] = useState(() => makeDefaultTitle(promptDraft, t('canvas.untitled')))
@@ -84,7 +106,14 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
   const selectedGalleryEntry = selectedWork ? galleryEntries.find((entry) => entry.workId === selectedWork.id) : null
   const selectedSafetyStatus = safetyStatus(selectedWork)
   const canSaveCurrentOutput = Boolean(lastHTML.trim())
-  const workCountLabel = `${works.length}/${limit}`
+  const selectedAlreadySubmitted = Boolean(selectedGalleryEntry && selectedGalleryEntry.status !== 'rejected')
+  const workQuota = quotaSummary?.works || null
+  const galleryQuota = quotaSummary?.gallerySubmissions || null
+  const workLimitReached = workQuota?.reached ?? works.length >= limit
+  const canSubmitSelectedToGallery = Boolean(selectedWork) && !selectedAlreadySubmitted && selectedSafetyStatus !== 'blocked' && (quotaSummary?.canSubmitGallery ?? true)
+  const workCountLabel = formatQuota(workQuota, `${works.length}/${limit}`)
+  const galleryCountLabel = formatQuota(galleryQuota, `${galleryEntries.filter((entry) => entry.status !== 'rejected').length}/∞`)
+  const galleryQuotaReason = quotaReasonText(quotaSummary?.galleryReason || galleryQuota?.reason, t)
 
   const load = async () => {
     setError(null)
@@ -95,16 +124,19 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
       fetch(`/api/works?ownerId=${encodeURIComponent(session.user.id)}`, { headers: mergeSessionHeaders() }).then((response) => readJson<{
         items: WorkRecord[]
         limit: number
+        quotaSummary?: WorkGalleryQuotaSummary
         shareLinks: ShareLink[]
       }>(response)),
       fetch('/api/gallery?includeOwn=true', { headers: mergeSessionHeaders() }).then((response) => readJson<{
         entries?: GalleryEntryWithWork[]
         items?: GalleryEntryWithWork[]
+        quotaSummary?: WorkGalleryQuotaSummary
       }>(response)),
     ])
     setUser(session.user)
     setWorks(workPayload.items || [])
-    setLimit(workPayload.limit || 10)
+    setQuotaSummary(workPayload.quotaSummary || galleryPayload.quotaSummary || null)
+    setLimit(workPayload.quotaSummary?.works.limit ?? workPayload.limit ?? 10)
     setShareLinks(workPayload.shareLinks || [])
     setGalleryEntries(galleryPayload.entries || galleryPayload.items || [])
     if ((workPayload.items || []).length < (workPayload.limit || 10)) setOverLimitMode(null)
@@ -130,7 +162,9 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
       await load()
       setNotice(message || successMessage)
     } catch (err: any) {
-      setError(err.message || String(err))
+      const payload = err?.payload as { quotaSummary?: WorkGalleryQuotaSummary } | undefined
+      if (payload?.quotaSummary) setQuotaSummary(payload.quotaSummary)
+      setError(quotaReasonText(err.message, t) || err.message || String(err))
     } finally {
       setBusy(false)
     }
@@ -138,7 +172,7 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
 
   const saveCurrent = () => runAction(async () => {
     if (!lastHTML.trim()) throw new Error(t('works.error.noHtml'))
-    if (works.length >= limit) {
+    if (workLimitReached) {
       setOverLimitMode('save')
       return t('works.notice.overLimit')
     }
@@ -155,7 +189,8 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
         canvasData: getCanvasData(),
       }),
     })
-    const data = await readJson<{ work: WorkRecord }>(response)
+    const data = await readJson<{ work: WorkRecord; quotaSummary?: WorkGalleryQuotaSummary }>(response)
+    if (data.quotaSummary) setQuotaSummary(data.quotaSummary)
     setSelectedId(data.work.id)
   }, t('works.notice.saved'))
 
@@ -196,7 +231,8 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
       headers: mergeSessionHeaders({ 'Content-Type': 'application/json' }),
       body: '{}',
     })
-    await readJson(response)
+    const data = await readJson<{ quotaSummary?: WorkGalleryQuotaSummary }>(response)
+    if (data.quotaSummary) setQuotaSummary(data.quotaSummary)
   }, t('works.notice.gallerySubmitted'))
 
   const deleteSelected = () => runAction(async () => {
@@ -223,7 +259,7 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
     if (!file) return
     await runAction(async () => {
       const html = await file.text()
-      if (works.length >= limit) {
+      if (workLimitReached) {
         setOverLimitMode('import')
         return t('works.notice.overLimit')
       }
@@ -239,7 +275,8 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
           canvasData: getCanvasData(),
         }),
       })
-      const data = await readJson<{ work: WorkRecord }>(response)
+      const data = await readJson<{ work: WorkRecord; quotaSummary?: WorkGalleryQuotaSummary }>(response)
+      if (data.quotaSummary) setQuotaSummary(data.quotaSummary)
       setSelectedId(data.work.id)
     }, t('works.notice.imported'))
   }
@@ -270,7 +307,8 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
             <span className="wcm-dot" />
             {user ? `${user.displayName} · ${user.tier}` : t('works.loadingUser')}
           </span>
-          <span className="wcm-count">{t('works.count', { count: workCountLabel })}</span>
+          <span className={`wcm-count primary ${workQuota?.reached ? 'warn' : ''}`}>{t('works.quota.works', { count: workCountLabel })}</span>
+          <span className={`wcm-count ${galleryQuota?.reached ? 'warn' : ''}`}>{t('works.quota.gallery', { count: galleryCountLabel })}</span>
           <button className="btn btn-secondary" onClick={load} disabled={busy}>{t('works.refresh')}</button>
         </div>
 
@@ -363,7 +401,7 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
                   <div className="wcm-actions wrap">
                     <button className="btn btn-secondary" onClick={() => downloadHtml(selectedWork)} disabled={!selectedWork.html}>{t('works.exportHtml')}</button>
                     <button className="btn btn-secondary" onClick={shareSelected} disabled={busy || selectedSafetyStatus === 'blocked'}>{t('works.share')}</button>
-                    <button className="btn btn-secondary" onClick={submitGallery} disabled={busy}>{t('works.submitGallery')}</button>
+                    <button className="btn btn-secondary" onClick={submitGallery} disabled={busy || !canSubmitSelectedToGallery}>{t('works.submitGallery')}</button>
                     <button className="btn btn-ghost danger" onClick={deleteSelected} disabled={busy}>{t('works.delete')}</button>
                   </div>
                 </>
@@ -374,7 +412,9 @@ export function WorkCenterModal({ lastHTML, modeId, promptDraft, getCanvasData, 
 
             <div className="wcm-card gallery">
               <div className="wcm-card-title">{t('works.galleryTitle')}</div>
-              <p className="wcm-card-note">{t('works.galleryNote')}</p>
+              <div className={`wcm-quota-note ${galleryQuota?.reached ? 'warn' : ''}`}>
+                {selectedAlreadySubmitted ? t('works.quota.galleryAlreadySubmitted') : (galleryQuotaReason || t('works.quota.galleryReady', { count: galleryCountLabel }))}
+              </div>
               {galleryEntries.length === 0 ? (
                 <div className="wcm-empty compact">{t('works.galleryEmpty')}</div>
               ) : (

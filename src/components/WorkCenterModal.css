@@ -89,6 +89,7 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
+  flex: 0 0 auto;
   min-height: 24px;
   padding: 3px 9px;
   border: 1px solid rgba(108, 117, 190, 0.18);
@@ -99,8 +100,14 @@
   letter-spacing: 0.04em;
 }
 
-.wcm-count {
+.wcm-count.primary {
   margin-left: auto;
+}
+
+.wcm-count.warn {
+  border-color: rgba(200, 155, 74, 0.36);
+  background: rgba(200, 155, 74, 0.09);
+  color: #e0bc70;
 }
 
 .wcm-dot {
@@ -320,6 +327,23 @@
   font-family: var(--font-sans);
   font-size: 11px;
   line-height: 1.55;
+}
+
+.wcm-quota-note {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(74, 158, 142, 0.24);
+  border-radius: 10px;
+  background: rgba(74, 158, 142, 0.08);
+  color: #8ed7c7;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.wcm-quota-note.warn {
+  border-color: rgba(200, 155, 74, 0.32);
+  background: rgba(200, 155, 74, 0.09);
+  color: #e0bc70;
 }
 
 .wcm-card label {

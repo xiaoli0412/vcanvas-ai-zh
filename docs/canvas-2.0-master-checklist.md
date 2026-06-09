@@ -42,6 +42,7 @@
 - `1.11.23` refreshes the platform readiness map so Control Center no longer reports public-share rendering hardening as unfinished; the local/mock guest and base-quota guardrails are visible in the security capability, and guest-session shutdown returns the same `guest-access-disabled` reason code as metered routes.
 - `1.11.24` adds a Control Center workflow resume surface backed by `/api/workflows` list/detail/cancel parity in Fastify and the lightweight deployment server; it exposes 24h retained prompts and context summaries, hides expired detail routes, limits cancel to queued/running local/mock runs, and does not claim a real background worker.
 - `1.11.25` upgrades local/mock maintenance cleanup: host-admin/admin users can preview stale workflow/session/rate-limit/blocked-IP candidates before applying cleanup, Ops shows retention windows and cleanup counts, and Fastify/lightweight responses share the same report shape.
+- `1.11.26` makes works/gallery limits visible and consistent: API responses now include a shared quota summary, Works Center shows compact work/gallery quota pills, gallery denial reasons are user-readable, and the lightweight deployment server mirrors the same shape.
 - Frontend, server typecheck, build, service smoke tests, and desktop/mobile browser screenshots passed on 2026-06-06.
 
 ## Completion Matrix
@@ -129,13 +130,14 @@
 - `in_progress` persistent work save/list/manage on server through local JSON store, `/api/works`, and the secondary Works Center modal
 - `done` import HTML through `/api/works/import-html` with the 10-work owner limit
 - `done` Works Center shows an in-modal deletion chooser when the work limit is reached, so users can free space without leaving the canvas
+- `done` Works Center shows work count, remaining gallery submission capacity, and tier denial reasons from server quota summaries inside the secondary modal
 - `done` share links through `/api/works/:id/share`, with local/mock safety preflight blocking `blocked` works before public links are created
 - `done` public share route `/share/:slug` renders enabled share links and returns branded 404/410/paused fallback pages
 - `done` public gallery route `/gallery` renders a read-only standalone feed for approved published local/mock entries only
 - `done` public share/gallery routes reject stale enabled links or published entries when refreshed work safety becomes `blocked`
 - `done` local/mock gallery / 鉴赏厅 review status, safety preflight, tier quotas, lightweight masonry-feed presentation, and admin publish/reject/restore workflow
 - `done` Control Center includes the secondary gallery review queue; route-level public gallery remains separate and approval-gated
-- `in_progress` per-tier work and gallery limits
+- `in_progress` per-tier work and gallery limits; gallery tier quotas are enforced and visible, while per-tier work-limit policy remains a future settings extension beyond the current site-wide work cap
 
 ### 8. Frontend / Branding
 - `in_progress` replace visible "canvas" branding intro surfaces with `inscanvas` where required while preserving storage/runtime compatibility
@@ -206,6 +208,7 @@
 - `1.11.22` validation covers stale public exposure closure on both Fastify and `scripts/serve-vcanvas.mjs`: a previously public share/gallery item becomes non-public after a dangerous edit, link-only `blocked` share metadata hides the entry from default `/api/gallery`, admin `includeReview=true` shows blocked content demoted to `pending-review`, blocked share creation returns `409`, and `/api/gallery/:id/safety-review` also disables stale public shares.
 - `1.11.23` validation must cover `/api/platform/readiness` parity on both Fastify and `scripts/serve-vcanvas.mjs`: security implemented items include guest metered-route shutdown and base-call quota guardrails, Works/Gallery/Share implemented items include stale public-exposure blocking, guest session shutdown includes `guest-access-disabled`, and no capability next step still says public share rendering hardening is unfinished.
 - `1.11.25` validation covers local/mock maintenance cleanup parity on both Fastify and `scripts/serve-vcanvas.mjs`: non-admin cleanup is rejected, admin dry-run previews stale workflow/session/rate-limit/blocked-IP candidates, apply removes only those candidates, Ops snapshot candidates return to zero, and Control Center Ops screenshots preserve canvas workspace size on desktop/mobile.
+- `1.11.26` validation must cover works/gallery quota summary parity on both Fastify and `scripts/serve-vcanvas.mjs`: `GET /api/works`, save/import over-limit `409`, gallery-submit success/denial, and `GET /api/gallery?includeOwn=true` all return the same summary shape, while Works Center quota pills stay inside the secondary modal on desktop/mobile.
 
 ### 10. Sign-in / Quota
 - `done` login/register/guest records are separated from daily check-in records through `SignInRecord.source`

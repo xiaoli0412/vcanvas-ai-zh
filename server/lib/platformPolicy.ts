@@ -9,6 +9,7 @@ import type {
   MaintenanceCleanupCounts,
   MaintenanceCleanupReport,
   ProviderChannel,
+  WorkGalleryQuotaSummary,
   DispatchSnapshot,
   UserAccount,
   UserPermission,
@@ -293,6 +294,45 @@ export function canSubmitGallery(data: PublicServerData, actorId: string, tier: 
   return count < limit
     ? { ok: true, limit, count }
     : { ok: false, limit, count, reason: `Gallery publish limit reached (${limit}).` }
+}
+
+function limitSummary(limitValue: number, used: number, reason?: string | null) {
+  const unlimited = !Number.isFinite(limitValue)
+  const limit = unlimited ? null : Math.max(0, Math.floor(limitValue))
+  const remaining = unlimited || limit === null ? null : Math.max(0, limit - used)
+  const reached = !unlimited && remaining !== null && remaining <= 0
+  return {
+    limit,
+    used,
+    remaining,
+    unlimited,
+    reached,
+    reason: reached ? (reason || null) : null,
+  }
+}
+
+export function buildWorkGalleryQuotaSummary(data: PublicServerData, input: {
+  ownerId: string
+  actorId: string
+  tier: UserTier
+}): WorkGalleryQuotaSummary {
+  const workLimit = Math.max(0, data.siteSettings.workLimitPerOwner || 10)
+  const workUsed = data.works.filter((work) => work.ownerId === input.ownerId).length
+  const galleryLimit = galleryLimitForTier(data, input.tier)
+  const galleryUsed = data.galleryEntries.filter((entry) => entry.ownerId === input.actorId && entry.status !== 'rejected').length
+  const galleryLimitLabel = Number.isFinite(galleryLimit) ? String(galleryLimit) : ''
+  const galleryReason = galleryLimit <= 0
+    ? 'This tier cannot publish to gallery.'
+    : (Number.isFinite(galleryLimit) && galleryUsed >= galleryLimit ? `Gallery publish limit reached (${galleryLimitLabel}).` : null)
+  return {
+    ownerId: input.ownerId,
+    actorId: input.actorId,
+    tier: input.tier,
+    works: limitSummary(workLimit, workUsed, `Work limit reached (${workLimit}).`),
+    gallerySubmissions: limitSummary(galleryLimit, galleryUsed, galleryReason),
+    canSubmitGallery: !galleryReason,
+    galleryReason,
+  }
 }
 
 export function createGalleryEntry(input: { workId: string; ownerId: string; status?: GalleryEntry['status'] }): GalleryEntry {

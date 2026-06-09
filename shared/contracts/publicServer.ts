@@ -378,6 +378,25 @@ export interface GalleryEntry {
   safetyReview?: GallerySafetyReview | null
 }
 
+export interface QuotaLimitSummary {
+  limit: number | null
+  used: number
+  remaining: number | null
+  unlimited: boolean
+  reached: boolean
+  reason?: string | null
+}
+
+export interface WorkGalleryQuotaSummary {
+  ownerId: string
+  actorId: string
+  tier: UserTier
+  works: QuotaLimitSummary
+  gallerySubmissions: QuotaLimitSummary
+  canSubmitGallery: boolean
+  galleryReason?: string | null
+}
+
 export interface QuotaLedger {
   userId: string
   tier: UserTier

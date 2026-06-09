@@ -4,9 +4,11 @@ import type { CanvasModeId, GalleryEntry, GalleryReviewStatus, ShareLink, WorkRe
 import { buildWorkSafetyReview } from '../lib/gallerySafety'
 import {
   buildDisclaimerComment,
+  buildWorkGalleryQuotaSummary,
   canSubmitGallery,
   createGalleryEntry,
   getActor,
+  resolveOwnedTargetId,
   injectDisclaimerComment,
   tierAtLeast,
 } from '../lib/platformPolicy'
@@ -141,15 +143,18 @@ export async function registerWorkRoutes(app: FastifyInstance) {
   app.get('/api/works', async (request) => {
     const data = await localDataStore.read()
     const actor = getActor(data, request)
-    const ownerId = typeof request.query === 'object' && request.query && 'ownerId' in request.query
+    const requestedOwnerId = typeof request.query === 'object' && request.query && 'ownerId' in request.query
       ? String((request.query as { ownerId?: string }).ownerId || actor.id)
-      : actor.id
+      : null
+    const { ownerId } = resolveOwnedTargetId(actor, requestedOwnerId)
     const limit = data.siteSettings.workLimitPerOwner || 10
     const items = data.works.filter((work) => work.ownerId === ownerId)
+    const quotaSummary = buildWorkGalleryQuotaSummary(data, { ownerId, actorId: actor.id, tier: actor.tier })
     return {
       ok: true,
       items,
       limit,
+      quotaSummary,
       shareLinks: data.shareLinks.filter((link) => items.some((work) => work.id === link.workId)),
     }
   })
@@ -159,10 +164,10 @@ export async function registerWorkRoutes(app: FastifyInstance) {
     const now = new Date().toISOString()
     const result = await localDataStore.update((data) => {
       const actor = getActor(data, request)
-      const ownerId = body.ownerId || actor.id
+      const { ownerId } = resolveOwnedTargetId(actor, body.ownerId || null)
       const limit = data.siteSettings.workLimitPerOwner || 10
-      const ownerWorks = data.works.filter((item) => item.ownerId === ownerId)
-      if (ownerWorks.length >= limit) return { work: null, limit }
+      const quotaSummary = buildWorkGalleryQuotaSummary(data, { ownerId, actorId: actor.id, tier: actor.tier })
+      if (quotaSummary.works.reached) return { work: null, limit, quotaSummary }
       const work = buildWork({ data, request, body, ownerId, now })
       data.works.push(work)
       data.auditEvents.push({
@@ -174,16 +179,17 @@ export async function registerWorkRoutes(app: FastifyInstance) {
         createdAt: now,
         metadata: { workId: work.id },
       })
-      return { work, limit }
+      return { work, limit, quotaSummary: buildWorkGalleryQuotaSummary(data, { ownerId, actorId: actor.id, tier: actor.tier }) }
     })
     if (!result.work) {
       reply.code(409).send({
         ok: false,
         error: `Work limit reached (${result.limit}). Delete an existing work before saving a new one.`,
+        quotaSummary: result.quotaSummary,
       })
       return
     }
-    return { ok: true, work: result.work }
+    return { ok: true, work: result.work, quotaSummary: result.quotaSummary }
   })
 
   app.post('/api/works/import-html', async (request, reply) => {
@@ -195,9 +201,10 @@ export async function registerWorkRoutes(app: FastifyInstance) {
     const now = new Date().toISOString()
     const result = await localDataStore.update((data) => {
       const actor = getActor(data, request)
-      const ownerId = body.ownerId || actor.id
+      const { ownerId } = resolveOwnedTargetId(actor, body.ownerId || null)
       const limit = data.siteSettings.workLimitPerOwner || 10
-      if (data.works.filter((item) => item.ownerId === ownerId).length >= limit) return { work: null, limit }
+      const quotaSummary = buildWorkGalleryQuotaSummary(data, { ownerId, actorId: actor.id, tier: actor.tier })
+      if (quotaSummary.works.reached) return { work: null, limit, quotaSummary }
       const work = buildWork({
         data,
         request,
@@ -215,13 +222,13 @@ export async function registerWorkRoutes(app: FastifyInstance) {
         createdAt: now,
         metadata: { workId: work.id },
       })
-      return { work, limit }
+      return { work, limit, quotaSummary: buildWorkGalleryQuotaSummary(data, { ownerId, actorId: actor.id, tier: actor.tier }) }
     })
     if (!result.work) {
-      reply.code(409).send({ ok: false, error: `Work limit reached (${result.limit}).` })
+      reply.code(409).send({ ok: false, error: `Work limit reached (${result.limit}).`, quotaSummary: result.quotaSummary })
       return
     }
-    return { ok: true, work: result.work }
+    return { ok: true, work: result.work, quotaSummary: result.quotaSummary }
   })
 
   app.get('/api/works/:id', async (request, reply) => {
@@ -232,11 +239,13 @@ export async function registerWorkRoutes(app: FastifyInstance) {
       reply.code(404).send({ ok: false, error: 'Work not found' })
       return
     }
+    const actor = getActor(data, request)
     return {
       ok: true,
       work,
       shareLinks: data.shareLinks.filter((link) => link.workId === id),
       galleryEntry: data.galleryEntries.find((entry) => entry.workId === id) || null,
+      quotaSummary: buildWorkGalleryQuotaSummary(data, { ownerId: work.ownerId, actorId: actor.id, tier: actor.tier }),
     }
   })
 
@@ -319,11 +328,11 @@ export async function registerWorkRoutes(app: FastifyInstance) {
     return { ok: true, work }
   })
 
-  app.delete('/api/works/:id', async (request) => {
+  app.delete('/api/works/:id', async (request, reply) => {
     const id = (request.params as { id: string }).id
-    await localDataStore.update((data) => {
+    const deleted = await localDataStore.update((data) => {
       const work = data.works.find((item) => item.id === id)
-      if (!work || !canAccessWork(data, request, work)) return
+      if (!work || !canAccessWork(data, request, work)) return false
       const actor = getActor(data, request)
       data.works = data.works.filter((item) => item.id !== id)
       data.shareLinks = data.shareLinks.filter((item) => item.workId !== id)
@@ -337,7 +346,12 @@ export async function registerWorkRoutes(app: FastifyInstance) {
         createdAt: new Date().toISOString(),
         metadata: { workId: id },
       })
+      return true
     })
+    if (!deleted) {
+      reply.code(404).send({ ok: false, error: 'Work not found' })
+      return
+    }
     return { ok: true, id }
   })
 
@@ -427,7 +441,11 @@ export async function registerWorkRoutes(app: FastifyInstance) {
       if (!work || !canAccessWork(data, request, work)) return { status: 'missing' as const }
       const actor = getActor(data, request)
       const eligibility = canSubmitGallery(data, actor.id, actor.tier)
-      if (!eligibility.ok) return { status: 'denied' as const, eligibility }
+      if (!eligibility.ok) return {
+        status: 'denied' as const,
+        eligibility,
+        quotaSummary: buildWorkGalleryQuotaSummary(data, { ownerId: work.ownerId, actorId: actor.id, tier: actor.tier }),
+      }
       const entry = createGalleryEntry({ workId: id, ownerId: work.ownerId })
       entry.safetyReview = buildWorkSafetyReview(work, entry.submittedAt)
       work.safetyReview = entry.safetyReview
@@ -443,17 +461,29 @@ export async function registerWorkRoutes(app: FastifyInstance) {
         createdAt: entry.submittedAt,
         metadata: { workId: id, galleryEntryId: entry.id, safetyStatus: entry.safetyReview.status },
       })
-      return { status: 'ok' as const, entry, work, eligibility }
+      return {
+        status: 'ok' as const,
+        entry,
+        work,
+        eligibility,
+        quotaSummary: buildWorkGalleryQuotaSummary(data, { ownerId: work.ownerId, actorId: actor.id, tier: actor.tier }),
+      }
     })
     if (result.status === 'missing') {
       reply.code(404).send({ ok: false, error: 'Work not found' })
       return
     }
     if (result.status === 'denied') {
-      reply.code(403).send({ ok: false, error: result.eligibility.reason, limit: result.eligibility.limit })
+      reply.code(403).send({
+        ok: false,
+        error: result.eligibility.reason,
+        limit: result.eligibility.limit,
+        count: result.eligibility.count,
+        quotaSummary: result.quotaSummary,
+      })
       return
     }
-    return { ok: true, entry: result.entry, work: result.work, limit: result.eligibility.limit }
+    return { ok: true, entry: result.entry, work: result.work, limit: result.eligibility.limit, quotaSummary: result.quotaSummary }
   })
 
   app.get('/api/gallery', async (request) => {
@@ -477,6 +507,7 @@ export async function registerWorkRoutes(app: FastifyInstance) {
       enabled: data.siteSettings.publicGalleryEnabled,
       entries,
       items: entries,
+      quotaSummary: buildWorkGalleryQuotaSummary(data, { ownerId: actor.id, actorId: actor.id, tier: actor.tier }),
     }
   })
 

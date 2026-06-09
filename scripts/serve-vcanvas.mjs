@@ -1042,6 +1042,38 @@ function galleryLimit(data, tier) {
   return 0
 }
 
+function limitSummary(limitValue, used, reason = null) {
+  const unlimited = !Number.isFinite(limitValue)
+  const limit = unlimited ? null : Math.max(0, Math.floor(limitValue))
+  const remaining = unlimited ? null : Math.max(0, limit - used)
+  const reached = !unlimited && remaining <= 0
+  return { limit, used, remaining, unlimited, reached, reason: reached ? reason : null }
+}
+
+function buildWorkGalleryQuotaSummary(data, { ownerId, actorId, tier }) {
+  const workLimit = Math.max(0, data.siteSettings.workLimitPerOwner || 10)
+  const workUsed = data.works.filter((work) => work.ownerId === ownerId).length
+  const publishLimit = galleryLimit(data, tier)
+  const galleryUsed = data.galleryEntries.filter((entry) => entry.ownerId === actorId && entry.status !== 'rejected').length
+  const galleryReason = publishLimit <= 0
+    ? 'This tier cannot publish to gallery.'
+    : (Number.isFinite(publishLimit) && galleryUsed >= publishLimit ? `Gallery publish limit reached (${publishLimit}).` : null)
+  return {
+    ownerId,
+    actorId,
+    tier,
+    works: limitSummary(workLimit, workUsed, `Work limit reached (${workLimit}).`),
+    gallerySubmissions: limitSummary(publishLimit, galleryUsed, galleryReason),
+    canSubmitGallery: !galleryReason,
+    galleryReason,
+  }
+}
+
+function canAccessWork(data, req, work) {
+  const actor = getActor(data, req)
+  return Boolean(work && (actor.id === work.ownerId || canManageUsers(actor.tier)))
+}
+
 const gallerySafetyBlockRules = [
   { code: 'secret-like-token', pattern: /\b(sk-[a-z0-9_-]{12,}|api[_\s-]?key|private\s+key|bearer\s+[a-z0-9._-]{12,})\b/i },
   { code: 'credential-collection', pattern: /\b(phishing|credential\s+harvesting|steal\s+password|password\s+collector)\b/i },
@@ -2266,12 +2298,14 @@ async function handleApi(req, res, url) {
 
   if (url.pathname === '/api/works' && method === 'GET') {
     const actor = getActor(data, req)
-    const ownerId = url.searchParams.get('ownerId') || actor.id
+    const { ownerId } = resolveOwnedTargetId(actor, url.searchParams.get('ownerId'))
     const items = data.works.filter((work) => work.ownerId === ownerId)
+    const quotaSummary = buildWorkGalleryQuotaSummary(data, { ownerId, actorId: actor.id, tier: actor.tier })
     sendJson(res, 200, {
       ok: true,
       items,
       limit: data.siteSettings.workLimitPerOwner || 10,
+      quotaSummary,
       shareLinks: data.shareLinks.filter((link) => items.some((work) => work.id === link.workId)),
     })
     return true
@@ -2280,10 +2314,11 @@ async function handleApi(req, res, url) {
   if (url.pathname === '/api/works' && method === 'POST') {
     const body = await readJsonBody(req)
     const actor = getActor(data, req)
-    const ownerId = body.ownerId || actor.id
+    const { ownerId } = resolveOwnedTargetId(actor, body.ownerId)
     const limit = data.siteSettings.workLimitPerOwner || 10
-    if (data.works.filter((work) => work.ownerId === ownerId).length >= limit) {
-      sendJson(res, 409, { ok: false, error: `Work limit reached (${limit}).` })
+    const quotaSummary = buildWorkGalleryQuotaSummary(data, { ownerId, actorId: actor.id, tier: actor.tier })
+    if (quotaSummary.works.reached) {
+      sendJson(res, 409, { ok: false, error: `Work limit reached (${limit}). Delete an existing work before saving a new one.`, quotaSummary })
       return true
     }
     const now = new Date().toISOString()
@@ -2311,7 +2346,7 @@ async function handleApi(req, res, url) {
     data.works.push(work)
     withAudit(data, req, 'work.create', ownerId, actor.tier, { workId: id })
     writeData(data)
-    sendJson(res, 200, { ok: true, work })
+    sendJson(res, 200, { ok: true, work, quotaSummary: buildWorkGalleryQuotaSummary(data, { ownerId, actorId: actor.id, tier: actor.tier }) })
     return true
   }
 
@@ -2322,10 +2357,11 @@ async function handleApi(req, res, url) {
       return true
     }
     const actor = getActor(data, req)
-    const ownerId = body.ownerId || actor.id
+    const { ownerId } = resolveOwnedTargetId(actor, body.ownerId)
     const limit = data.siteSettings.workLimitPerOwner || 10
-    if (data.works.filter((work) => work.ownerId === ownerId).length >= limit) {
-      sendJson(res, 409, { ok: false, error: `Work limit reached (${limit}).` })
+    const quotaSummary = buildWorkGalleryQuotaSummary(data, { ownerId, actorId: actor.id, tier: actor.tier })
+    if (quotaSummary.works.reached) {
+      sendJson(res, 409, { ok: false, error: `Work limit reached (${limit}).`, quotaSummary })
       return true
     }
     const now = new Date().toISOString()
@@ -2353,7 +2389,7 @@ async function handleApi(req, res, url) {
     data.works.push(work)
     withAudit(data, req, 'work.importHtml', ownerId, actor.tier, { workId: id })
     writeData(data)
-    sendJson(res, 200, { ok: true, work })
+    sendJson(res, 200, { ok: true, work, quotaSummary: buildWorkGalleryQuotaSummary(data, { ownerId, actorId: actor.id, tier: actor.tier }) })
     return true
   }
 
@@ -2362,12 +2398,22 @@ async function handleApi(req, res, url) {
     const id = decodeURIComponent(workMatch[1])
     const index = data.works.findIndex((work) => work.id === id)
     if (method === 'GET') {
-      if (index < 0) sendJson(res, 404, { ok: false, error: 'Work not found' })
-      else sendJson(res, 200, { ok: true, work: data.works[index] })
+      const work = data.works[index]
+      if (index < 0 || !canAccessWork(data, req, work)) sendJson(res, 404, { ok: false, error: 'Work not found' })
+      else {
+        const actor = getActor(data, req)
+        sendJson(res, 200, {
+          ok: true,
+          work,
+          shareLinks: data.shareLinks.filter((link) => link.workId === id),
+          galleryEntry: data.galleryEntries.find((entry) => entry.workId === id) || null,
+          quotaSummary: buildWorkGalleryQuotaSummary(data, { ownerId: work.ownerId, actorId: actor.id, tier: actor.tier }),
+        })
+      }
       return true
     }
     if (method === 'PATCH') {
-      if (index < 0) {
+      if (index < 0 || !canAccessWork(data, req, data.works[index])) {
         sendJson(res, 404, { ok: false, error: 'Work not found' })
         return true
       }
@@ -2419,6 +2465,10 @@ async function handleApi(req, res, url) {
     }
     if (method === 'DELETE') {
       const work = data.works[index]
+      if (!canAccessWork(data, req, work)) {
+        sendJson(res, 404, { ok: false, error: 'Work not found' })
+        return true
+      }
       data.works = data.works.filter((item) => item.id !== id)
       data.shareLinks = data.shareLinks.filter((item) => item.workId !== id)
       data.galleryEntries = data.galleryEntries.filter((item) => item.workId !== id)
@@ -2433,7 +2483,7 @@ async function handleApi(req, res, url) {
   if (shareMatch && method === 'POST') {
     const id = decodeURIComponent(shareMatch[1])
     const work = data.works.find((item) => item.id === id)
-    if (!work) {
+    if (!work || !canAccessWork(data, req, work)) {
       sendJson(res, 404, { ok: false, error: 'Work not found' })
       return true
     }
@@ -2467,7 +2517,7 @@ async function handleApi(req, res, url) {
   if (gallerySubmitMatch && method === 'POST') {
     const id = decodeURIComponent(gallerySubmitMatch[1])
     const work = data.works.find((item) => item.id === id)
-    if (!work) {
+    if (!work || !canAccessWork(data, req, work)) {
       sendJson(res, 404, { ok: false, error: 'Work not found' })
       return true
     }
@@ -2475,7 +2525,14 @@ async function handleApi(req, res, url) {
     const limit = galleryLimit(data, actor.tier)
     const count = data.galleryEntries.filter((entry) => entry.ownerId === actor.id && entry.status !== 'rejected').length
     if (limit <= 0 || count >= limit) {
-      sendJson(res, 403, { ok: false, error: limit <= 0 ? 'This tier cannot publish to gallery.' : `Gallery publish limit reached (${limit}).`, limit })
+      const quotaSummary = buildWorkGalleryQuotaSummary(data, { ownerId: work.ownerId, actorId: actor.id, tier: actor.tier })
+      sendJson(res, 403, {
+        ok: false,
+        error: limit <= 0 ? 'This tier cannot publish to gallery.' : `Gallery publish limit reached (${limit}).`,
+        limit,
+        count,
+        quotaSummary,
+      })
       return true
     }
     const now = new Date().toISOString()
@@ -2487,7 +2544,13 @@ async function handleApi(req, res, url) {
     data.galleryEntries = [...data.galleryEntries.filter((item) => item.workId !== id), entry]
     withAudit(data, req, 'work.gallerySubmit', actor.id, actor.tier, { workId: id, galleryEntryId: entry.id, safetyStatus: entry.safetyReview.status })
     writeData(data)
-    sendJson(res, 200, { ok: true, entry, work, limit })
+    sendJson(res, 200, {
+      ok: true,
+      entry,
+      work,
+      limit,
+      quotaSummary: buildWorkGalleryQuotaSummary(data, { ownerId: work.ownerId, actorId: actor.id, tier: actor.tier }),
+    })
     return true
   }
 
@@ -2502,7 +2565,13 @@ async function handleApi(req, res, url) {
         return rank[a.status] - rank[b.status] || Date.parse(b.submittedAt) - Date.parse(a.submittedAt)
       })
       .map((entry) => ({ ...entry, work: data.works.find((work) => work.id === entry.workId) || null }))
-    sendJson(res, 200, { ok: true, enabled: data.siteSettings.publicGalleryEnabled, entries, items: entries })
+    sendJson(res, 200, {
+      ok: true,
+      enabled: data.siteSettings.publicGalleryEnabled,
+      entries,
+      items: entries,
+      quotaSummary: buildWorkGalleryQuotaSummary(data, { ownerId: actor.id, actorId: actor.id, tier: actor.tier }),
+    })
     return true
   }
 

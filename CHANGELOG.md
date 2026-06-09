@@ -1,3 +1,13 @@
+## 1.11.26 - 2026-06-09
+
+### Features
+- Added a shared works/gallery quota summary contract so Fastify and the lightweight deployment server return visible work limits, gallery submission limits, remaining slots, and tier denial reasons with consistent `limit: null` unlimited semantics.
+- Surfaced compact work and gallery quota pills inside the secondary Works Center modal, keeping limit status actionable without adding persistent canvas chrome.
+
+### Fixes
+- Included quota metadata in save/import/gallery-submit success and denial responses so the UI can explain over-limit states before users hit opaque errors.
+- Brought the lightweight deployment server closer to Fastify parity for work detail metadata and work access checks.
+
 ## 1.11.25 - 2026-06-09
 
 ### Features

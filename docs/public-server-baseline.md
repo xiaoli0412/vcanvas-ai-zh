@@ -72,6 +72,7 @@
 - `1.11.23` refreshes `/api/platform/readiness` parity in both Fastify and `scripts/serve-vcanvas.mjs`: completed public-exposure hardening is now listed as implemented, guest-session shutdown reports `guest-access-disabled`, and the remaining next step is the external safety-review model rather than already-finished share rendering hardening.
 - `1.11.24` adds workflow resume parity to both Fastify and `scripts/serve-vcanvas.mjs`: `/api/workflows` lists retained summaries, `/api/workflows/:id` returns selected detail within the 24h retention window, `PATCH /api/workflows/:id` cancels only queued/running local/mock runs, and only Generate/Refine/Plan POST routes consume metered quota.
 - `1.11.25` makes local maintenance cleanup observable and safer in both Fastify and `scripts/serve-vcanvas.mjs`: `GET /api/maintenance/cleanup` previews stale candidates, `POST /api/maintenance/cleanup` applies the same report shape, non-admin cleanup is rejected, and Control Center Ops shows candidate counts plus retention windows.
+- `1.11.26` adds a shared works/gallery quota summary to both Fastify and `scripts/serve-vcanvas.mjs`: work saves/imports, gallery submissions, `GET /api/works`, and owner gallery reads now return visible used/limit/remaining state with `limit: null` for unlimited tiers. Works Center renders this as compact secondary-modal quota pills without changing the canvas shell.
 
 ## 2026-06-06 Verification Snapshot
 - `npm run typecheck`
@@ -105,6 +106,7 @@
 - `1.11.23` validation adds readiness-map smoke coverage for Fastify and `scripts/serve-vcanvas.mjs`: security guardrails name guest-disabled metered-route blocking and base quota checks, guest-session shutdown returns `guest-access-disabled`, Works/Gallery/Share names stale public exposure blocking, and no next step contains the stale phrase `public share rendering hardening`.
 - `1.11.25` validation adds maintenance-cleanup smoke coverage for Fastify and `scripts/serve-vcanvas.mjs`: non-admin cleanup preview/apply returns `403`, admin preview reports stale workflow/session/rate-limit/blocked-IP candidates, dry-run does not delete, apply removes candidates, and the Ops snapshot returns zero cleanup candidates afterward.
 - `1.11.25` browser review passed for the Control Center Ops cleanup section at `1440x960` and `390x844`: cleanup counts and retention windows render inside the secondary modal, no horizontal overflow appears, and `.workspace` dimensions remain unchanged.
+- `1.11.26` validation adds works/gallery quota smoke coverage for Fastify and `scripts/serve-vcanvas.mjs`: quota summaries appear on list/success/denial responses, work-limit `409` carries deletion context, gallery tier denial carries a readable reason, and Works Center quota pills render within the secondary modal at desktop/mobile sizes.
 
 ## Deferred Beyond This Commit
 - Real auth on top of latest `newapi`, production key encryption, payment-grade quotas/redeem-code generation, PostgreSQL/Redis persistence, and external `newapi/subapi/octopus` bridges.
