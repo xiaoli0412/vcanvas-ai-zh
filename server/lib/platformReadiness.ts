@@ -47,6 +47,8 @@ export function makePlatformReadinessSnapshot(data: PublicServerData): PlatformR
       summary: 'Traffic guard, blocked IPs, secret masking, and local AES-GCM provider-key custody exist; production key vault/KMS custody is still pending.',
       implemented: [
         'basic rate-limit policies',
+        'guest metered-route shutdown when guest access is disabled',
+        'daily base-call quota guard independent of request-rate policy toggles',
         'manual IP block/unblock',
         'admin-only user guardrail view',
         'share/export disclaimer comments',
@@ -116,13 +118,14 @@ export function makePlatformReadinessSnapshot(data: PublicServerData): PlatformR
         'Xiaohongshu-style /gallery feed shell',
         'admin gallery review workflow',
         'local/mock gallery safety preflight',
+        'stale public share and gallery exposure blocking for blocked work/link/entry states',
       ],
       gaps: [
-        'external safety review model before publishing',
+        'external safety review model before production publishing',
         'flow-map export',
         '24h task resume UI',
       ],
-      nextStep: 'Attach a safety-review model and public share rendering hardening before production publishing.',
+      nextStep: 'Attach an external safety-review model and keep the local public-exposure gate as the fallback before production publishing.',
     }),
     status({
       id: 'notice-system',

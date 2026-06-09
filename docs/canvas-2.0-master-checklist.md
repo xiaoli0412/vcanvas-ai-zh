@@ -39,6 +39,7 @@
 - `1.11.20` adds local/mock gallery safety preflight: submissions store policy status, risk score, and reason codes; blocked entries cannot be published until the future safety-review adapter changes that verdict; content edits refresh the preflight and can move published entries back to pending review.
 - `1.11.21` promotes safety metadata to saved works: save/import/update/share/gallery paths share local preflight status, blocked works cannot create share links, and stale share links are disabled when edited content becomes blocked.
 - `1.11.22` closes stale public-exposure gaps: public share/gallery routes re-check work/link/entry safety state, gallery rechecks demote blocked published entries, and blocked works disappear from default public gallery APIs.
+- `1.11.23` refreshes the platform readiness map so Control Center no longer reports public-share rendering hardening as unfinished; the local/mock guest and base-quota guardrails are visible in the security capability, and guest-session shutdown returns the same `guest-access-disabled` reason code as metered routes.
 - Frontend, server typecheck, build, service smoke tests, and desktop/mobile browser screenshots passed on 2026-06-06.
 
 ## Completion Matrix
@@ -56,7 +57,7 @@
 - `done` explicit session contract: user identity no longer falls back to the most recent active session when headers are missing
 - `done` logout safety contract: no ambient session wipe; cross-user logout requires host-admin/admin
 - `done` workflow/asset ownership contract: requested `ownerId` is ignored for non-admin callers and kept only as metadata
-- `in_progress` platform readiness endpoint exposes the real auth gap and keeps the future `newapi/subapi` role source explicit
+- `in_progress` platform readiness endpoint exposes the real auth gap, keeps the future `newapi/subapi` role source explicit, and is updated after completed local/mock guardrails land
 - `todo` QQ avatar sync
 - `todo` wallet/payment area split with stronger protection
 
@@ -64,6 +65,7 @@
 - `in_progress` Encrypted provider keys for non-guest users: local AES-GCM custody exists, production KMS/key-vault adapter remains todo
 - `in_progress` IP audit, throttling, blocked IP store, manual admin block/unblock, and escalating lockouts on heavy routes
 - `in_progress` injection/leak prevention across UI and service routes; local/mock work safety preflight now protects gallery publishing, public share creation, stale public share rendering, and public gallery listing
+- `done` local/mock traffic guard truthfulness in readiness: guest-disabled metered routes and base-call quota checks are named as implemented guardrails
 - `in_progress` long/short disclaimer system
 - `in_progress` export/share comment injection with IP/time metadata
 - `in_progress` admin-only site/security controls are visible in Control Center; production key encryption and security review model remain deferred
@@ -198,6 +200,7 @@
 - `1.11.20` validation covers safe submission preflight, blocked submission preflight, admin safety recheck, publish blocking for `blocked`, content-update preflight refresh, publish success for `passed`/`needs-review`, audit parity, and Fastify/lightweight parity.
 - `1.11.21` validation covers work-level safety metadata on save/import/update, public share blocking for `blocked`, stale share disabling after dangerous edits, Works Center safety display, and Fastify/lightweight parity.
 - `1.11.22` validation covers stale public exposure closure on both Fastify and `scripts/serve-vcanvas.mjs`: a previously public share/gallery item becomes non-public after a dangerous edit, link-only `blocked` share metadata hides the entry from default `/api/gallery`, admin `includeReview=true` shows blocked content demoted to `pending-review`, blocked share creation returns `409`, and `/api/gallery/:id/safety-review` also disables stale public shares.
+- `1.11.23` validation must cover `/api/platform/readiness` parity on both Fastify and `scripts/serve-vcanvas.mjs`: security implemented items include guest metered-route shutdown and base-call quota guardrails, Works/Gallery/Share implemented items include stale public-exposure blocking, guest session shutdown includes `guest-access-disabled`, and no capability next step still says public share rendering hardening is unfinished.
 
 ### 10. Sign-in / Quota
 - `done` login/register/guest records are separated from daily check-in records through `SignInRecord.source`

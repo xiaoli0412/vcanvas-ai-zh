@@ -217,6 +217,12 @@
     - `/gallery` 与默认 `/api/gallery` 同步过滤 `blocked` work/entry，不只信任 `published` 状态
     - `/api/gallery/:id/review` 与 `/api/gallery/:id/safety-review` 刷新出 `blocked` 时会禁用旧分享并把已公开条目退回 `pending-review`
     - 作品中心只展示仍 enabled、未过期且未 blocked 的分享 slug
+  - 2026-06-09 成熟度地图真实性收口：
+    - Fastify 与轻量服务 `/api/platform/readiness` 同步更新 Works/Gallery/Share 能力状态
+    - 已完成的公开分享/鉴赏厅 stale exposure gate 从 next step 移入 implemented
+    - 安全能力中明确列出访客关闭后的 metered-route 拦截与基础日额度护栏
+    - `/api/session/guest` 与 metered routes 在关闭访客时统一返回 `guest-access-disabled`
+    - 后续 next step 收敛为外部安全审核模型，而不是重复提示已完成的分享渲染加固
 
 ## 已验证
 - `npm run typecheck` 通过
@@ -246,6 +252,10 @@
 - 当前公开安全收口切片验证通过：
   - Fastify 与轻量服务均验证：安全作品可分享和发布；危险编辑后旧 `/share/:slug` 不再返回 200；`/gallery` 与默认 `/api/gallery` 不再展示；管理员 `includeReview=true` 可见条目已退回 `pending-review`
   - 追加验证：`blocked` 作品重新分享返回 `409`；显式 `/api/gallery/:id/safety-review` 也会关闭旧分享并退回公开条目
+- 当前成熟度地图切片验证通过：
+  - Fastify 与轻量服务 `/api/platform/readiness` 均包含 guest-disabled metered route、base-call quota guard、stale public exposure blocking
+  - Fastify 与轻量服务 `/api/session/guest` 在访客关闭时均返回 `guest-access-disabled`
+  - readiness next steps 不再包含旧的 `public share rendering hardening` 文案
 - 当前字体 / 语言 / 简约主题切片已完成最终验证：
   - `npm run typecheck`
   - `npm run typecheck:server`
@@ -256,7 +266,7 @@
   - 浏览器截图：主应用、模式面板、模型快速切换、个人设置、控制中心、作品中心、公开 `/gallery` 的桌面与移动布局
 
 ## 当前工作树状态
-- 本轮计划提交信息：`fix: block stale public exposure for unsafe works`
+- 本轮计划提交信息：`chore: refresh platform readiness map`
 - 推送目标：`publish/main` 与 `publish/public-server`
 - 不推送 `origin`
 

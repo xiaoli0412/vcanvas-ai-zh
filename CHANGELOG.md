@@ -1,3 +1,10 @@
+## 1.11.23 - 2026-06-09
+
+### Fixes
+- Updated the platform readiness map so the Works/Gallery/Share capability no longer lists public share rendering hardening as unfinished after the `1.11.22` safety gate.
+- Mirrored the readiness wording in both Fastify and the lightweight deployment server, including the local/mock guest metered-route shutdown and base-quota guardrails.
+- Returned the same `guest-access-disabled` reason code from both guest-session and metered-route shutdown responses.
+
 ## 1.11.22 - 2026-06-08
 
 ### Fixes

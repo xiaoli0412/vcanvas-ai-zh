@@ -259,7 +259,11 @@ export async function registerSessionRoutes(app: FastifyInstance) {
   app.post('/api/session/guest', async (request, reply) => {
     const current = await localDataStore.read()
     if (current.siteSettings.guestEnabled === false) {
-      reply.code(403).send({ ok: false, error: 'Guest access is temporarily closed by site settings.' })
+      reply.code(403).send({
+        ok: false,
+        error: 'Guest access is temporarily closed by site settings.',
+        gatingReason: 'guest-access-disabled',
+      })
       return
     }
     const ip = getClientIp(request)

@@ -69,6 +69,7 @@
 - `1.11.20` adds local/mock gallery safety preflight parity to both Fastify and `scripts/serve-vcanvas.mjs`: submissions carry safety status, risk score, and reason codes, admins can rerun `/api/gallery/:id/safety-review`, locally blocked entries cannot be published, and content edits refresh the preflight before public exposure continues.
 - `1.11.21` promotes safety metadata to work records in both Fastify and `scripts/serve-vcanvas.mjs`: save/import/update/share/gallery paths all refresh local policy status, share creation returns `409` for `blocked` works, and existing share links are disabled when later edits become blocked.
 - `1.11.22` closes stale public exposure in both Fastify and `scripts/serve-vcanvas.mjs`: public share/gallery rendering re-checks work/link/entry safety, default `/api/gallery` hides blocked works, and gallery review/safety-review paths disable stale shares plus demote blocked published entries.
+- `1.11.23` refreshes `/api/platform/readiness` parity in both Fastify and `scripts/serve-vcanvas.mjs`: completed public-exposure hardening is now listed as implemented, guest-session shutdown reports `guest-access-disabled`, and the remaining next step is the external safety-review model rather than already-finished share rendering hardening.
 
 ## 2026-06-06 Verification Snapshot
 - `npm run typecheck`
@@ -98,6 +99,7 @@
 - `1.11.20` validation adds gallery-safety smoke coverage for Fastify and `scripts/serve-vcanvas.mjs`: safe works get `passed`, script/payment examples get `needs-review`, secret-like submissions get `blocked`, blocked entries cannot be published, content edits refresh safety metadata, and admin rechecks refresh safety metadata.
 - `1.11.21` validation adds public-share safety smoke coverage for Fastify and `scripts/serve-vcanvas.mjs`: saved and imported works receive work-level safety metadata, `blocked` works cannot create share links, previously shared works disable stale links when edited into `blocked`, and Works Center renders compact safety labels.
 - `1.11.22` validation adds stale-public-exposure smoke coverage for Fastify and `scripts/serve-vcanvas.mjs`: safe works can be shared and published, later dangerous edits make the old share non-200, `/gallery` and default `/api/gallery` hide the blocked work, admin review queues show it back in `pending-review`, blocked share creation returns `409`, and explicit gallery safety rechecks also close old shares.
+- `1.11.23` validation adds readiness-map smoke coverage for Fastify and `scripts/serve-vcanvas.mjs`: security guardrails name guest-disabled metered-route blocking and base quota checks, guest-session shutdown returns `guest-access-disabled`, Works/Gallery/Share names stale public exposure blocking, and no next step contains the stale phrase `public share rendering hardening`.
 
 ## Deferred Beyond This Commit
 - Real auth on top of latest `newapi`, production key encryption, payment-grade quotas/redeem-code generation, PostgreSQL/Redis persistence, and external `newapi/subapi/octopus` bridges.

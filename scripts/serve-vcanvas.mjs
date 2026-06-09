@@ -1172,7 +1172,7 @@ function platformReadinessSnapshot(data) {
       title: 'security and secret guardrails',
       maturity: 'local-mock',
       summary: 'Traffic guard, blocked IPs, secret masking, and local AES-GCM provider-key custody exist; production key vault/KMS custody is still pending.',
-      implemented: ['basic rate-limit policies', 'manual IP block/unblock', 'admin-only user guardrail view', 'share/export disclaimer comments', 'local provider key encryption before JSON persistence', 'provider channel write permissions for owners/admins'],
+      implemented: ['basic rate-limit policies', 'guest metered-route shutdown when guest access is disabled', 'daily base-call quota guard independent of request-rate policy toggles', 'manual IP block/unblock', 'admin-only user guardrail view', 'share/export disclaimer comments', 'local provider key encryption before JSON persistence', 'provider channel write permissions for owners/admins'],
       gaps: ['production key vault or KMS adapter', 'HTML safety review model', 'injection/leak audit pass', 'tier downgrade and emergency lock UI'],
       nextStep: 'Replace local fallback key material with a production key vault adapter before enabling server-managed provider execution by default.',
     }),
@@ -1183,7 +1183,7 @@ function platformReadinessSnapshot(data) {
       maturity: data.providerChannels.some((channel) => channel.models.length > 0) ? 'local-mock' : 'contract-only',
       summary: 'Provider channels are modeled, searchable, and editable, but latest model capability data is not yet verified automatically.',
       implemented: ['Compatible OpenAI first', 'ChatGPT/Kimi/provider channel entries', 'manual model capability badges', 'batch capability editing'],
-      gaps: ['official/latest model registry', 'Asterbot-style capability detection', 'capability confidence refresh schedule', 'site-level model pool'],
+      gaps: ['official/latest model registry', 'Asterbot-style capability detection', 'capability confidence refresh schedule', 'site-level main/vision/video/compression/safety model pool'],
       nextStep: 'Create a ModelRegistry service that combines official-doc verification, live /models fetches, and manual overrides.',
     }),
     capabilityStatus({
@@ -1202,9 +1202,9 @@ function platformReadinessSnapshot(data) {
       title: 'works, sharing, and gallery',
       maturity: 'local-mock',
       summary: 'Works can be saved, imported, shared, submitted to the gallery, and reviewed by local/mock admins.',
-      implemented: ['works CRUD and 10-work limit', 'HTML import/export', 'share links and /share/:slug', 'Xiaohongshu-style /gallery feed shell', 'admin gallery review workflow', 'local/mock gallery safety preflight'],
-      gaps: ['external safety review model before publishing', 'flow-map export', '24h task resume UI'],
-      nextStep: 'Attach a safety-review model and public share rendering hardening before production publishing.',
+      implemented: ['works CRUD and 10-work limit', 'HTML import/export', 'share links and /share/:slug', 'Xiaohongshu-style /gallery feed shell', 'admin gallery review workflow', 'local/mock gallery safety preflight', 'stale public share and gallery exposure blocking for blocked work/link/entry states'],
+      gaps: ['external safety review model before production publishing', 'flow-map export', '24h task resume UI'],
+      nextStep: 'Attach an external safety-review model and keep the local public-exposure gate as the fallback before production publishing.',
     }),
     capabilityStatus({
       id: 'notice-system',
@@ -1212,7 +1212,7 @@ function platformReadinessSnapshot(data) {
       title: 'announcement, realtime notice, and warning system',
       maturity: 'local-mock',
       summary: 'Notice storage and forced warning overlays exist, but permissions and rich-content sanitization need hardening.',
-      implemented: ['announcement/realtime/warning types', 'force and dismissible flags', 'main app overlay', 'admin creation UI'],
+      implemented: ['announcement/realtime/warning types', 'force and dismissible flags', 'main app overlay', 'admin creation UI in control center'],
       gaps: ['markdown/image sanitization', 'per-user warning targets', 'subapi-style location/device enrichment'],
       nextStep: 'Add a NoticePolicy service with sanitized markdown rendering and targeted warning delivery.',
     }),
@@ -1752,7 +1752,11 @@ async function handleApi(req, res, url) {
     const body = await readJsonBody(req)
     const isGuest = url.pathname.endsWith('/guest')
     if (isGuest && data.siteSettings.guestEnabled === false) {
-      sendJson(res, 403, { ok: false, error: 'Guest access is temporarily closed by site settings.' })
+      sendJson(res, 403, {
+        ok: false,
+        error: 'Guest access is temporarily closed by site settings.',
+        gatingReason: 'guest-access-disabled',
+      })
       return true
     }
     const userId = isGuest ? 'guest-local' : (body.userId || body.username || 'mock-user')
