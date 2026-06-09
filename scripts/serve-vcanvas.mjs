@@ -745,6 +745,17 @@ function canEditProviderChannel(actor, channel) {
   return Boolean(channel?.ownerId && channel.ownerId === actor.id)
 }
 
+function noticeVisibleTo(notice, tier, now = Date.now()) {
+  if (!notice.enabled) return false
+  if (notice.expiresAt) {
+    const expiresAt = Date.parse(notice.expiresAt)
+    if (Number.isFinite(expiresAt) && expiresAt <= now) return false
+    if (!Number.isFinite(expiresAt)) return false
+  }
+  if (notice.audience === 'all') return true
+  return Array.isArray(notice.audience) && notice.audience.includes(tier)
+}
+
 function getActor(data, req) {
   const now = Date.now()
   const sessionId = typeof req.headers['x-vcanvas-session-id'] === 'string' ? req.headers['x-vcanvas-session-id'] : ''
@@ -1288,8 +1299,8 @@ function platformReadinessSnapshot(data) {
       domain: 'notices',
       title: 'announcement, realtime notice, and warning system',
       maturity: 'local-mock',
-      summary: 'Notice storage and forced warning overlays exist, but permissions and rich-content sanitization need hardening.',
-      implemented: ['announcement/realtime/warning types', 'force and dismissible flags', 'main app overlay', 'admin creation UI in control center'],
+      summary: 'Notice storage, forced warning overlays, and local/admin lifecycle controls exist; rich-content sanitization still needs a production service.',
+      implemented: ['announcement/realtime/warning types', 'force and dismissible flags', 'main app overlay', 'admin creation UI in control center', 'admin enable/disable/delete lifecycle controls', 'tier-aware enabled notice delivery'],
       gaps: ['markdown/image sanitization', 'per-user warning targets', 'subapi-style location/device enrichment'],
       nextStep: 'Add a NoticePolicy service with sanitized markdown rendering and targeted warning delivery.',
     }),
@@ -2264,8 +2275,52 @@ async function handleApi(req, res, url) {
   }
 
   if (url.pathname === '/api/notices' && method === 'GET') {
-    const notices = data.notices.filter((notice) => notice.enabled)
-    sendJson(res, 200, { ok: true, notices, items: notices, allNotices: data.notices })
+    const actor = getActor(data, req)
+    const admin = canManageSite(actor.tier)
+    const notices = data.notices.filter((notice) => noticeVisibleTo(notice, actor.tier))
+    sendJson(res, 200, { ok: true, notices, items: notices, allNotices: admin ? data.notices : undefined, actor: { id: actor.id, tier: actor.tier } })
+    return true
+  }
+
+  const noticeItemMatch = url.pathname.match(/^\/api\/notices\/([^/]+)$/)
+  if (noticeItemMatch && method === 'PATCH') {
+    const actor = getActor(data, req)
+    if (!canManageSite(actor.tier)) {
+      sendJson(res, 403, { ok: false, error: 'Only host-admin/admin can update inscanvas notices.' })
+      return true
+    }
+    const id = decodeURIComponent(noticeItemMatch[1])
+    const body = await readJsonBody(req)
+    const index = data.notices.findIndex((item) => item.id === id)
+    if (index < 0) {
+      sendJson(res, 404, { ok: false, error: 'Notice not found.' })
+      return true
+    }
+    const notice = { ...data.notices[index], ...body, id, updatedAt: new Date().toISOString() }
+    data.notices[index] = notice
+    withAudit(data, req, 'notice.update', actor.id, actor.tier, { noticeId: id, enabled: notice.enabled })
+    writeData(data)
+    sendJson(res, 200, { ok: true, notice })
+    return true
+  }
+
+  if (noticeItemMatch && method === 'DELETE') {
+    const actor = getActor(data, req)
+    if (!canManageSite(actor.tier)) {
+      sendJson(res, 403, { ok: false, error: 'Only host-admin/admin can delete inscanvas notices.' })
+      return true
+    }
+    const id = decodeURIComponent(noticeItemMatch[1])
+    const before = data.notices.length
+    data.notices = data.notices.filter((item) => item.id !== id)
+    const removed = before - data.notices.length
+    if (!removed) {
+      sendJson(res, 404, { ok: false, error: 'Notice not found.' })
+      return true
+    }
+    withAudit(data, req, 'notice.delete', actor.id, actor.tier, { noticeId: id, removed })
+    writeData(data)
+    sendJson(res, 200, { ok: true, removed })
     return true
   }
 

@@ -263,7 +263,7 @@ export function ControlCenterModal({
         loginNotice: { ip?: string | null; time?: string; userAgent?: string | null }
       }>(response)),
       fetch('/api/settings/site', { headers: mergeSessionHeaders() }).then((response) => readJson<{ settings: SiteSettings & Record<string, any> }>(response)),
-      fetch('/api/notices', { headers: mergeSessionHeaders() }).then((response) => readJson<{ notices: NoticeMessage[] }>(response)),
+      fetch('/api/notices', { headers: mergeSessionHeaders() }).then((response) => readJson<{ notices: NoticeMessage[]; allNotices?: NoticeMessage[] }>(response)),
       fetch('/api/providers', { headers: mergeSessionHeaders() }).then((response) => readJson<{ channels: ProviderChannel[] }>(response)),
       fetch('/api/quotas/sign-in', { headers: mergeSessionHeaders() }).then((response) => readJson<{ ledger: QuotaLedger | null; canSignIn?: boolean; nextResetAt?: string | null }>(response)),
       fetch('/api/quotas/redeem', { headers: mergeSessionHeaders() }).then((response) => readJson<{ ledger: QuotaLedger | null }>(response)),
@@ -280,7 +280,7 @@ export function ControlCenterModal({
     setQuotaStatus({ canSignIn: quotaPayload.canSignIn, nextResetAt: quotaPayload.nextResetAt || quotaPayload.ledger?.resetAt || null })
     setSiteSettings(settingsPayload.settings)
     setDispatchNodesText(JSON.stringify(settingsPayload.settings.dispatchPolicy?.nodes || [], null, 2))
-    setNotices(noticePayload.notices || [])
+    setNotices(canManageSite(sessionPayload.user) ? (noticePayload.allNotices || noticePayload.notices || []) : (noticePayload.notices || []))
     setProviders(providerPayload.channels || [])
     setOps(opsPayload.snapshot)
     setGallery(galleryPayload.entries || galleryPayload.items || [])
@@ -480,6 +480,23 @@ export function ControlCenterModal({
     }).then((response) => readJson(response))
     setNoticeDraft({ kind: 'announcement', title: '', body: '', force: false })
     return t('control.notice.noticeCreated')
+  })
+
+  const toggleNotice = (notice: NoticeMessage) => run(async () => {
+    await fetch(`/api/notices/${encodeURIComponent(notice.id)}`, {
+      method: 'PATCH',
+      headers: mergeSessionHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ enabled: notice.enabled === false }),
+    }).then((response) => readJson(response))
+    return notice.enabled === false ? t('control.notice.noticeEnabled') : t('control.notice.noticeDisabled')
+  })
+
+  const deleteNotice = (notice: NoticeMessage) => run(async () => {
+    await fetch(`/api/notices/${encodeURIComponent(notice.id)}`, {
+      method: 'DELETE',
+      headers: mergeSessionHeaders(),
+    }).then((response) => readJson(response))
+    return t('control.notice.noticeDeleted')
   })
 
   const cleanup = () => run(async () => {
@@ -1258,24 +1275,43 @@ export function ControlCenterModal({
 
             {tab === 'notices' && (
               <div className="ccm-grid">
-                <section className="ccm-card wide">
-                  <h3>{t('control.notices.create')}</h3>
-                  <div className="ccm-form-grid">
-                    <label>{t('control.field.kind')}<select value={noticeDraft.kind} onChange={(event) => setNoticeDraft((value) => ({ ...value, kind: event.target.value as NoticeMessage['kind'] }))}><option value="announcement">announcement</option><option value="realtime">realtime</option><option value="warning">warning</option></select></label>
-                    <label>{t('control.field.title')}<input value={noticeDraft.title} onChange={(event) => setNoticeDraft((value) => ({ ...value, title: event.target.value }))} /></label>
-                  </div>
-                  <textarea className="ccm-textarea" value={noticeDraft.body} onChange={(event) => setNoticeDraft((value) => ({ ...value, body: event.target.value }))} placeholder={t('control.placeholder.notice')} />
-                  <label className="ccm-inline"><input type="checkbox" checked={noticeDraft.force} onChange={(event) => setNoticeDraft((value) => ({ ...value, force: event.target.checked }))} /> {t('control.switch.force')}</label>
-                  <button className="btn btn-primary" onClick={createNotice} disabled={busy || !noticeDraft.body.trim()}>{t('control.action.createNotice')}</button>
-                </section>
+                {admin && (
+                  <section className="ccm-card wide">
+                    <h3>{t('control.notices.create')}</h3>
+                    <div className="ccm-form-grid">
+                      <label>{t('control.field.kind')}<select value={noticeDraft.kind} onChange={(event) => setNoticeDraft((value) => ({ ...value, kind: event.target.value as NoticeMessage['kind'] }))}><option value="announcement">announcement</option><option value="realtime">realtime</option><option value="warning">warning</option></select></label>
+                      <label>{t('control.field.title')}<input value={noticeDraft.title} onChange={(event) => setNoticeDraft((value) => ({ ...value, title: event.target.value }))} /></label>
+                    </div>
+                    <textarea className="ccm-textarea" value={noticeDraft.body} onChange={(event) => setNoticeDraft((value) => ({ ...value, body: event.target.value }))} placeholder={t('control.placeholder.notice')} />
+                    <label className="ccm-inline"><input type="checkbox" checked={noticeDraft.force} onChange={(event) => setNoticeDraft((value) => ({ ...value, force: event.target.checked }))} /> {t('control.switch.force')}</label>
+                    <button className="btn btn-primary" onClick={createNotice} disabled={busy || !noticeDraft.body.trim()}>{t('control.action.createNotice')}</button>
+                  </section>
+                )}
                 <section className="ccm-card wide">
                   <h3>{t('control.notices.active')}</h3>
+                  <p>{admin ? t('control.notices.manageNote') : t('control.notices.readOnlyNote')}</p>
                   <div className="ccm-notice-list">
+                    {notices.length === 0 && <div className="ccm-empty compact">{t('control.notices.empty')}</div>}
                     {notices.map((notice) => (
-                      <article key={notice.id} className={`ccm-notice ${notice.kind}`}>
-                        <strong>{notice.title}</strong>
-                        <span>{notice.kind} · {notice.force ? 'force' : 'soft'} · {notice.format}</span>
-                        <p>{notice.body}</p>
+                      <article key={notice.id} className={`ccm-notice ${notice.kind} ${notice.enabled === false ? 'off' : ''}`}>
+                        <div className="ccm-notice-main">
+                          <strong>{notice.title}</strong>
+                          <span>
+                            {notice.kind} · {notice.force ? 'force' : 'soft'} · {notice.format}
+                            {notice.enabled === false ? ` · ${t('control.notices.disabled')}` : ''}
+                          </span>
+                          <p>{notice.body}</p>
+                        </div>
+                        {admin && (
+                          <div className="ccm-notice-actions">
+                            <button className="btn btn-secondary" onClick={() => toggleNotice(notice)} disabled={busy}>
+                              {notice.enabled === false ? t('control.notices.enable') : t('control.notices.disable')}
+                            </button>
+                            <button className="btn btn-ghost danger" onClick={() => deleteNotice(notice)} disabled={busy}>
+                              {t('control.notices.delete')}
+                            </button>
+                          </div>
+                        )}
                       </article>
                     ))}
                   </div>

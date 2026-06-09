@@ -44,6 +44,7 @@
 - `1.11.25` upgrades local/mock maintenance cleanup: host-admin/admin users can preview stale workflow/session/rate-limit/blocked-IP candidates before applying cleanup, Ops shows retention windows and cleanup counts, and Fastify/lightweight responses share the same report shape.
 - `1.11.26` makes works/gallery limits visible and consistent: API responses now include a shared quota summary, Works Center shows compact work/gallery quota pills, gallery denial reasons are user-readable, and the lightweight deployment server mirrors the same shape.
 - `1.11.27` adds admin-editable quota policy controls inside the secondary Control Center Site tab and hardens site-settings/notice writes with server-side host-admin/admin checks in both service paths.
+- `1.11.28` adds local/mock notice lifecycle governance: admins can enable, disable, and delete notices from the secondary Control Center, while ordinary users only receive enabled notices targeted to their current tier.
 - Frontend, server typecheck, build, service smoke tests, and desktop/mobile browser screenshots passed on 2026-06-06.
 
 ## Completion Matrix
@@ -123,6 +124,7 @@
 - `done` Control Center now defaults to a maturity/readiness tab that separates production, local/mock, contract-only, and missing capabilities
 - `in_progress` notice / warning / announcement systems with persisted `force`, `dismissible`, markdown/image metadata, and admin creation UI
 - `done` notice creation and site settings writes are now rejected server-side for non-admin callers in Fastify and the lightweight deployment server
+- `done` notice lifecycle controls now cover admin enable/disable/delete and tier-aware enabled notice delivery without exposing disabled rows to ordinary users
 - `done` forced warning notices now surface in the main app rather than only inside Control Center
 - `in_progress` site settings now include site profile, share policy, notice policy, security mode, update policy, migration policy, ops public switch, and editable local/mock work/gallery quota policies
 - `done` ops status and cleanup endpoints for local-json deployment health include cleanup candidate preview and admin-only apply
@@ -212,6 +214,7 @@
 - `1.11.25` validation covers local/mock maintenance cleanup parity on both Fastify and `scripts/serve-vcanvas.mjs`: non-admin cleanup is rejected, admin dry-run previews stale workflow/session/rate-limit/blocked-IP candidates, apply removes only those candidates, Ops snapshot candidates return to zero, and Control Center Ops screenshots preserve canvas workspace size on desktop/mobile.
 - `1.11.26` validation must cover works/gallery quota summary parity on both Fastify and `scripts/serve-vcanvas.mjs`: `GET /api/works`, save/import over-limit `409`, gallery-submit success/denial, and `GET /api/gallery?includeOwn=true` all return the same summary shape, while Works Center quota pills stay inside the secondary modal on desktop/mobile.
 - `1.11.27` validation must cover admin-only site settings and notice writes, invalid quota-policy rejection, `workLimitPerOwner: 0` preservation, and Control Center Site quota-policy rendering without changing workspace size.
+- `1.11.28` validation must cover notice list filtering, admin-only notice patch/delete, disabled notice hiding for guests, full notice list visibility for admins, and Control Center Notices rendering without changing workspace size.
 
 ### 10. Sign-in / Quota
 - `done` login/register/guest records are separated from daily check-in records through `SignInRecord.source`

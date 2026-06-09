@@ -132,12 +132,14 @@ export function makePlatformReadinessSnapshot(data: PublicServerData): PlatformR
       domain: 'notices',
       title: 'announcement, realtime notice, and warning system',
       maturity: 'local-mock',
-      summary: 'Notice storage and forced warning overlays exist, but permissions and rich-content sanitization need hardening.',
+      summary: 'Notice storage, forced warning overlays, and local/admin lifecycle controls exist; rich-content sanitization still needs a production service.',
       implemented: [
         'announcement/realtime/warning types',
         'force and dismissible flags',
         'main app overlay',
         'admin creation UI in control center',
+        'admin enable/disable/delete lifecycle controls',
+        'tier-aware enabled notice delivery',
       ],
       gaps: [
         'markdown/image sanitization',

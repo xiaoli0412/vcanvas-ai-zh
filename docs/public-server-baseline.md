@@ -74,6 +74,7 @@
 - `1.11.25` makes local maintenance cleanup observable and safer in both Fastify and `scripts/serve-vcanvas.mjs`: `GET /api/maintenance/cleanup` previews stale candidates, `POST /api/maintenance/cleanup` applies the same report shape, non-admin cleanup is rejected, and Control Center Ops shows candidate counts plus retention windows.
 - `1.11.26` adds a shared works/gallery quota summary to both Fastify and `scripts/serve-vcanvas.mjs`: work saves/imports, gallery submissions, `GET /api/works`, and owner gallery reads now return visible used/limit/remaining state with `limit: null` for unlimited tiers. Works Center renders this as compact secondary-modal quota pills without changing the canvas shell.
 - `1.11.27` lets host-admin/admin users edit local/mock work and gallery quota policies from the secondary Control Center Site tab, rejects non-admin site-settings and notice writes server-side, validates quota patches, and preserves intentional zero work limits in both Fastify and the lightweight deployment server.
+- `1.11.28` completes the local/mock notice lifecycle loop in both Fastify and `scripts/serve-vcanvas.mjs`: ordinary users only receive enabled tier-targeted notices, admins can inspect all notices, and Control Center can enable, disable, or delete notices from a secondary modal.
 
 ## 2026-06-06 Verification Snapshot
 - `npm run typecheck`
@@ -109,6 +110,7 @@
 - `1.11.25` browser review passed for the Control Center Ops cleanup section at `1440x960` and `390x844`: cleanup counts and retention windows render inside the secondary modal, no horizontal overflow appears, and `.workspace` dimensions remain unchanged.
 - `1.11.26` validation adds works/gallery quota smoke coverage for Fastify and `scripts/serve-vcanvas.mjs`: quota summaries appear on list/success/denial responses, work-limit `409` carries deletion context, gallery tier denial carries a readable reason, and Works Center quota pills render within the secondary modal at desktop/mobile sizes.
 - `1.11.27` validation adds site-policy smoke coverage for Fastify and `scripts/serve-vcanvas.mjs`: guest writes to site settings/notices return `403`, admin quota patches persist, invalid negative limits return `400`, `workLimitPerOwner: 0` stays visible in `/api/works`, and the Control Center Site tab keeps `.workspace` dimensions unchanged on desktop/mobile.
+- `1.11.28` validation adds notice-governance smoke coverage for Fastify and `scripts/serve-vcanvas.mjs`: admin create/disable/delete works, guest patch/delete returns `403`, disabled notices disappear from guest reads, `allNotices` is admin-only, and the Control Center Notices tab keeps `.workspace` dimensions unchanged on desktop/mobile.
 
 ## Deferred Beyond This Commit
 - Real auth on top of latest `newapi`, production key encryption, payment-grade quotas/redeem-code generation, PostgreSQL/Redis persistence, and external `newapi/subapi/octopus` bridges.

@@ -1,3 +1,13 @@
+## 1.11.28 - 2026-06-09
+
+### Features
+- Added admin notice lifecycle controls in the secondary Control Center so host-admin/admin users can enable, disable, and delete announcements, realtime notices, and warnings.
+- Updated notice delivery so ordinary users only receive enabled notices targeted to their current tier, while admins can inspect the full local/mock notice list.
+
+### Fixes
+- Kept Fastify and the lightweight deployment server aligned for notice read/update/delete permissions and audit events.
+- Refreshed the platform readiness wording so notice permissions are no longer reported as an unfinished hardening gap.
+
 ## 1.11.27 - 2026-06-09
 
 ### Features
