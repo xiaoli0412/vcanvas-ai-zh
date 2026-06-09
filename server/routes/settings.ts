@@ -1,7 +1,7 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify'
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { createId, getClientIp, localDataStore } from '../data/localDataStore'
 import type { PersonalSettings, SiteSettings } from '../../shared/contracts/publicServer'
-import { getActor } from '../lib/platformPolicy'
+import { canManageSite, getActor } from '../lib/platformPolicy'
 
 const defaultSharePolicy: NonNullable<SiteSettings['sharePolicy']> = {
   enabled: true,
@@ -32,6 +32,46 @@ const defaultDispatchPolicy: NonNullable<SiteSettings['dispatchPolicy']> = {
   nodes: [],
 }
 
+const tierKeys = ['host-admin', 'admin', 'vip', 'user', 'guest'] as const
+
+function normalizeGalleryPublishLimits(value: unknown, fallback: SiteSettings['galleryPublishLimits']) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return fallback
+  const source = value as Record<string, unknown>
+  const next = { ...(fallback || {}) }
+  for (const tier of tierKeys) {
+    if (!(tier in source)) continue
+    const raw = source[tier]
+    if (raw === null) {
+      next[tier] = null
+      continue
+    }
+    const numeric = Number(raw)
+    if (!Number.isFinite(numeric) || numeric < 0) {
+      throw new Error('galleryPublishLimits must contain non-negative numbers or null.')
+    }
+    next[tier] = Math.floor(numeric)
+  }
+  return next
+}
+
+function normalizeSiteSettingsBody(body: Partial<SiteSettings> & Record<string, unknown>, current: SiteSettings) {
+  const next = { ...body }
+  if ('workLimitPerOwner' in body) {
+    const numeric = Number(body.workLimitPerOwner)
+    if (!Number.isFinite(numeric) || numeric < 0) throw new Error('workLimitPerOwner must be a non-negative number.')
+    next.workLimitPerOwner = Math.floor(numeric)
+  }
+  if ('galleryPublishLimits' in body) {
+    next.galleryPublishLimits = normalizeGalleryPublishLimits(body.galleryPublishLimits, current.galleryPublishLimits)
+  }
+  if ('highLoadDegradeThreshold' in body) {
+    const numeric = Number(body.highLoadDegradeThreshold)
+    if (!Number.isFinite(numeric) || numeric < 0 || numeric > 1) throw new Error('highLoadDegradeThreshold must be between 0 and 1.')
+    next.highLoadDegradeThreshold = numeric
+  }
+  return next
+}
+
 export async function registerSettingsRoutes(app: FastifyInstance) {
   app.get('/api/settings/site', async () => {
     const data = await localDataStore.read()
@@ -47,27 +87,40 @@ export async function registerSettingsRoutes(app: FastifyInstance) {
     }
   })
 
-  const updateSiteSettings = async (request: FastifyRequest) => {
+  const updateSiteSettings = async (request: FastifyRequest, reply: FastifyReply) => {
     const body = (request.body || {}) as Partial<SiteSettings> & Record<string, unknown>
+    const current = await localDataStore.read()
+    const currentActor = getActor(current, request)
+    if (!canManageSite(currentActor.tier)) {
+      reply.code(403).send({ ok: false, error: 'Only host-admin/admin can update inscanvas site settings.' })
+      return
+    }
+    let normalizedBody: Partial<SiteSettings> & Record<string, unknown>
+    try {
+      normalizedBody = normalizeSiteSettingsBody(body, current.siteSettings)
+    } catch (error: any) {
+      reply.code(400).send({ ok: false, error: error.message || String(error) })
+      return
+    }
     const settings = await localDataStore.update((data) => {
       const actor = getActor(data, request)
       data.siteSettings = {
         ...data.siteSettings,
-        ...body,
-        sharePolicy: { ...defaultSharePolicy, ...(data.siteSettings.sharePolicy || {}), ...(body.sharePolicy || {}) },
-        noticePolicy: { ...defaultNoticePolicy, ...(data.siteSettings.noticePolicy || {}), ...(body.noticePolicy || {}) },
-        updatePolicy: { ...defaultUpdatePolicy, ...(data.siteSettings.updatePolicy || {}), ...(body.updatePolicy || {}) },
-        migrationPolicy: { ...defaultMigrationPolicy, ...(data.siteSettings.migrationPolicy || {}), ...(body.migrationPolicy || {}) },
-        dispatchPolicy: { ...defaultDispatchPolicy, ...(data.siteSettings.dispatchPolicy || {}), ...(body.dispatchPolicy || {}) },
+        ...normalizedBody,
+        sharePolicy: { ...defaultSharePolicy, ...(data.siteSettings.sharePolicy || {}), ...(normalizedBody.sharePolicy || {}) },
+        noticePolicy: { ...defaultNoticePolicy, ...(data.siteSettings.noticePolicy || {}), ...(normalizedBody.noticePolicy || {}) },
+        updatePolicy: { ...defaultUpdatePolicy, ...(data.siteSettings.updatePolicy || {}), ...(normalizedBody.updatePolicy || {}) },
+        migrationPolicy: { ...defaultMigrationPolicy, ...(data.siteSettings.migrationPolicy || {}), ...(normalizedBody.migrationPolicy || {}) },
+        dispatchPolicy: { ...defaultDispatchPolicy, ...(data.siteSettings.dispatchPolicy || {}), ...(normalizedBody.dispatchPolicy || {}) },
       }
-      if (body.disclaimerPolicy && typeof body.disclaimerPolicy === 'object') {
+      if (normalizedBody.disclaimerPolicy && typeof normalizedBody.disclaimerPolicy === 'object') {
         data.disclaimerPolicy = {
           ...data.disclaimerPolicy,
-          ...(body.disclaimerPolicy as Record<string, unknown>),
+          ...(normalizedBody.disclaimerPolicy as Record<string, unknown>),
         }
       }
-      if (Array.isArray(body.rateLimitPolicies)) {
-        data.rateLimitPolicies = body.rateLimitPolicies as typeof data.rateLimitPolicies
+      if (Array.isArray(normalizedBody.rateLimitPolicies)) {
+        data.rateLimitPolicies = normalizedBody.rateLimitPolicies as typeof data.rateLimitPolicies
       }
       data.auditEvents.push({
         id: createId('audit'),

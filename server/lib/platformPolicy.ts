@@ -81,6 +81,10 @@ export function canManageModels(tier: UserTier) {
   return getTierPermissions(tier).includes('manage-models')
 }
 
+export function canManageSite(tier: UserTier) {
+  return getTierPermissions(tier).includes('manage-site') || tier === 'host-admin' || tier === 'admin'
+}
+
 export function canManageUsers(tier: UserTier) {
   return getTierPermissions(tier).includes('manage-users')
 }
@@ -316,7 +320,7 @@ export function buildWorkGalleryQuotaSummary(data: PublicServerData, input: {
   actorId: string
   tier: UserTier
 }): WorkGalleryQuotaSummary {
-  const workLimit = Math.max(0, data.siteSettings.workLimitPerOwner || 10)
+  const workLimit = Math.max(0, data.siteSettings.workLimitPerOwner ?? 10)
   const workUsed = data.works.filter((work) => work.ownerId === input.ownerId).length
   const galleryLimit = galleryLimitForTier(data, input.tier)
   const galleryUsed = data.galleryEntries.filter((entry) => entry.ownerId === input.actorId && entry.status !== 'rejected').length

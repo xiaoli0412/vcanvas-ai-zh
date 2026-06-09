@@ -358,6 +358,51 @@
   text-transform: none;
 }
 
+.ccm-quota-policy {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.7fr) minmax(0, 1.3fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.ccm-limit-main,
+.ccm-tier-limit {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(42, 52, 72, 0.75);
+  border-radius: 12px;
+  background: rgba(8, 10, 18, 0.48);
+}
+
+.ccm-limit-main input {
+  margin-top: auto;
+}
+
+.ccm-tier-limit-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ccm-tier-limit {
+  gap: 7px;
+}
+
+.ccm-tier-limit span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ccm-quota-help {
+  margin: 10px 0 12px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
 .ccm-textarea {
   min-height: 92px;
   margin: 10px 0;
@@ -1145,6 +1190,7 @@
 
   .ccm-grid,
   .ccm-form-grid,
+  .ccm-quota-policy,
   .ccm-provider-mini,
   .ccm-update-grid,
   .ccm-data-summary,
@@ -1167,6 +1213,10 @@
 
   .ccm-section-row {
     flex-direction: column;
+  }
+
+  .ccm-tier-limit-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .ccm-section-actions {

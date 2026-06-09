@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import type { NoticeMessage } from '../../shared/contracts/publicServer'
 import { createId, getClientIp, localDataStore } from '../data/localDataStore'
+import { canManageSite, getActor } from '../lib/platformPolicy'
 
 export async function registerNoticeRoutes(app: FastifyInstance) {
   app.get('/api/notices', async () => {
@@ -14,10 +15,12 @@ export async function registerNoticeRoutes(app: FastifyInstance) {
     }
   })
 
-  app.post('/api/notices', async (request) => {
+  app.post('/api/notices', async (request, reply) => {
     const body = (request.body || {}) as Partial<NoticeMessage>
     const now = new Date().toISOString()
     const notice = await localDataStore.update((data) => {
+      const actor = getActor(data, request)
+      if (!canManageSite(actor.tier)) return { status: 403 as const, notice: null, actor }
       const id = body.id || createId('notice')
       const existing = data.notices.find((item) => item.id === id)
       const next: NoticeMessage = {
@@ -41,15 +44,19 @@ export async function registerNoticeRoutes(app: FastifyInstance) {
       ]
       data.auditEvents.push({
         id: createId('audit'),
-        actorId: 'local-admin',
-        actorTier: 'host-admin',
+        actorId: actor.id,
+        actorTier: actor.tier,
         action: existing ? 'notice.update' : 'notice.create',
         ip: getClientIp(request),
         createdAt: now,
         metadata: { noticeId: id },
       })
-      return next
+      return { status: 200 as const, notice: next, actor }
     })
-    return { ok: true, notice }
+    if (notice.status === 403) {
+      reply.code(403).send({ ok: false, error: 'Only host-admin/admin can create inscanvas notices.' })
+      return
+    }
+    return { ok: true, notice: notice.notice }
   })
 }

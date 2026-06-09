@@ -43,6 +43,7 @@
 - `1.11.24` adds a Control Center workflow resume surface backed by `/api/workflows` list/detail/cancel parity in Fastify and the lightweight deployment server; it exposes 24h retained prompts and context summaries, hides expired detail routes, limits cancel to queued/running local/mock runs, and does not claim a real background worker.
 - `1.11.25` upgrades local/mock maintenance cleanup: host-admin/admin users can preview stale workflow/session/rate-limit/blocked-IP candidates before applying cleanup, Ops shows retention windows and cleanup counts, and Fastify/lightweight responses share the same report shape.
 - `1.11.26` makes works/gallery limits visible and consistent: API responses now include a shared quota summary, Works Center shows compact work/gallery quota pills, gallery denial reasons are user-readable, and the lightweight deployment server mirrors the same shape.
+- `1.11.27` adds admin-editable quota policy controls inside the secondary Control Center Site tab and hardens site-settings/notice writes with server-side host-admin/admin checks in both service paths.
 - Frontend, server typecheck, build, service smoke tests, and desktop/mobile browser screenshots passed on 2026-06-06.
 
 ## Completion Matrix
@@ -121,8 +122,9 @@
 - `done` Control Center v1 gives users one secondary entry for personal center, site settings, notices, gallery, quotas, and ops
 - `done` Control Center now defaults to a maturity/readiness tab that separates production, local/mock, contract-only, and missing capabilities
 - `in_progress` notice / warning / announcement systems with persisted `force`, `dismissible`, markdown/image metadata, and admin creation UI
+- `done` notice creation and site settings writes are now rejected server-side for non-admin callers in Fastify and the lightweight deployment server
 - `done` forced warning notices now surface in the main app rather than only inside Control Center
-- `in_progress` site settings now include site profile, share policy, notice policy, security mode, update policy, migration policy, and ops public switch
+- `in_progress` site settings now include site profile, share policy, notice policy, security mode, update policy, migration policy, ops public switch, and editable local/mock work/gallery quota policies
 - `done` ops status and cleanup endpoints for local-json deployment health include cleanup candidate preview and admin-only apply
 
 ### 7. Works / Gallery / Share
@@ -137,7 +139,7 @@
 - `done` public share/gallery routes reject stale enabled links or published entries when refreshed work safety becomes `blocked`
 - `done` local/mock gallery / 鉴赏厅 review status, safety preflight, tier quotas, lightweight masonry-feed presentation, and admin publish/reject/restore workflow
 - `done` Control Center includes the secondary gallery review queue; route-level public gallery remains separate and approval-gated
-- `in_progress` per-tier work and gallery limits; gallery tier quotas are enforced and visible, while per-tier work-limit policy remains a future settings extension beyond the current site-wide work cap
+- `in_progress` site-wide work limits and per-tier gallery limits are enforced, visible, and admin-editable locally; per-tier work-limit policy remains a future settings extension beyond the current site-wide work cap
 
 ### 8. Frontend / Branding
 - `in_progress` replace visible "canvas" branding intro surfaces with `inscanvas` where required while preserving storage/runtime compatibility
@@ -209,6 +211,7 @@
 - `1.11.23` validation must cover `/api/platform/readiness` parity on both Fastify and `scripts/serve-vcanvas.mjs`: security implemented items include guest metered-route shutdown and base-call quota guardrails, Works/Gallery/Share implemented items include stale public-exposure blocking, guest session shutdown includes `guest-access-disabled`, and no capability next step still says public share rendering hardening is unfinished.
 - `1.11.25` validation covers local/mock maintenance cleanup parity on both Fastify and `scripts/serve-vcanvas.mjs`: non-admin cleanup is rejected, admin dry-run previews stale workflow/session/rate-limit/blocked-IP candidates, apply removes only those candidates, Ops snapshot candidates return to zero, and Control Center Ops screenshots preserve canvas workspace size on desktop/mobile.
 - `1.11.26` validation must cover works/gallery quota summary parity on both Fastify and `scripts/serve-vcanvas.mjs`: `GET /api/works`, save/import over-limit `409`, gallery-submit success/denial, and `GET /api/gallery?includeOwn=true` all return the same summary shape, while Works Center quota pills stay inside the secondary modal on desktop/mobile.
+- `1.11.27` validation must cover admin-only site settings and notice writes, invalid quota-policy rejection, `workLimitPerOwner: 0` preservation, and Control Center Site quota-policy rendering without changing workspace size.
 
 ### 10. Sign-in / Quota
 - `done` login/register/guest records are separated from daily check-in records through `SignInRecord.source`

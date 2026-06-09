@@ -147,7 +147,7 @@ export async function registerWorkRoutes(app: FastifyInstance) {
       ? String((request.query as { ownerId?: string }).ownerId || actor.id)
       : null
     const { ownerId } = resolveOwnedTargetId(actor, requestedOwnerId)
-    const limit = data.siteSettings.workLimitPerOwner || 10
+    const limit = data.siteSettings.workLimitPerOwner ?? 10
     const items = data.works.filter((work) => work.ownerId === ownerId)
     const quotaSummary = buildWorkGalleryQuotaSummary(data, { ownerId, actorId: actor.id, tier: actor.tier })
     return {
@@ -165,7 +165,7 @@ export async function registerWorkRoutes(app: FastifyInstance) {
     const result = await localDataStore.update((data) => {
       const actor = getActor(data, request)
       const { ownerId } = resolveOwnedTargetId(actor, body.ownerId || null)
-      const limit = data.siteSettings.workLimitPerOwner || 10
+      const limit = data.siteSettings.workLimitPerOwner ?? 10
       const quotaSummary = buildWorkGalleryQuotaSummary(data, { ownerId, actorId: actor.id, tier: actor.tier })
       if (quotaSummary.works.reached) return { work: null, limit, quotaSummary }
       const work = buildWork({ data, request, body, ownerId, now })
@@ -202,7 +202,7 @@ export async function registerWorkRoutes(app: FastifyInstance) {
     const result = await localDataStore.update((data) => {
       const actor = getActor(data, request)
       const { ownerId } = resolveOwnedTargetId(actor, body.ownerId || null)
-      const limit = data.siteSettings.workLimitPerOwner || 10
+      const limit = data.siteSettings.workLimitPerOwner ?? 10
       const quotaSummary = buildWorkGalleryQuotaSummary(data, { ownerId, actorId: actor.id, tier: actor.tier })
       if (quotaSummary.works.reached) return { work: null, limit, quotaSummary }
       const work = buildWork({

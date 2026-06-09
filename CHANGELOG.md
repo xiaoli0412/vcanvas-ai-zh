@@ -1,3 +1,13 @@
+## 1.11.27 - 2026-06-09
+
+### Features
+- Added an admin quota-policy editor inside the secondary Control Center Site tab for works-per-owner limits and per-tier gallery submission limits, with blank values representing unlimited gallery capacity.
+- Kept the new quota controls inside the existing modal flow so no persistent canvas chrome or drawing area is added.
+
+### Fixes
+- Restricted site-settings and notice writes to host-admin/admin users in both Fastify and the lightweight deployment server instead of relying on frontend visibility.
+- Validated quota policy patches server-side and preserved `workLimitPerOwner: 0` as an intentional zero limit across quota summaries and work save/import checks.
+
 ## 1.11.26 - 2026-06-09
 
 ### Features

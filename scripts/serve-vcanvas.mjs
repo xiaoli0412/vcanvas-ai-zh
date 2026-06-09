@@ -598,8 +598,51 @@ function canManageData(tier) {
   return permissionsForTier(tier).includes('manage-site') || tier === 'host-admin' || tier === 'admin'
 }
 
+function canManageSite(tier) {
+  return permissionsForTier(tier).includes('manage-site') || tier === 'host-admin' || tier === 'admin'
+}
+
 function canCheckUpdates(tier) {
   return permissionsForTier(tier).includes('manage-site') || tier === 'host-admin' || tier === 'admin'
+}
+
+const siteSettingTierKeys = ['host-admin', 'admin', 'vip', 'user', 'guest']
+
+function normalizeGalleryPublishLimits(value, fallback = {}) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return fallback
+  const next = { ...fallback }
+  for (const tier of siteSettingTierKeys) {
+    if (!(tier in value)) continue
+    const raw = value[tier]
+    if (raw === null) {
+      next[tier] = null
+      continue
+    }
+    const numeric = Number(raw)
+    if (!Number.isFinite(numeric) || numeric < 0) {
+      throw new Error('galleryPublishLimits must contain non-negative numbers or null.')
+    }
+    next[tier] = Math.floor(numeric)
+  }
+  return next
+}
+
+function normalizeSiteSettingsBody(body, current) {
+  const next = { ...body }
+  if ('workLimitPerOwner' in body) {
+    const numeric = Number(body.workLimitPerOwner)
+    if (!Number.isFinite(numeric) || numeric < 0) throw new Error('workLimitPerOwner must be a non-negative number.')
+    next.workLimitPerOwner = Math.floor(numeric)
+  }
+  if ('galleryPublishLimits' in body) {
+    next.galleryPublishLimits = normalizeGalleryPublishLimits(body.galleryPublishLimits, current.galleryPublishLimits)
+  }
+  if ('highLoadDegradeThreshold' in body) {
+    const numeric = Number(body.highLoadDegradeThreshold)
+    if (!Number.isFinite(numeric) || numeric < 0 || numeric > 1) throw new Error('highLoadDegradeThreshold must be between 0 and 1.')
+    next.highLoadDegradeThreshold = numeric
+  }
+  return next
 }
 
 function normalizeIp(value) {
@@ -1051,7 +1094,7 @@ function limitSummary(limitValue, used, reason = null) {
 }
 
 function buildWorkGalleryQuotaSummary(data, { ownerId, actorId, tier }) {
-  const workLimit = Math.max(0, data.siteSettings.workLimitPerOwner || 10)
+  const workLimit = Math.max(0, data.siteSettings.workLimitPerOwner ?? 10)
   const workUsed = data.works.filter((work) => work.ownerId === ownerId).length
   const publishLimit = galleryLimit(data, tier)
   const galleryUsed = data.galleryEntries.filter((entry) => entry.ownerId === actorId && entry.status !== 'rejected').length
@@ -2227,6 +2270,11 @@ async function handleApi(req, res, url) {
   }
 
   if (url.pathname === '/api/notices' && method === 'POST') {
+    const actor = getActor(data, req)
+    if (!canManageSite(actor.tier)) {
+      sendJson(res, 403, { ok: false, error: 'Only host-admin/admin can create inscanvas notices.' })
+      return true
+    }
     const body = await readJsonBody(req)
     const now = new Date().toISOString()
     const id = body.id || createId('notice')
@@ -2247,7 +2295,7 @@ async function handleApi(req, res, url) {
       updatedAt: now,
     }
     data.notices = [...data.notices.filter((item) => item.id !== id), notice]
-    withAudit(data, req, existing ? 'notice.update' : 'notice.create', 'local-admin', 'host-admin', { noticeId: id })
+    withAudit(data, req, existing ? 'notice.update' : 'notice.create', actor.id, actor.tier, { noticeId: id })
     writeData(data)
     sendJson(res, 200, { ok: true, notice })
     return true
@@ -2260,7 +2308,18 @@ async function handleApi(req, res, url) {
   }
 
   if (url.pathname === '/api/settings/site' && (method === 'POST' || method === 'PATCH')) {
-    const body = await readJsonBody(req)
+    const actor = getActor(data, req)
+    if (!canManageSite(actor.tier)) {
+      sendJson(res, 403, { ok: false, error: 'Only host-admin/admin can update inscanvas site settings.' })
+      return true
+    }
+    let body
+    try {
+      body = normalizeSiteSettingsBody(await readJsonBody(req), data.siteSettings)
+    } catch (error) {
+      sendJson(res, 400, { ok: false, error: error.message || String(error) })
+      return true
+    }
     data.siteSettings = {
       ...data.siteSettings,
       ...body,
@@ -2272,7 +2331,7 @@ async function handleApi(req, res, url) {
     }
     if (body.disclaimerPolicy) data.disclaimerPolicy = { ...data.disclaimerPolicy, ...body.disclaimerPolicy }
     if (Array.isArray(body.rateLimitPolicies)) data.rateLimitPolicies = body.rateLimitPolicies
-    withAudit(data, req, 'settings.site.update', 'local-admin', 'host-admin')
+    withAudit(data, req, 'settings.site.update', actor.id, actor.tier)
     writeData(data)
     sendJson(res, 200, { ok: true, settings: data.siteSettings })
     return true
@@ -2304,7 +2363,7 @@ async function handleApi(req, res, url) {
     sendJson(res, 200, {
       ok: true,
       items,
-      limit: data.siteSettings.workLimitPerOwner || 10,
+      limit: data.siteSettings.workLimitPerOwner ?? 10,
       quotaSummary,
       shareLinks: data.shareLinks.filter((link) => items.some((work) => work.id === link.workId)),
     })
@@ -2315,7 +2374,7 @@ async function handleApi(req, res, url) {
     const body = await readJsonBody(req)
     const actor = getActor(data, req)
     const { ownerId } = resolveOwnedTargetId(actor, body.ownerId)
-    const limit = data.siteSettings.workLimitPerOwner || 10
+    const limit = data.siteSettings.workLimitPerOwner ?? 10
     const quotaSummary = buildWorkGalleryQuotaSummary(data, { ownerId, actorId: actor.id, tier: actor.tier })
     if (quotaSummary.works.reached) {
       sendJson(res, 409, { ok: false, error: `Work limit reached (${limit}). Delete an existing work before saving a new one.`, quotaSummary })
@@ -2358,7 +2417,7 @@ async function handleApi(req, res, url) {
     }
     const actor = getActor(data, req)
     const { ownerId } = resolveOwnedTargetId(actor, body.ownerId)
-    const limit = data.siteSettings.workLimitPerOwner || 10
+    const limit = data.siteSettings.workLimitPerOwner ?? 10
     const quotaSummary = buildWorkGalleryQuotaSummary(data, { ownerId, actorId: actor.id, tier: actor.tier })
     if (quotaSummary.works.reached) {
       sendJson(res, 409, { ok: false, error: `Work limit reached (${limit}).`, quotaSummary })

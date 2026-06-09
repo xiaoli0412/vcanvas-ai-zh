@@ -148,6 +148,15 @@ const defaultUpdatePolicy: NonNullable<SiteSettings['updatePolicy']> = {
   lowTrafficAutoUpdate: false,
 }
 
+const quotaTierOrder: UserTier[] = ['host-admin', 'admin', 'vip', 'user', 'guest']
+
+function normalizeLimitInput(value: string) {
+  if (value.trim() === '') return null
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric) || numeric < 0) return 0
+  return Math.floor(numeric)
+}
+
 export function ControlCenterModal({
   onClose,
   onOpenPersonalSettings,
@@ -225,6 +234,7 @@ export function ControlCenterModal({
   const sharePolicy = { ...defaultSharePolicy, ...(siteSettings?.sharePolicy || {}) }
   const noticePolicy = { ...defaultNoticePolicy, ...(siteSettings?.noticePolicy || {}) }
   const updatePolicy = { ...defaultUpdatePolicy, ...(siteSettings?.updatePolicy || {}) }
+  const galleryPublishLimits = siteSettings?.galleryPublishLimits || {}
   const dispatch = ops?.dispatch
   const maturityTotals = useMemo(() => {
     const totals: Record<PlatformCapabilityMaturity, number> = {
@@ -482,6 +492,17 @@ export function ControlCenterModal({
     setOps(payload.snapshot)
     return t('control.notice.cleanup')
   })
+
+  const updateGalleryLimit = (tier: UserTier, value: number | null) => {
+    if (!siteSettings) return
+    setSiteSettings({
+      ...siteSettings,
+      galleryPublishLimits: {
+        ...(siteSettings.galleryPublishLimits || {}),
+        [tier]: value,
+      },
+    })
+  }
 
   const previewCleanup = () => run(async () => {
     const payload = await fetch('/api/maintenance/cleanup', { headers: mergeSessionHeaders() })
@@ -1010,6 +1031,45 @@ export function ControlCenterModal({
                     <label><input type="checkbox" checked={siteSettings.publicGalleryEnabled === true} onChange={(event) => setSiteSettings({ ...siteSettings, publicGalleryEnabled: event.target.checked })} /> {t('control.switch.gallery')}</label>
                     <label><input type="checkbox" checked={noticePolicy.forceWarnings !== false} onChange={(event) => setSiteSettings({ ...siteSettings, noticePolicy: { ...noticePolicy, forceWarnings: event.target.checked } })} /> {t('control.switch.forceWarnings')}</label>
                   </div>
+                  <button className="btn btn-primary" onClick={saveSite} disabled={busy}>{t('provider.save')}</button>
+                </section>
+                <section className="ccm-card wide">
+                  <div className="ccm-section-row">
+                    <div>
+                      <h3>{t('control.site.quotaTitle')}</h3>
+                      <p>{t('control.site.quotaNote')}</p>
+                    </div>
+                    <span className="ccm-pill">{t('control.site.quotaScope')}</span>
+                  </div>
+                  <div className="ccm-quota-policy">
+                    <label className="ccm-limit-main">
+                      {t('control.site.workLimit')}
+                      <input
+                        type="number"
+                        min="0"
+                        value={siteSettings.workLimitPerOwner ?? 10}
+                        onChange={(event) => setSiteSettings({ ...siteSettings, workLimitPerOwner: normalizeLimitInput(event.target.value) ?? 0 })}
+                      />
+                    </label>
+                    <div className="ccm-tier-limit-grid">
+                      {quotaTierOrder.map((tier) => {
+                        const limit = galleryPublishLimits[tier]
+                        return (
+                          <label key={tier} className="ccm-tier-limit">
+                            <span>{t(`control.tier.${tier}`)}</span>
+                            <input
+                              type="number"
+                              min="0"
+                              value={limit ?? ''}
+                              placeholder="∞"
+                              onChange={(event) => updateGalleryLimit(tier, normalizeLimitInput(event.target.value))}
+                            />
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </div>
+                  <div className="ccm-quota-help">{t('control.site.galleryLimitHelp')}</div>
                   <button className="btn btn-primary" onClick={saveSite} disabled={busy}>{t('provider.save')}</button>
                 </section>
                 <section className="ccm-card">
