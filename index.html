@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>inscanvas</title>
+  <link rel="icon" href="data:,">
+  <script>
+    (function loadDisplayFonts() {
+      var baseUrl = new URL('/vcanvas-ai-zh/', document.baseURI);
+      ['fonts/noto-serif-sc.css', 'fonts/fusion-pixel.css'].forEach(function (href) {
+        var link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = new URL(href, baseUrl).href;
+        document.head.appendChild(link);
+      });
+    })();
+  </script>
+  <script type="module" crossorigin src="/vcanvas-ai-zh/assets/index-pv9DYcW-.js"></script>
+  <link rel="modulepreload" crossorigin href="/vcanvas-ai-zh/assets/chunk-DseTPa7n.js">
+  <link rel="stylesheet" crossorigin href="/vcanvas-ai-zh/assets/index-DOLvrXDe.css">
+</head>
+<body>
+  <div id="root"></div>
+</body>
+</html>
