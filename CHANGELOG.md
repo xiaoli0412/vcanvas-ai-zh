@@ -1,3 +1,8 @@
+## 1.11.29 - 2026-07-17
+
+### Documentation
+- Added a complete Canvas 2.0 handoff log covering the current branch, architecture, completed capabilities, local/mock boundaries, unfinished platform work, API inventory, validation commands, deployment risks, milestone plan, and owner release workflow.
+
 ## 1.11.28 - 2026-06-09
 
 ### Features
